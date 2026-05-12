@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  html, body, #root {
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+}
+
+@layer utilities {
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+  .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+}
+
+.calc-btn {
+  @apply flex items-center justify-center rounded-xl font-semibold text-sm transition-all duration-75 select-none cursor-pointer;
+  min-height: 52px;
+  -webkit-user-select: none;
+}
+
+.calc-btn:active {
+  transform: scale(0.94);
+  filter: brightness(1.3);
+}

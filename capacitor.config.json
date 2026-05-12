@@ -1,0 +1,15 @@
+{
+  "appId": "com.ems.calculator",
+  "appName": "EMS Calculator",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "backgroundColor": "#000000",
+      "showSpinner": false
+    }
+  }
+}
