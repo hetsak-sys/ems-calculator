@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { SQRT3, pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, SubTabBar } from './shared'
+import { useSite } from './SiteContext'
 
 // ── Transformer ────────────────────────────────────────────────────────────
 function TransformerCalc({ addHistory }) {
@@ -114,9 +115,10 @@ function PowerFactorCalc({ addHistory }) {
 
 // ── Generator Sizing ───────────────────────────────────────────────────────
 function GeneratorSizing({ addHistory }) {
+  const { site } = useSite()
   const [loads,setLoads]=useState([{name:'',kw:'',pf:'0.85',qty:'1'}])
-  const [largestMotorKW,setLargestMotorKW]=useState(''),[altitude,setAltitude]=useState('1500')
-  const [ambientTemp,setAmbientTemp]=useState('25'),[result,setResult]=useState(null),[error,setError]=useState('')
+  const [largestMotorKW,setLargestMotorKW]=useState(''),[altitude,setAltitude]=useState(site.altitude||'1500')
+  const [ambientTemp,setAmbientTemp]=useState(site.ambient||'25'),[result,setResult]=useState(null),[error,setError]=useState('')
 
   const addLoad=()=>setLoads(l=>[...l,{name:'',kw:'',pf:'0.85',qty:'1'}])
   const removeLoad=(i)=>setLoads(l=>l.filter((_,j)=>j!==i))
@@ -373,7 +375,8 @@ function TransformerInrush({ addHistory }) {
 // ── Standby Power Cost Estimator ───────────────────────────────────────────
 function StandbyCost({ addHistory }) {
   const [loads,setLoads]=useState([{name:'Compressor (idle)',kw:'15',hours:'16',days:'365'},{name:'Pump (standby)',kw:'7.5',hours:'8',days:'365'},{name:'Lighting (off-hours)',kw:'5',hours:'12',days:'365'}])
-  const [tariff,setTariff]=useState('2.50'),[currency,setCurrency]=useState('ZAR'),[result,setResult]=useState(null)
+  const { site } = useSite()
+  const [tariff,setTariff]=useState(site.tariff||'2.50'),[currency,setCurrency]=useState(site.currency||'ZAR'),[result,setResult]=useState(null)
 
   const addLoad=()=>setLoads(l=>[...l,{name:'',kw:'',hours:'',days:'365'}])
   const removeLoad=(i)=>setLoads(l=>l.filter((_,j)=>j!==i))

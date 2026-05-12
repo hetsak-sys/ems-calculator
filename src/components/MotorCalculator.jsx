@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { SubTabBar, SelectInput, CalcButton } from './shared'
+import { useSite } from './SiteContext'
 
 const SQRT3 = Math.sqrt(3)
 const pf = (v) => parseFloat(String(v).replace(',', '.')) || 0
@@ -61,13 +62,14 @@ function InfoBox({ title, color = 'blue', lines }) {
 
 // ── FLA ────────────────────────────────────────────────────────────────────
 function FlaCalc({ addHistory }) {
-  const [phase, setPhase] = useState('3ph')
+  const { site } = useSite()
+  const [phase, setPhase] = useState(site.phase || '3ph')
   const [inputType, setInputType] = useState('kw')
   const [kw, setKw] = useState('')
   const [hp, setHp] = useState('')
-  const [voltage, setVoltage] = useState('400')
-  const [pfVal, setPf] = useState('0.85')
-  const [eff, setEff] = useState('90')
+  const [voltage, setVoltage] = useState(site.defaultLV || '400')
+  const [pfVal, setPf] = useState(site.pf || '0.85')
+  const [eff, setEff] = useState(site.efficiency || '90')
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
 

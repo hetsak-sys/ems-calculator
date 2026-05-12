@@ -1,4 +1,6 @@
 import { useState, createContext } from 'react'
+import { SiteProvider } from './components/SiteContext'
+import SiteSelector from './components/SiteSelector'
 import BasicCalculator from './components/BasicCalculator'
 import ScientificCalculator from './components/ScientificCalculator'
 import MotorCalculator from './components/MotorCalculator'
@@ -9,7 +11,6 @@ import PowerSystems from './components/PowerSystems'
 import PowerQuality from './components/PowerQuality'
 import UnitConverter from './components/UnitConverter'
 import FormulaReference from './components/FormulaReference'
-import Settings from './components/Settings'
 
 export const HistoryContext = createContext({ history: [], addHistory: () => {} })
 
@@ -24,10 +25,9 @@ const TABS = [
   { id: 'quality',    label: 'PQ',       icon: '〰' },
   { id: 'converter',  label: 'Convert',  icon: '⇄' },
   { id: 'formulas',   label: 'Formulas', icon: '∑' },
-  { id: 'settings',   label: 'Settings', icon: '⚙️' },
 ]
 
-export default function App() {
+function AppContent() {
   const [activeTab, setActiveTab] = useState('basic')
   const [history, setHistory] = useState([])
 
@@ -47,7 +47,6 @@ export default function App() {
       case 'quality':    return <PowerQuality addHistory={addHistory} />
       case 'converter':  return <UnitConverter />
       case 'formulas':   return <FormulaReference history={history} />
-      case 'settings':   return <Settings />
       default:           return <BasicCalculator addHistory={addHistory} />
     }
   }
@@ -55,15 +54,15 @@ export default function App() {
   return (
     <HistoryContext.Provider value={{ history, addHistory }}>
       <div className="flex flex-col h-full bg-black overflow-hidden"
-        style={{paddingTop:'env(safe-area-inset-top,24px)',paddingBottom:'env(safe-area-inset-bottom,0px)'}}>
+        style={{ paddingTop: 'env(safe-area-inset-top, 24px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
 
-        {/* Header */}
-        <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-[#111] border-b border-[#2a2a2a]">
+        {/* Header with site selector */}
+        <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 bg-[#111] border-b border-[#2a2a2a]">
           <div className="flex items-center gap-2">
             <span className="text-amber-400 font-black text-xl tracking-tight">EMS</span>
-            <span className="text-[#444] text-xs">v2.0</span>
+            <span className="text-[#444] text-xs">v3.0</span>
           </div>
-          <span className="text-[#444] text-[11px]">Maseru · Lesotho</span>
+          <SiteSelector />
         </div>
 
         {/* Tab Bar */}
@@ -91,5 +90,13 @@ export default function App() {
 
       </div>
     </HistoryContext.Provider>
+  )
+}
+
+export default function App() {
+  return (
+    <SiteProvider>
+      <AppContent />
+    </SiteProvider>
   )
 }

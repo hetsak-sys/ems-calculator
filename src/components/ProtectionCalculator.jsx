@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { SQRT3, pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, SubTabBar } from './shared'
+import { useSite } from './SiteContext'
 
 const VOLTAGES=[{label:'400V LV',vll:400},{label:'3.3kV',vll:3300},{label:'6.6kV',vll:6600},{label:'11kV',vll:11000},{label:'22kV',vll:22000},{label:'33kV',vll:33000}]
 

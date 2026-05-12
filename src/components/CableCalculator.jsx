@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { SQRT3, pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, SubTabBar } from './shared'
+import { useSite } from './SiteContext'
 
 const CABLE_DATA = [
   [1.5,  17.5,16.5,12.10,20.00,0.10],[2.5,  24,  23,  7.41, 12.10,0.10],
@@ -17,10 +18,11 @@ const GROUP={'1':1.00,'2':0.80,'3':0.70,'4':0.65,'5':0.60,'6':0.57}
 const INSTALL={'Clipped direct':1.00,'Free air':1.04,'Conduit in wall':0.77,'Trunking':0.85,'Buried direct':0.96,'Buried in duct':0.80}
 
 function CableSizing({ addHistory }) {
-  const [phase,setPhase]=useState('3ph'),[current,setCurrent]=useState(''),[length,setLength]=useState('')
-  const [voltage,setVoltage]=useState('400'),[insul,setInsul]=useState('PVC'),[material,setMat]=useState('Cu')
-  const [ambient,setAmbient]=useState('30'),[groups,setGroups]=useState('1'),[install,setInstall]=useState('Clipped direct')
-  const [maxVd,setMaxVd]=useState('3'),[results,setResults]=useState(null),[error,setError]=useState('')
+  const { site } = useSite()
+  const [phase,setPhase]=useState(site.phase||'3ph'),[current,setCurrent]=useState(''),[length,setLength]=useState('')
+  const [voltage,setVoltage]=useState(site.defaultLV||'400'),[insul,setInsul]=useState(site.insulation||'PVC'),[material,setMat]=useState(site.material||'Cu')
+  const [ambient,setAmbient]=useState(site.ambient||'30'),[groups,setGroups]=useState('1'),[install,setInstall]=useState('Clipped direct')
+  const [maxVd,setMaxVd]=useState(site.maxVd||'3'),[results,setResults]=useState(null),[error,setError]=useState('')
 
   const calculate=()=>{
     setError('')

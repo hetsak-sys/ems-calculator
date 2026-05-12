@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { SQRT3, pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, SubTabBar } from './shared'
+import { useSite } from './SiteContext'
 
 // ── 1. Earth Electrode Resistance ──────────────────────────────────────────
 function ElectrodeResistance({ addHistory }) {
