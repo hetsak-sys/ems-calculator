@@ -3,24 +3,24 @@ import BasicCalculator from './components/BasicCalculator'
 import ScientificCalculator from './components/ScientificCalculator'
 import MotorCalculator from './components/MotorCalculator'
 import CableCalculator from './components/CableCalculator'
-import TransformerCalculator from './components/TransformerCalculator'
-import PowerFactorCalculator from './components/PowerFactorCalculator'
+import ProtectionCalculator from './components/ProtectionCalculator'
+import PowerSystems from './components/PowerSystems'
+import PowerQuality from './components/PowerQuality'
 import UnitConverter from './components/UnitConverter'
 import FormulaReference from './components/FormulaReference'
-import NerCalculator from './components/NerCalculator'
 
 export const HistoryContext = createContext({ history: [], addHistory: () => {} })
 
 const TABS = [
-  { id: 'basic',       label: 'Basic',    icon: '⊞' },
-  { id: 'scientific',  label: 'Sci',      icon: 'ƒ' },
-  { id: 'motor',       label: 'Motor',    icon: '⚙' },
-  { id: 'cable',       label: 'Cable',    icon: '≋' },
-  { id: 'transformer', label: 'Trafo',    icon: '⇌' },
-  { id: 'pf',          label: 'P.Factor', icon: 'φ' },
-  { id: 'converter',   label: 'Convert',  icon: '⇄' },
-  { id: 'ner',         label: 'NER/NCRT', icon: '⏚' },
-  { id: 'formulas',    label: 'Formulas', icon: '∑' },
+  { id: 'basic',      label: 'Basic',    icon: '⊞' },
+  { id: 'sci',        label: 'Sci',      icon: 'ƒ' },
+  { id: 'motor',      label: 'Motor',    icon: '⚙' },
+  { id: 'cable',      label: 'Cable',    icon: '≋' },
+  { id: 'protection', label: 'Protect',  icon: '🛡' },
+  { id: 'powersys',   label: 'Power Sys',icon: '⚡' },
+  { id: 'quality',    label: 'PQ',       icon: '〰' },
+  { id: 'converter',  label: 'Convert',  icon: '⇄' },
+  { id: 'formulas',   label: 'Formulas', icon: '∑' },
 ]
 
 export default function App() {
@@ -33,39 +33,39 @@ export default function App() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'basic':       return <BasicCalculator addHistory={addHistory} />
-      case 'scientific':  return <ScientificCalculator addHistory={addHistory} />
-      case 'motor':       return <MotorCalculator addHistory={addHistory} />
-      case 'cable':       return <CableCalculator addHistory={addHistory} />
-      case 'transformer': return <TransformerCalculator addHistory={addHistory} />
-      case 'pf':          return <PowerFactorCalculator addHistory={addHistory} />
-      case 'converter':   return <UnitConverter />
-      case 'ner':         return <NerCalculator addHistory={addHistory} />
-      case 'formulas':    return <FormulaReference history={history} />
-      default:            return <BasicCalculator addHistory={addHistory} />
+      case 'basic':      return <BasicCalculator addHistory={addHistory} />
+      case 'sci':        return <ScientificCalculator addHistory={addHistory} />
+      case 'motor':      return <MotorCalculator addHistory={addHistory} />
+      case 'cable':      return <CableCalculator addHistory={addHistory} />
+      case 'protection': return <ProtectionCalculator addHistory={addHistory} />
+      case 'powersys':   return <PowerSystems addHistory={addHistory} />
+      case 'quality':    return <PowerQuality addHistory={addHistory} />
+      case 'converter':  return <UnitConverter />
+      case 'formulas':   return <FormulaReference history={history} />
+      default:           return <BasicCalculator addHistory={addHistory} />
     }
   }
 
   return (
     <HistoryContext.Provider value={{ history, addHistory }}>
-      <div className="flex flex-col h-full bg-black overflow-hidden" style={{paddingBottom: 'env(safe-area-inset-bottom, 0px)'}}>
+      <div className="flex flex-col h-full bg-black overflow-hidden" style={{paddingBottom:'env(safe-area-inset-bottom,0px)'}}>
 
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-[#111] border-b border-[#2a2a2a]">
           <div className="flex items-center gap-2">
             <span className="text-amber-400 font-black text-xl tracking-tight">EMS</span>
-            <span className="text-[#444] text-xs">v1.0</span>
+            <span className="text-[#444] text-xs">v2.0</span>
           </div>
           <span className="text-[#444] text-[11px]">Maseru · Lesotho</span>
         </div>
 
-        {/* Tab Bar — horizontally scrollable, no visible scrollbar */}
+        {/* Tab Bar */}
         <div className="flex-shrink-0 flex overflow-x-auto scrollbar-none bg-[#0a0a0a] border-b border-[#2a2a2a]">
           {TABS.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex-shrink-0 flex flex-col items-center justify-center px-3 py-2 min-w-[62px] transition-colors ${
+              className={`flex-shrink-0 flex flex-col items-center justify-center px-3 py-2 min-w-[60px] transition-colors ${
                 activeTab === tab.id
                   ? 'text-amber-400 border-b-2 border-amber-400'
                   : 'text-gray-500'
@@ -77,7 +77,7 @@ export default function App() {
           ))}
         </div>
 
-        {/* Content area */}
+        {/* Content */}
         <div className="flex-1 overflow-hidden">
           {renderContent()}
         </div>
