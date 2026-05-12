@@ -17,6 +17,7 @@ const AL_FACTOR = 0.78
 
 // Ambient temperature derating (ref = 30°C, PVC)
 const AMBIENT_DERATING = {
+  '-10': 1.29, '-5': 1.24, 0: 1.18, 5: 1.12, 10: 1.15, 15: 1.08, 20: 1.04,
   25: 1.03, 30: 1.00, 35: 0.94, 40: 0.87, 45: 0.79, 50: 0.71, 55: 0.61
 }
 
@@ -223,7 +224,7 @@ function InputField({ label, value, onChange, unit }) {
     <div className="mb-3">
       <label className="text-gray-400 text-xs mb-1 block">{label}</label>
       <div className="flex items-center bg-[#1c1c1c] border border-[#2a2a2a] rounded-xl overflow-hidden">
-        <input type="number" value={value} onChange={e => onChange(e.target.value)}
+        <input type="text" value={value} onChange={e => onChange(e.target.value)}
           inputMode="decimal" step="any"
           className="flex-1 bg-transparent text-white text-lg px-4 py-3 outline-none"
           placeholder="0" />

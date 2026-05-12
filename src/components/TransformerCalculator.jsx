@@ -187,7 +187,7 @@ function TField({ label, value, onChange, unit, id }) {
     <div className="mb-3">
       <label className="text-gray-400 text-xs mb-1 block">{label}</label>
       <div className="flex items-center bg-[#1c1c1c] border border-[#2a2a2a] rounded-xl overflow-hidden">
-        <input id={id} type="number" value={value} onChange={e => onChange && onChange(e.target.value)}
+        <input id={id} type="text" value={value} onChange={e => onChange && onChange(e.target.value)}
           inputMode="decimal" step="any"
           className="flex-1 bg-transparent text-white text-lg px-4 py-3 outline-none"
           placeholder="0" />

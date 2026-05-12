@@ -182,7 +182,7 @@ function PFField({ label, value, onChange, unit, placeholder = '0' }) {
     <div className="mb-3">
       <label className="text-gray-400 text-xs mb-1 block">{label}</label>
       <div className="flex items-center bg-[#1c1c1c] border border-[#2a2a2a] rounded-xl overflow-hidden">
-        <input type="number" value={value} onChange={e => onChange(e.target.value)}
+        <input type="text" value={value} onChange={e => onChange(e.target.value)}
           inputMode="decimal" placeholder={placeholder}
           className="flex-1 bg-transparent text-white text-lg px-4 py-3 outline-none" />
         <span className="text-gray-500 text-sm px-3">{unit}</span>

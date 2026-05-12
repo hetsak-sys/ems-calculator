@@ -7,6 +7,7 @@ import TransformerCalculator from './components/TransformerCalculator'
 import PowerFactorCalculator from './components/PowerFactorCalculator'
 import UnitConverter from './components/UnitConverter'
 import FormulaReference from './components/FormulaReference'
+import NerCalculator from './components/NerCalculator'
 
 export const HistoryContext = createContext({ history: [], addHistory: () => {} })
 
@@ -18,6 +19,7 @@ const TABS = [
   { id: 'transformer', label: 'Trafo',    icon: '⇌' },
   { id: 'pf',          label: 'P.Factor', icon: 'φ' },
   { id: 'converter',   label: 'Convert',  icon: '⇄' },
+  { id: 'ner',         label: 'NER/NCRT', icon: '⏚' },
   { id: 'formulas',    label: 'Formulas', icon: '∑' },
 ]
 
@@ -38,6 +40,7 @@ export default function App() {
       case 'transformer': return <TransformerCalculator addHistory={addHistory} />
       case 'pf':          return <PowerFactorCalculator addHistory={addHistory} />
       case 'converter':   return <UnitConverter />
+      case 'ner':         return <NerCalculator addHistory={addHistory} />
       case 'formulas':    return <FormulaReference history={history} />
       default:            return <BasicCalculator addHistory={addHistory} />
     }
