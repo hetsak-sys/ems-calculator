@@ -471,15 +471,163 @@ function GlandSize() {
   )
 }
 
-const TABS=[{id:'sizing',label:'Sizing',icon:'≋'},{id:'vd',label:'Volt Drop',icon:'⬇'},{id:'isc',label:'Fault I',icon:'⚡'},{id:'trailing',label:'Trailing',icon:'〰'},{id:'conduit',label:'Conduit',icon:'○'},{id:'gland',label:'Gland',icon:'⊗'}]
+const TABS=[{id:'sizing',label:'Sizing',icon:'≋'},{id:'vd',label:'Volt Drop',icon:'⬇'},{id:'isc',label:'Fault I',icon:'⚡'},{id:'trailing',label:'Trailing',icon:'〰'},{id:'conduit',label:'Conduit',icon:'○'},{id:'gland',label:'Gland',icon:'⊗'},{id:'schedule',label:'Schedule',icon:'📋'},{id:'vfd',label:'VFD',icon:'∿'}]
 
 export default function CableCalculator({ addHistory }) {
   const [sub,setSub]=useState('sizing')
-  const map={sizing:<CableSizing addHistory={addHistory}/>,vd:<VoltDrop addHistory={addHistory}/>,isc:<ShortCircuit addHistory={addHistory}/>,trailing:<TrailingCable addHistory={addHistory}/>,conduit:<ConduitFill/>,gland:<GlandSize/>}
+  const map={sizing:<CableSizing addHistory={addHistory}/>,vd:<VoltDrop addHistory={addHistory}/>,isc:<ShortCircuit addHistory={addHistory}/>,trailing:<TrailingCable addHistory={addHistory}/>,conduit:<ConduitFill/>,gland:<GlandSize/>,schedule:<CableSchedule/>,vfd:<VfdCable addHistory={addHistory}/>}
   return(
     <div className="flex flex-col h-full overflow-hidden">
       <SubTabBar tabs={TABS} active={sub} onChange={setSub}/>
       <div className="flex-1 overflow-y-auto">{map[sub]}</div>
+    </div>
+  )
+}
+
+// ── Cable Schedule ─────────────────────────────────────────────────────────
+function CableSchedule() {
+  const [cables,setCables]=useState([{ref:'CB-01',from:'MDB',to:'Load 1',current:'',length:'',voltage:'400',phase:'3ph',material:'Cu',insul:'PVC',size:'',notes:''}])
+  const [error,setError]=useState('')
+
+  const CABLE_DATA_LOCAL=[
+    [1.5,17.5,16.5],[2.5,24,23],[4,32,31],[6,41,40],[10,57,54],[16,76,73],
+    [25,99,96],[35,121,119],[50,150,144],[70,191,184],[95,232,223],[120,269,259],
+    [150,309,299],[185,353,341],[240,415,403],[300,477,464],
+  ]
+
+  const autoSize=(I,phase,mat,ins)=>{
+    const idx=phase==='1ph'?1:2
+    const xlpe=ins==='XLPE'?1.15:1
+    const al=mat==='Al'?0.78:1
+    const row=CABLE_DATA_LOCAL.find(r=>r[idx]*xlpe*al>=I)
+    return row?row[0]:300
+  }
+
+  const addCable=()=>setCables(c=>[...c,{ref:`CB-0${c.length+1}`,from:'',to:'',current:'',length:'',voltage:'400',phase:'3ph',material:'Cu',insul:'PVC',size:'',notes:''}])
+  const removeCable=(i)=>setCables(c=>c.filter((_,j)=>j!==i))
+  const update=(i,field,val)=>setCables(c=>c.map((item,j)=>j===i?{...item,[field]:val}:item))
+
+  const autoSizeAll=()=>{
+    setCables(c=>c.map(cable=>{
+      const I=pf(cable.current)
+      if(!I)return cable
+      const size=autoSize(I,cable.phase,cable.material,cable.insul)
+      return{...cable,size:String(size)}
+    }))
+  }
+
+  const exportCSV=()=>{
+    const header='Ref,From,To,Current(A),Length(m),Voltage(V),Phase,Material,Insul,Size(mm²),Notes'
+    const rows=cables.map(c=>`${c.ref},${c.from},${c.to},${c.current},${c.length},${c.voltage},${c.phase},${c.material},${c.insul},${c.size},${c.notes}`)
+    const csv=[header,...rows].join('\n')
+    const blob=new Blob([csv],{type:'text/csv'})
+    const url=URL.createObjectURL(blob)
+    const a=document.createElement('a')
+    a.href=url;a.download='cable-schedule.csv';a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return(
+    <div className="px-4 py-3">
+      <InfoBox title="Cable Schedule" lines={['Build your cable list, auto-size, and export to CSV','Open CSV in Excel for full schedule']}/>
+      <div className="flex gap-2 mb-4">
+        <button onClick={autoSizeAll} className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl text-sm font-bold">⚡ Auto-Size All</button>
+        <button onClick={exportCSV} className="flex-1 bg-green-600 text-white py-2.5 rounded-xl text-sm font-bold">📥 Export CSV</button>
+        <button onClick={addCable} className="flex-1 bg-[#1c1c1c] text-gray-400 py-2.5 rounded-xl text-sm">+ Add</button>
+      </div>
+      {cables.map((c,i)=>(
+        <div key={i} className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-3 mb-3">
+          <div className="flex justify-between items-center mb-2">
+            <input type="text" value={c.ref} onChange={e=>update(i,'ref',e.target.value)}
+              className="bg-[#111] border border-[#333] text-amber-400 text-sm font-bold rounded-lg px-3 py-1.5 w-24 outline-none"/>
+            <button onClick={()=>removeCable(i)} className="text-red-500 text-xs">Remove</button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            {[['from','From (source)'],['to','To (load)']].map(([f,l])=>(
+              <div key={f}><label className="text-gray-500 text-[10px]">{l}</label>
+                <input type="text" value={c[f]} onChange={e=>update(i,f,e.target.value)}
+                  className="w-full bg-[#111] border border-[#333] text-white text-sm rounded-lg px-3 py-1.5 outline-none mt-1"/></div>
+            ))}
+            {[['current','Current (A)'],['length','Length (m)'],['voltage','Voltage (V)']].map(([f,l])=>(
+              <div key={f}><label className="text-gray-500 text-[10px]">{l}</label>
+                <input type="text" inputMode="decimal" value={c[f]} onChange={e=>update(i,f,e.target.value.replace(',','.'))}
+                  className="w-full bg-[#111] border border-[#333] text-white text-sm rounded-lg px-3 py-1.5 outline-none mt-1"/></div>
+            ))}
+            <div><label className="text-gray-500 text-[10px]">Phase</label>
+              <select value={c.phase} onChange={e=>update(i,'phase',e.target.value)} className="w-full bg-[#111] border border-[#333] text-white text-sm rounded-lg px-3 py-1.5 outline-none mt-1">
+                <option value="1ph">1φ</option><option value="3ph">3φ</option>
+              </select></div>
+            <div><label className="text-gray-500 text-[10px]">Material</label>
+              <select value={c.material} onChange={e=>update(i,'material',e.target.value)} className="w-full bg-[#111] border border-[#333] text-white text-sm rounded-lg px-3 py-1.5 outline-none mt-1">
+                <option value="Cu">Copper</option><option value="Al">Aluminium</option>
+              </select></div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1"><label className="text-gray-500 text-[10px]">Auto-sized: {c.size?c.size+'mm²':'—'}</label></div>
+            <div className="flex-1"><label className="text-gray-500 text-[10px]">Notes</label>
+              <input type="text" value={c.notes} onChange={e=>update(i,'notes',e.target.value)}
+                className="w-full bg-[#111] border border-[#333] text-gray-300 text-xs rounded-lg px-3 py-1.5 outline-none mt-1" placeholder="optional"/></div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── VFD Cable Sizing ────────────────────────────────────────────────────────
+function VfdCable({ addHistory }) {
+  const [current,setCurrent]=useState(''),[length,setLength]=useState('')
+  const [voltage,setVoltage]=useState('400'),[result,setResult]=useState(null),[error,setError]=useState('')
+
+  const calculate=()=>{
+    setError('')
+    const I=pf(current),L=pf(length),V=pf(voltage)
+    if(!I||!L||!V){setError('Enter current, length, and voltage');return}
+    // VFD cable derating: screened cable has ~80% of standard cable current capacity
+    // Also need to consider:
+    // 1. Harmonics derating (use RMS current × 1.1)
+    // 2. Screening current (10% adder)
+    const deratedI=I*1.1/0.80  // harmonic correction + screen derating
+    const CABLE=[
+      [1.5,17.5],[2.5,24],[4,32],[6,41],[10,57],[16,76],[25,99],[35,121],
+      [50,150],[70,191],[95,232],[120,269],[150,309],[185,353],[240,415],
+    ]
+    const row=CABLE.find(r=>r[1]>=deratedI)
+    const size=row?row[0]:300
+    // Voltage drop (screened cable R ~same as standard)
+    const RMAP={1.5:12.1,2.5:7.41,4:4.61,6:3.08,10:1.83,16:1.15,25:0.727,35:0.524,50:0.387,70:0.268,95:0.193,120:0.153,150:0.124,185:0.0991,240:0.0754}
+    const R=RMAP[size]||0.1
+    const vd=(SQRT3*R*L*I)/1000
+    const vdPct=(vd/V*100).toFixed(2)
+    // Max cable length for VFD (to limit dV/dt): typical 50m unfiltered, 100m with output choke
+    const maxLen=50
+    setResult({size,deratedI:deratedI.toFixed(1),vd:vd.toFixed(2),vdPct,lengthOK:L<=maxLen,maxLen})
+    addHistory({tab:'VFD Cable',expr:`${I}A ${L}m VFD`,result:`${size}mm²`})
+  }
+
+  return(
+    <div className="px-4 py-3">
+      <InfoBox title="VFD Output Cable Sizing" lines={['Screened cable required for VFD output','Derating applied: ×1.1 for harmonics, ×0.8 for screening effect']}/>
+      <NumInput label="Motor FLA" value={current} onChange={setCurrent} unit="A"/>
+      <NumInput label="Cable Length (drive to motor)" value={length} onChange={setLength} unit="m"/>
+      <NumInput label="System Voltage" value={voltage} onChange={setVoltage} unit="V"/>
+      <CalcButton onClick={calculate} label="SIZE VFD CABLE"/>
+      <ErrBox msg={error}/>
+      {result&&<>
+        <ResultBox rows={[
+          {label:'Derated Design Current',value:result.deratedI,unit:'A'},
+          {label:'➤ Recommended Cable Size',value:result.size,unit:'mm² (screened)',accent:true},
+          {label:'Voltage Drop',value:result.vd,unit:`V (${result.vdPct}%)`},
+          {label:'Cable Length Check',value:result.lengthOK?`✓ OK (≤${result.maxLen}m)`:`⚠ Exceeds ${result.maxLen}m — fit output reactor`,unit:'',accent:result.lengthOK,warn:!result.lengthOK},
+        ]}/>
+        <InfoBox color="amber" title="VFD Cable Requirements" lines={[
+          '• Always use screened (shielded) cable — 360° termination at both ends',
+          '• Do NOT use SWA armoured cable for VFD output — use SY, YY, or LIYCY',
+          '• Max unfiltered length ≈ 50m to limit dV/dt stress on motor winding',
+          '• Add output reactor/filter for lengths >50m or older motors',
+          '• Separate VFD cable from signal cables by ≥300mm',
+        ]}/>
+      </>}
     </div>
   )
 }

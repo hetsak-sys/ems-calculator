@@ -4,10 +4,12 @@ import ScientificCalculator from './components/ScientificCalculator'
 import MotorCalculator from './components/MotorCalculator'
 import CableCalculator from './components/CableCalculator'
 import ProtectionCalculator from './components/ProtectionCalculator'
+import EarthingCalculator from './components/EarthingCalculator'
 import PowerSystems from './components/PowerSystems'
 import PowerQuality from './components/PowerQuality'
 import UnitConverter from './components/UnitConverter'
 import FormulaReference from './components/FormulaReference'
+import Settings from './components/Settings'
 
 export const HistoryContext = createContext({ history: [], addHistory: () => {} })
 
@@ -16,11 +18,13 @@ const TABS = [
   { id: 'sci',        label: 'Sci',      icon: 'ƒ' },
   { id: 'motor',      label: 'Motor',    icon: '⚙' },
   { id: 'cable',      label: 'Cable',    icon: '≋' },
+  { id: 'earthing',   label: 'Earthing', icon: '⏚' },
   { id: 'protection', label: 'Protect',  icon: '🛡' },
   { id: 'powersys',   label: 'Power Sys',icon: '⚡' },
   { id: 'quality',    label: 'PQ',       icon: '〰' },
   { id: 'converter',  label: 'Convert',  icon: '⇄' },
   { id: 'formulas',   label: 'Formulas', icon: '∑' },
+  { id: 'settings',   label: 'Settings', icon: '⚙️' },
 ]
 
 export default function App() {
@@ -37,18 +41,21 @@ export default function App() {
       case 'sci':        return <ScientificCalculator addHistory={addHistory} />
       case 'motor':      return <MotorCalculator addHistory={addHistory} />
       case 'cable':      return <CableCalculator addHistory={addHistory} />
+      case 'earthing':   return <EarthingCalculator addHistory={addHistory} />
       case 'protection': return <ProtectionCalculator addHistory={addHistory} />
       case 'powersys':   return <PowerSystems addHistory={addHistory} />
       case 'quality':    return <PowerQuality addHistory={addHistory} />
       case 'converter':  return <UnitConverter />
       case 'formulas':   return <FormulaReference history={history} />
+      case 'settings':   return <Settings />
       default:           return <BasicCalculator addHistory={addHistory} />
     }
   }
 
   return (
     <HistoryContext.Provider value={{ history, addHistory }}>
-      <div className="flex flex-col h-full bg-black overflow-hidden" style={{paddingTop:'env(safe-area-inset-top,24px)',paddingBottom:'env(safe-area-inset-bottom,0px)'}}>
+      <div className="flex flex-col h-full bg-black overflow-hidden"
+        style={{paddingTop:'env(safe-area-inset-top,24px)',paddingBottom:'env(safe-area-inset-bottom,0px)'}}>
 
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-[#111] border-b border-[#2a2a2a]">
@@ -65,7 +72,7 @@ export default function App() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex-shrink-0 flex flex-col items-center justify-center px-3 py-2 min-w-[60px] transition-colors ${
+              className={`flex-shrink-0 flex flex-col items-center justify-center px-3 py-2 min-w-[58px] transition-colors ${
                 activeTab === tab.id
                   ? 'text-amber-400 border-b-2 border-amber-400'
                   : 'text-gray-500'

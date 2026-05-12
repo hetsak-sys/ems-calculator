@@ -308,15 +308,133 @@ const TABS=[
   {id:'gen',      label:'Generator',  icon:'⚡'},
   {id:'busbar',   label:'Busbar',     icon:'▬'},
   {id:'starting', label:'Starting',   icon:'▶'},
+  {id:'inrush',   label:'Inrush',     icon:'⚡'},
+  {id:'standby',  label:'Standby$',   icon:'💰'},
 ]
 
 export default function PowerSystems({ addHistory }) {
   const [sub,setSub]=useState('trafo')
-  const map={trafo:<TransformerCalc addHistory={addHistory}/>,pf:<PowerFactorCalc addHistory={addHistory}/>,gen:<GeneratorSizing addHistory={addHistory}/>,busbar:<BusbarRating addHistory={addHistory}/>,starting:<MotorStarting addHistory={addHistory}/>}
+  const map={trafo:<TransformerCalc addHistory={addHistory}/>,pf:<PowerFactorCalc addHistory={addHistory}/>,gen:<GeneratorSizing addHistory={addHistory}/>,busbar:<BusbarRating addHistory={addHistory}/>,starting:<MotorStarting addHistory={addHistory}/>,inrush:<TransformerInrush addHistory={addHistory}/>,standby:<StandbyCost addHistory={addHistory}/>}
   return(
     <div className="flex flex-col h-full overflow-hidden">
       <SubTabBar tabs={TABS} active={sub} onChange={setSub}/>
       <div className="flex-1 overflow-y-auto">{map[sub]}</div>
+    </div>
+  )
+}
+
+// ── Transformer Inrush ──────────────────────────────────────────────────────
+function TransformerInrush({ addHistory }) {
+  const [kva,setKva]=useState(''),[voltage,setVoltage]=useState('400')
+  const [impedance,setImpedance]=useState('5'),[result,setResult]=useState(null),[error,setError]=useState('')
+
+  const calculate=()=>{
+    setError('')
+    const KVA=pf(kva),V=pf(voltage),Zt=pf(impedance)/100
+    if(!KVA||!V){setError('Enter kVA and voltage');return}
+    const In=(KVA*1000)/(SQRT3*V)  // rated current
+    // Inrush = 8–12× rated current (typical for distribution transformers)
+    const inrushPeak=In*10  // 10× peak
+    const inrushRMS=In*7    // 7× RMS (first cycle)
+    const inrush2nd=In*4    // 4× second cycle
+    const inrush5th=In*2    // 2× at 5 cycles
+    const duration=0.1      // typical 0.1s for inrush to decay
+    setResult({In:In.toFixed(1),inrushPeak:inrushPeak.toFixed(0),inrushRMS:inrushRMS.toFixed(0),inrush2nd:inrush2nd.toFixed(0),inrush5th:inrush5th.toFixed(0)})
+    addHistory({tab:'Inrush',expr:`${KVA}kVA ${V}V`,result:`${inrushPeak.toFixed(0)}A peak`})
+  }
+
+  return(
+    <div className="px-4 py-3">
+      <InfoBox title="Transformer Inrush Current" lines={['Peak inrush ≈ 8–12× rated current at energisation','Critical for protection relay grading and fuse selection']}/>
+      <NumInput label="Transformer Rating" value={kva} onChange={setKva} unit="kVA"/>
+      <NumInput label="Secondary Voltage" value={voltage} onChange={setVoltage} unit="V"/>
+      <NumInput label="Transformer Impedance" value={impedance} onChange={setImpedance} unit="%" placeholder="5"/>
+      <CalcButton onClick={calculate} label="CALCULATE INRUSH"/>
+      <ErrBox msg={error}/>
+      {result&&<>
+        <ResultBox rows={[
+          {label:'Rated Full Load Current',value:result.In,unit:'A'},
+          {label:'Peak Inrush (1st cycle)',value:result.inrushPeak,unit:'A',accent:true},
+          {label:'RMS Inrush (1st cycle)',value:result.inrushRMS,unit:'A'},
+          {label:'2nd Cycle Inrush',value:result.inrush2nd,unit:'A'},
+          {label:'5th Cycle Inrush',value:result.inrush5th,unit:'A'},
+        ]}/>
+        <InfoBox color="amber" title="Protection Settings" lines={[
+          '• Overcurrent relay: set instantaneous at >10× FLA (above inrush)',
+          '• Fuse: must not blow on inrush — check time-current curve at 10× FLA',
+          '• Differential relay: use 2nd harmonic restraint (15–20%) to block on inrush',
+          '• Inrush decays in 0.1–0.5s depending on transformer size and core material',
+        ]}/>
+      </>}
+    </div>
+  )
+}
+
+// ── Standby Power Cost Estimator ───────────────────────────────────────────
+function StandbyCost({ addHistory }) {
+  const [loads,setLoads]=useState([{name:'Compressor (idle)',kw:'15',hours:'16',days:'365'},{name:'Pump (standby)',kw:'7.5',hours:'8',days:'365'},{name:'Lighting (off-hours)',kw:'5',hours:'12',days:'365'}])
+  const [tariff,setTariff]=useState('2.50'),[currency,setCurrency]=useState('ZAR'),[result,setResult]=useState(null)
+
+  const addLoad=()=>setLoads(l=>[...l,{name:'',kw:'',hours:'',days:'365'}])
+  const removeLoad=(i)=>setLoads(l=>l.filter((_,j)=>j!==i))
+  const update=(i,f,v)=>setLoads(l=>l.map((item,j)=>j===i?{...item,[f]:v}:item))
+
+  const calculate=()=>{
+    const T=pf(tariff)
+    const results=loads.map(l=>{
+      const kW=pf(l.kw),H=pf(l.hours),D=pf(l.days)
+      const annualKWh=kW*H*D
+      const cost=annualKWh*T
+      return{...l,annualKWh:annualKWh.toFixed(0),cost:cost.toFixed(2)}
+    })
+    const totalKWh=results.reduce((s,r)=>s+pf(r.annualKWh),0)
+    const totalCost=results.reduce((s,r)=>s+pf(r.cost),0)
+    setResult({results,totalKWh:totalKWh.toFixed(0),totalCost:totalCost.toFixed(2)})
+    addHistory({tab:'StandbyCost',expr:`${loads.length} loads`,result:`${currency}${totalCost.toFixed(0)}/yr`})
+  }
+
+  return(
+    <div className="px-4 py-3">
+      <InfoBox title="Standby / Idle Power Cost Estimator" lines={['Quantify cost of loads running unnecessarily','Useful for energy audit justification']}/>
+      {loads.map((l,i)=>(
+        <div key={i} className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-3 mb-2">
+          <div className="flex justify-between mb-2">
+            <input type="text" value={l.name} onChange={e=>update(i,'name',e.target.value)} placeholder="Load name"
+              className="flex-1 bg-[#111] border border-[#333] text-white text-sm rounded-lg px-3 py-1.5 outline-none mr-2"/>
+            {loads.length>1&&<button onClick={()=>removeLoad(i)} className="text-red-500 text-xs flex-shrink-0">Remove</button>}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {[['kw','Power (kW)'],['hours','Hrs/day'],['days','Days/yr']].map(([f,lbl])=>(
+              <div key={f}><label className="text-gray-500 text-[10px]">{lbl}</label>
+                <input type="text" inputMode="decimal" value={l[f]} onChange={e=>update(i,f,e.target.value.replace(',','.'))}
+                  className="w-full bg-[#111] border border-[#333] text-white text-sm rounded-lg px-2 py-1.5 outline-none mt-1"/></div>
+            ))}
+          </div>
+        </div>
+      ))}
+      <button onClick={addLoad} className="w-full bg-[#1c1c1c] border border-[#2a2a2a] text-gray-400 py-2.5 rounded-xl text-sm mb-3">+ Add Load</button>
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <NumInput label="Tariff" value={tariff} onChange={setTariff} unit="/kWh"/>
+        <SelectInput label="Currency" value={currency} onChange={setCurrency} options={[['ZAR','ZAR'],['LSL','LSL'],['USD','USD'],['EUR','EUR']]}/>
+      </div>
+      <CalcButton onClick={calculate} label="CALCULATE COST"/>
+      {result&&<>
+        <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-4">
+          <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]"><span className="text-amber-400 text-xs font-bold">ANNUAL STANDBY COST</span></div>
+          {result.results.map((r,i)=>(
+            <div key={i} className="flex justify-between items-center px-4 py-2.5 border-b border-[#1a1a1a] last:border-0 text-sm">
+              <span className="text-gray-400 flex-1">{r.name||`Load ${i+1}`}</span>
+              <span className="text-gray-500 text-xs mr-3">{parseInt(r.annualKWh).toLocaleString()} kWh</span>
+              <span className="text-white font-bold">{currency}{pf(r.cost).toLocaleString()}</span>
+            </div>
+          ))}
+          <div className="flex justify-between items-center px-4 py-3 bg-[#1a1500]">
+            <span className="text-amber-400 font-bold">TOTAL</span>
+            <span className="text-gray-400 text-xs mr-3">{parseInt(result.totalKWh).toLocaleString()} kWh/yr</span>
+            <span className="text-amber-400 text-xl font-black">{currency}{pf(result.totalCost).toLocaleString()}/yr</span>
+          </div>
+        </div>
+      </>}
     </div>
   )
 }

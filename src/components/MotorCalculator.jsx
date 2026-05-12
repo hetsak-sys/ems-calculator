@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { SubTabBar, SelectInput, CalcButton } from './shared'
 
 const SQRT3 = Math.sqrt(3)
 const pf = (v) => parseFloat(String(v).replace(',', '.')) || 0
@@ -368,44 +369,159 @@ function BreakerCalc({ addHistory }) {
 }
 
 // ── MAIN ───────────────────────────────────────────────────────────────────
-const SUB_TABS = [
+const MOTOR_TABS = [
   { id: 'fla',       label: 'FLA',      icon: '⚡' },
   { id: 'newelec',   label: '327M',     icon: '🔧' },
   { id: 'epc',       label: 'EPC MS1',  icon: '🛡' },
   { id: 'contactor', label: 'Contactor',icon: '⊕' },
   { id: 'overload',  label: 'Overload', icon: '🌡' },
   { id: 'breaker',   label: 'Breaker',  icon: '⊞' },
+  { id: 'reaccel',   label: 'V-Dip',    icon: '📉' },
+  { id: 'ie',        label: 'IE Class', icon: '♻' },
 ]
 
 export default function MotorCalculator({ addHistory }) {
   const [sub, setSub] = useState('fla')
-
-  const renderSub = () => {
-    switch(sub) {
-      case 'fla':       return <FlaCalc addHistory={addHistory} />
-      case 'newelec':   return <NewElec327M />
-      case 'epc':       return <EpcMs1 />
-      case 'contactor': return <ContactorCalc addHistory={addHistory} />
-      case 'overload':  return <OverloadCalc addHistory={addHistory} />
-      case 'breaker':   return <BreakerCalc addHistory={addHistory} />
-      default:          return <FlaCalc addHistory={addHistory} />
-    }
+  const map = {
+    fla:       <FlaCalc addHistory={addHistory} />,
+    newelec:   <NewElec327M />,
+    epc:       <EpcMs1 />,
+    contactor: <ContactorCalc addHistory={addHistory} />,
+    overload:  <OverloadCalc addHistory={addHistory} />,
+    breaker:   <BreakerCalc addHistory={addHistory} />,
+    reaccel:   <Reacceleration addHistory={addHistory} />,
+    ie:        <IeComparison addHistory={addHistory} />,
   }
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex-shrink-0 flex overflow-x-auto scrollbar-none bg-[#0a0a0a] border-b border-[#2a2a2a] px-1 py-1 gap-1">
-        {SUB_TABS.map(t => (
-          <button key={t.id} onClick={() => setSub(t.id)}
-            className={`flex-shrink-0 flex flex-col items-center px-3 py-1.5 rounded-lg min-w-[58px] ${sub===t.id?'bg-amber-500 text-black':'text-gray-500'}`}>
-            <span className="text-sm">{t.icon}</span>
-            <span className="text-[10px] mt-0.5 font-medium">{t.label}</span>
-          </button>
-        ))}
-      </div>
-      <div className="flex-1 overflow-y-auto">
-        {renderSub()}
-      </div>
+      <SubTabBar tabs={MOTOR_TABS} active={sub} onChange={setSub} />
+      <div className="flex-1 overflow-y-auto">{map[sub]}</div>
+    </div>
+  )
+}
+
+// ── Motor Reacceleration / Voltage Dip ────────────────────────────────────
+function Reacceleration({ addHistory }) {
+  const [motorKW,setMotorKW]=useState(''),[voltage,setVoltage]=useState('400')
+  const [xfmrKVA,setXfmrKVA]=useState(''),[pfVal,setPf]=useState('0.85')
+  const [eff,setEff]=useState('90'),[result,setResult]=useState(null),[error,setError]=useState('')
+
+  const calculate=()=>{
+    setError('')
+    const KW=pf(motorKW),V=pf(voltage),KVA=pf(xfmrKVA),PF=pf(pfVal),EFF=pf(eff)/100
+    if(!KW||!V||!KVA){setError('Enter motor kW, voltage, and transformer kVA');return}
+    const inputPower=KW/EFF
+    const fla=inputPower*1000/(SQRT3*V*PF)
+    const startI=fla*6  // DOL starting current
+    const startKVA=(SQRT3*V*startI)/1000
+    // Transformer impedance (typical 5–6% for distribution transformers)
+    const Zt=0.055  // 5.5% typical
+    const Zs=V*V/(KVA*1000)  // source impedance
+    const Zxfmr=Zt*V*V/(KVA*1000)
+    // Voltage dip = (starting kVA) / (transformer kVA) × Zt × 100%
+    const voltageDip=(startKVA/KVA)*Zt*100
+    const voltageAtStart=V*(1-voltageDip/100)
+    // Available torque reduces as V²
+    const torqueReduction=(voltageAtStart/V)**2*100
+    // Check if motor will start (needs >60% torque for typical loads)
+    const willStart=torqueReduction>=60
+    setResult({fla:fla.toFixed(1),startI:startI.toFixed(1),startKVA:startKVA.toFixed(1),voltageDip:voltageDip.toFixed(1),voltageAtStart:voltageAtStart.toFixed(1),torqueReduction:torqueReduction.toFixed(1),willStart})
+    addHistory({tab:'Reaccel',expr:`${KW}kW @ ${KVA}kVA xfmr`,result:`Dip=${voltageDip.toFixed(1)}%`})
+  }
+
+  return(
+    <div className="px-4 py-3">
+      <InfoBox title="Motor Starting Voltage Dip" lines={['Calculates voltage depression during DOL motor starting','Critical for large motors on weak transformers or at Letseng altitude']}/>
+      <NumInput label="Motor Power" value={motorKW} onChange={setMotorKW} unit="kW"/>
+      <NumInput label="Supply Voltage (L-L)" value={voltage} onChange={setVoltage} unit="V"/>
+      <NumInput label="Transformer Rating" value={xfmrKVA} onChange={setXfmrKVA} unit="kVA"/>
+      <NumInput label="Motor Power Factor" value={pfVal} onChange={setPf} unit="PF"/>
+      <NumInput label="Motor Efficiency" value={eff} onChange={setEff} unit="%"/>
+      <CalcButton onClick={calculate} label="CALCULATE VOLTAGE DIP"/>
+      <ErrBox msg={error}/>
+      {result&&<>
+        <ResultBox rows={[
+          {label:'Motor FLA',value:result.fla,unit:'A'},
+          {label:'DOL Starting Current',value:result.startI,unit:'A'},
+          {label:'Starting kVA Demand',value:result.startKVA,unit:'kVA'},
+          {label:'Voltage Dip',value:`${result.voltageDip}%`,unit:'',accent:true,warn:pf(result.voltageDip)>15},
+          {label:'Voltage During Start',value:result.voltageAtStart,unit:'V'},
+          {label:'Available Torque at Start',value:`${result.torqueReduction}%`,unit:'(of rated)',accent:result.willStart,warn:!result.willStart},
+          {label:'Motor Will Start',value:result.willStart?'✓ YES (torque >60%)':'✗ MARGINAL — consider soft-starter or VFD',unit:'',accent:result.willStart,warn:!result.willStart},
+        ]}/>
+        <InfoBox color={pf(result.voltageDip)>15?'red':'amber'} title="Voltage Dip Guidelines" lines={[
+          '• <5% : Excellent — no issues expected',
+          '• 5–15% : Acceptable for most installations',
+          '• 15–25% : May cause other equipment to trip or dim lights',
+          '• >25% : Likely to cause problems — use soft starter or VFD',
+          '• At Letseng altitude, derated transformers worsen this effect',
+        ]}/>
+      </>}
+    </div>
+  )
+}
+
+// ── IE Motor Efficiency Comparison ────────────────────────────────────────
+function IeComparison({ addHistory }) {
+  const [kw,setKw]=useState(''),[hoursPerYear,setHours]=useState('4000'),[tariff,setTariff]=useState('2.50')
+  const [currency,setCurrency]=useState('ZAR'),[result,setResult]=useState(null),[error,setError]=useState('')
+
+  // IE efficiency levels (IEC 60034-30-1) — approximate for 3ph 50Hz at rated load
+  const IE_EFF = {
+    'IE1': {0.75:72.1,1.1:75.0,1.5:77.2,2.2:79.7,3:81.5,4:83.1,5.5:84.7,7.5:86.0,11:87.6,15:88.7,18.5:89.3,22:89.9,30:90.7,37:91.2,45:91.7,55:92.1,75:92.8,90:93.1,110:93.5,132:93.8,160:94.0,200:94.2},
+    'IE2': {0.75:77.4,1.1:79.6,1.5:81.3,2.2:83.2,3:84.6,4:85.8,5.5:87.0,7.5:88.1,11:89.4,15:90.3,18.5:90.9,22:91.3,30:92.0,37:92.5,45:92.9,55:93.2,75:93.8,90:94.1,110:94.4,132:94.7,160:94.9,200:95.1},
+    'IE3': {0.75:80.7,1.1:82.7,1.5:84.2,2.2:85.9,3:87.1,4:88.1,5.5:89.2,7.5:90.1,11:91.2,15:91.9,18.5:92.4,22:92.7,30:93.3,37:93.7,45:94.0,55:94.3,75:94.7,90:95.0,110:95.2,132:95.4,160:95.6,200:95.8},
+    'IE4': {0.75:82.5,1.1:84.5,1.5:85.9,2.2:87.4,3:88.5,4:89.4,5.5:90.3,7.5:91.0,11:92.0,15:92.7,18.5:93.1,22:93.4,30:94.0,37:94.4,45:94.7,55:95.0,75:95.4,90:95.6,110:95.8,132:96.0,160:96.2,200:96.4},
+  }
+
+  const findEff=(level,kw)=>{
+    const sizes=Object.keys(IE_EFF[level]).map(Number).sort((a,b)=>a-b)
+    const closest=sizes.reduce((prev,curr)=>Math.abs(curr-kw)<Math.abs(prev-kw)?curr:prev)
+    return IE_EFF[level][closest]
+  }
+
+  const calculate=()=>{
+    setError('')
+    const KW=pf(kw),H=pf(hoursPerYear),T=pf(tariff)
+    if(!KW||!H||!T){setError('Enter motor kW, operating hours, and tariff');return}
+    const levels=['IE1','IE2','IE3','IE4']
+    const results=levels.map(level=>{
+      const eff=findEff(level,KW)/100
+      const inputKW=KW/eff
+      const annualKWh=inputKW*H
+      const annualCost=annualKWh*T
+      return{level,eff:(eff*100).toFixed(1),inputKW:inputKW.toFixed(2),annualKWh:annualKWh.toFixed(0),annualCost:annualCost.toFixed(2)}
+    })
+    const ie1Cost=pf(results[0].annualCost)
+    const savings=results.map(r=>({...r,saving:(ie1Cost-pf(r.annualCost)).toFixed(2)}))
+    setResult(savings)
+    addHistory({tab:'IE Compare',expr:`${KW}kW ${H}h/yr`,result:`IE3 saves ${savings[2].saving} ${currency}/yr`})
+  }
+
+  return(
+    <div className="px-4 py-3">
+      <InfoBox title="Motor Efficiency Class Comparison — IEC 60034-30-1" lines={['Compare annual energy cost for IE1 to IE4 motors','Useful for procurement decisions and motor replacement justification']}/>
+      <NumInput label="Motor Power" value={kw} onChange={setKw} unit="kW"/>
+      <NumInput label="Annual Operating Hours" value={hoursPerYear} onChange={setHours} unit="h/yr" placeholder="4000"/>
+      <NumInput label="Electricity Tariff" value={tariff} onChange={setTariff} unit="/kWh" placeholder="2.50"/>
+      <SelectInput label="Currency" value={currency} onChange={setCurrency} options={[['ZAR','ZAR'],['LSL','LSL'],['USD','USD'],['EUR','EUR']]}/>
+      <CalcButton onClick={calculate} label="COMPARE EFFICIENCY CLASSES"/>
+      <ErrBox msg={error}/>
+      {result&&<>
+        <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-4">
+          <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]"><span className="text-amber-400 text-xs font-bold">ANNUAL ENERGY COMPARISON</span></div>
+          <div className="grid grid-cols-4 text-[10px] text-gray-500 font-bold px-4 py-2 border-b border-[#1a1a1a]"><span>CLASS</span><span>EFF%</span><span>kWh/yr</span><span>SAVING/yr</span></div>
+          {result.map((r,i)=>(
+            <div key={r.level} className={`grid grid-cols-4 px-4 py-2.5 border-b border-[#1a1a1a] last:border-0 text-sm ${i===2?'bg-[#001a00]':''}`}>
+              <span className={`font-bold ${i===0?'text-red-400':i===1?'text-orange-400':i===2?'text-green-400':'text-blue-400'}`}>{r.level}</span>
+              <span className="text-white">{r.eff}%</span>
+              <span className="text-gray-300">{parseInt(r.annualKWh).toLocaleString()}</span>
+              <span className={`font-bold ${pf(r.saving)>0?'text-green-400':i===0?'text-gray-500':'text-red-400'}`}>{i===0?'—':`+${currency}${pf(r.saving).toLocaleString()}`}</span>
+            </div>
+          ))}
+        </div>
+        <InfoBox color="green" title="Recommendation" lines={[`IE3 is minimum standard for new motors (EU regulation, increasingly adopted in SA)`,`IE4 worth considering for motors running >4000h/yr or >30kW`,`Payback period = extra capital cost ÷ annual saving`]}/>
+      </>}
     </div>
   )
 }

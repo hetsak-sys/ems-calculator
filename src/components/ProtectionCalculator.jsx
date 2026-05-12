@@ -390,22 +390,221 @@ function VtSizing({ addHistory }) {
   )
 }
 
-const TABS=[
+const PROT_TABS=[
   {id:'ner',    label:'NER/NCRT', icon:'⏚'},
   {id:'idmt',   label:'IDMT',     icon:'⏱'},
   {id:'ct',     label:'CT Burden',icon:'◎'},
   {id:'megger', label:'Megger',   icon:'🔬'},
   {id:'arc',    label:'Arc Flash',icon:'⚠'},
   {id:'vt',     label:'VT Size',  icon:'🔌'},
+  {id:'diff',   label:'Trafo Diff',icon:'⇌'},
+  {id:'swgr',   label:'Swgr Chk', icon:'⊞'},
+  {id:'coord',  label:'Coord',    icon:'⏱'},
 ]
 
 export default function ProtectionCalculator({ addHistory }) {
   const [sub,setSub]=useState('ner')
-  const map={ner:<NerSizing addHistory={addHistory}/>,idmt:<IdmtRelay addHistory={addHistory}/>,ct:<CtBurden addHistory={addHistory}/>,megger:<MeggerTest addHistory={addHistory}/>,arc:<ArcFlash addHistory={addHistory}/>,vt:<VtSizing addHistory={addHistory}/>}
+  const map={
+    ner:<NerSizing addHistory={addHistory}/>,
+    idmt:<IdmtRelay addHistory={addHistory}/>,
+    ct:<CtBurden addHistory={addHistory}/>,
+    megger:<MeggerTest addHistory={addHistory}/>,
+    arc:<ArcFlash addHistory={addHistory}/>,
+    vt:<VtSizing addHistory={addHistory}/>,
+    diff:<Trafodifferential addHistory={addHistory}/>,
+    swgr:<SwitchgearCheck addHistory={addHistory}/>,
+    coord:<CoordTable addHistory={addHistory}/>,
+  }
   return(
     <div className="flex flex-col h-full overflow-hidden">
-      <SubTabBar tabs={TABS} active={sub} onChange={setSub}/>
+      <SubTabBar tabs={PROT_TABS} active={sub} onChange={setSub}/>
       <div className="flex-1 overflow-y-auto">{map[sub]}</div>
+    </div>
+  )
+}
+
+// ── Transformer Differential Protection ────────────────────────────────────
+function Trafodifferential({ addHistory }) {
+  const [kva,setKva]=useState(''),[vpri,setVpri]=useState(''),[vsec,setVsec]=useState('')
+  const [ctpri,setCtpri]=useState(''),[ctsec,setCtSec]=useState('')
+  const [biasMin,setBiasMin]=useState('20'),[biasSlope,setBiasSlope]=useState('25')
+  const [result,setResult]=useState(null),[error,setError]=useState('')
+
+  const calculate=()=>{
+    setError('')
+    const KVA=pf(kva),VP=pf(vpri),VS=pf(vsec),CTP=pf(ctpri),CTS=pf(ctsec)
+    if(!KVA||!VP||!VS){setError('Enter kVA, Vp, Vs');return}
+    const Ip=(KVA*1000)/(SQRT3*VP),Is=(KVA*1000)/(SQRT3*VS)
+    const ctpCalc=Math.ceil(Ip*1.25/5)*5,ctsCalc=Math.ceil(Is*1.25/5)*5
+    const relayIp=CTP>0?Ip/CTP:Ip/ctpCalc
+    const relayIs=CTS>0?Is/CTS:Is/ctsCalc
+    const differential=Math.abs(relayIp-relayIs)
+    const restraint=(relayIp+relayIs)/2
+    const diffPct=(differential/restraint*100).toFixed(1)
+    const biasM=pf(biasMin),biasS=pf(biasSlope)/100
+    const operateCurrent=biasM/100*restraint+biasS*restraint
+    setResult({Ip:Ip.toFixed(2),Is:Is.toFixed(2),ctpCalc,ctsCalc,relayIp:relayIp.toFixed(3),relayIs:relayIs.toFixed(3),differential:differential.toFixed(3),restraint:restraint.toFixed(3),diffPct,operateCurrent:operateCurrent.toFixed(3)})
+    addHistory({tab:'Trafo Diff',expr:`${KVA}kVA ${VP}/${VS}V`,result:`Id=${differential.toFixed(3)}A`})
+  }
+
+  return(
+    <div className="px-4 py-3">
+      <InfoBox title="Transformer Differential Protection" lines={['Percentage bias differential relay settings','Id > Is_min + slope × Ir']}/>
+      <NumInput label="Transformer Rating" value={kva} onChange={setKva} unit="kVA"/>
+      <NumInput label="Primary Voltage (Vp)" value={vpri} onChange={setVpri} unit="V"/>
+      <NumInput label="Secondary Voltage (Vs)" value={vsec} onChange={setVsec} unit="V"/>
+      <NumInput label="Primary CT Ratio (primary A, leave blank for auto)" value={ctpri} onChange={setCtpri} unit="A" placeholder="auto"/>
+      <NumInput label="Secondary CT Ratio (primary A, leave blank for auto)" value={ctsec} onChange={setCtSec} unit="A" placeholder="auto"/>
+      <div className="mb-3">
+        <label className="text-gray-400 text-xs mb-2 block">Bias Settings</label>
+        <div className="grid grid-cols-2 gap-2">
+          <NumInput label="Minimum Bias (%)" value={biasMin} onChange={setBiasMin} unit="%"/>
+          <NumInput label="Slope (%)" value={biasSlope} onChange={setBiasSlope} unit="%"/>
+        </div>
+      </div>
+      <CalcButton onClick={calculate} label="CALCULATE SETTINGS"/>
+      <ErrBox msg={error}/>
+      {result&&<ResultBox rows={[
+        {label:'Primary FLA',value:result.Ip,unit:'A'},{label:'Secondary FLA',value:result.Is,unit:'A'},
+        {label:'Suggested Primary CT',value:`${result.ctpCalc}/5`,unit:'A'},{label:'Suggested Secondary CT',value:`${result.ctsCalc}/5`,unit:'A'},
+        {label:'Relay Primary Current',value:result.relayIp,unit:'A'},{label:'Relay Secondary Current',value:result.relayIs,unit:'A'},
+        {label:'Differential Current (Id)',value:result.differential,unit:'A',accent:true},
+        {label:'Restraint Current (Ir)',value:result.restraint,unit:'A'},
+        {label:'Id as % of Ir',value:`${result.diffPct}%`,unit:''},
+        {label:'Operate Current Threshold',value:result.operateCurrent,unit:'A'},
+      ]}/>}
+    </div>
+  )
+}
+
+// ── Switchgear Fault Rating Check ──────────────────────────────────────────
+function SwitchgearCheck({ addHistory }) {
+  const [iscKA,setIscKA]=useState(''),[ratedKA,setRatedKA]=useState('')
+  const [voltage,setVoltage]=useState('400'),[duration,setDuration]=useState('1')
+  const [result,setResult]=useState(null),[error,setError]=useState('')
+
+  const STANDARD_RATINGS=[6.3,10,16,20,25,31.5,40,50,63,80,100]
+
+  const calculate=()=>{
+    setError('')
+    const Isc=pf(iscKA),Ir=pf(ratedKA)
+    if(!Isc){setError('Enter fault current');return}
+    const pass=Ir>0?Isc<=Ir:null
+    const nextRating=STANDARD_RATINGS.find(r=>r>=Isc)||100
+    const peakFactor=2.5,peakCurrent=(Isc*peakFactor).toFixed(1)
+    setResult({Isc,Ir,pass,nextRating,peakCurrent})
+    addHistory({tab:'Switchgear',expr:`${Isc}kA fault`,result:pass===false?'✗ FAIL':'✓ PASS'})
+  }
+
+  return(
+    <div className="px-4 py-3">
+      <InfoBox title="Switchgear Fault Rating Check" lines={['Verify switchgear breaking capacity against calculated fault level','IEC 60947-2 / IEC 62271']}/>
+      <NumInput label="Calculated Fault Current (Isc)" value={iscKA} onChange={setIscKA} unit="kA" placeholder="e.g. 12.5"/>
+      <NumInput label="Equipment Rated Breaking Capacity" value={ratedKA} onChange={setRatedKA} unit="kA" note="from nameplate"/>
+      <NumInput label="System Voltage" value={voltage} onChange={setVoltage} unit="V"/>
+      <NumInput label="Short Time Duration" value={duration} onChange={setDuration} unit="s" note="1s or 3s typical"/>
+      <CalcButton onClick={calculate} label="CHECK RATING"/>
+      <ErrBox msg={error}/>
+      {result&&<>
+        <ResultBox rows={[
+          {label:'Fault Current (Isc)',value:`${result.Isc}`,unit:'kA',accent:true},
+          {label:'Peak Current (×2.5)',value:result.peakCurrent,unit:'kA'},
+          {label:'Equipment Rating',value:result.Ir||'Not entered',unit:'kA'},
+          ...(result.pass!==null?[{label:'Status',value:result.pass?'✓ ADEQUATE':'✗ INADEQUATE — upgrade required',unit:'',accent:result.pass,warn:!result.pass}]:[]),
+          {label:'Minimum Standard Rating Required',value:result.nextRating,unit:'kA'},
+        ]}/>
+        <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-4">
+          <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]"><span className="text-amber-400 text-xs font-bold">IEC STANDARD RATINGS (kA)</span></div>
+          <div className="flex flex-wrap gap-2 p-3">
+            {[6.3,10,16,20,25,31.5,40,50,63,80,100].map(r=>(
+              <span key={r} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${r>=pf(iscKA)?'bg-[#002a00] text-green-400':'bg-[#1a0000] text-red-500'}`}>{r}kA</span>
+            ))}
+          </div>
+        </div>
+      </>}
+    </div>
+  )
+}
+
+// ── Protection Coordination Grading Table ──────────────────────────────────
+function CoordTable({ addHistory }) {
+  const [relays,setRelays]=useState([
+    {name:'Incomer',pickup:'100',tms:'0.4',type:'SI'},
+    {name:'Feeder',pickup:'60',tms:'0.2',type:'SI'},
+    {name:'Load',pickup:'30',tms:'0.1',type:'SI'},
+  ])
+  const [faultI,setFaultI]=useState(''),[result,setResult]=useState(null)
+
+  const CURVES={SI:{k:0.14,a:0.02},VI:{k:13.5,a:1.0},EI:{k:80,a:2.0}}
+  const tripTime=(relay,If)=>{
+    const Ip=pf(relay.pickup),TMS=pf(relay.tms)
+    const M=If/Ip
+    if(M<=1)return Infinity
+    const c=CURVES[relay.type]||CURVES.SI
+    return TMS*(c.k/(Math.pow(M,c.a)-1))
+  }
+
+  const calculate=()=>{
+    const If=pf(faultI)
+    if(!If)return
+    const times=relays.map(r=>({...r,time:tripTime(r,If)}))
+    // Check grading margins
+    const graded=times.map((r,i)=>{
+      if(i===0)return{...r,margin:null,ok:true}
+      const upstream=times[i-1]
+      const margin=upstream.time-r.time
+      return{...r,margin:margin.toFixed(3),ok:margin>=0.3}
+    })
+    setResult(graded)
+    addHistory({tab:'Coord',expr:`If=${If}A`,result:`${graded.length} relays graded`})
+  }
+
+  const updateRelay=(i,field,val)=>setRelays(r=>r.map((item,j)=>j===i?{...item,[field]:val}:item))
+  const addRelay=()=>setRelays(r=>[...r,{name:'New Relay',pickup:'20',tms:'0.05',type:'SI'}])
+  const removeRelay=(i)=>setRelays(r=>r.filter((_,j)=>j!==i))
+
+  return(
+    <div className="px-4 py-3">
+      <InfoBox title="Protection Coordination Grading" lines={['Minimum grading margin: 0.3s between relays','Downstream relay must trip before upstream']}/>
+      {relays.map((r,i)=>(
+        <div key={i} className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-3 mb-2">
+          <div className="flex justify-between mb-2">
+            <span className="text-amber-400 text-xs font-bold">{i===0?'UPSTREAM (Incomer)':i===relays.length-1?'DOWNSTREAM (Load)':`Level ${i+1}`}</span>
+            {relays.length>2&&<button onClick={()=>removeRelay(i)} className="text-red-500 text-xs">Remove</button>}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className="text-gray-500 text-[10px]">Name</label>
+              <input type="text" value={r.name} onChange={e=>updateRelay(i,'name',e.target.value)} className="w-full bg-[#111] border border-[#333] text-white text-sm rounded-lg px-3 py-2 outline-none mt-1"/></div>
+            <div><label className="text-gray-500 text-[10px]">Curve</label>
+              <select value={r.type} onChange={e=>updateRelay(i,'type',e.target.value)} className="w-full bg-[#111] border border-[#333] text-white text-sm rounded-lg px-3 py-2 outline-none mt-1">
+                <option value="SI">Standard Inverse</option><option value="VI">Very Inverse</option><option value="EI">Extremely Inverse</option>
+              </select></div>
+            <div><label className="text-gray-500 text-[10px]">Pickup (A)</label>
+              <input type="text" inputMode="decimal" value={r.pickup} onChange={e=>updateRelay(i,'pickup',e.target.value.replace(',','.'))} className="w-full bg-[#111] border border-[#333] text-white text-sm rounded-lg px-3 py-2 outline-none mt-1"/></div>
+            <div><label className="text-gray-500 text-[10px]">TMS</label>
+              <input type="text" inputMode="decimal" value={r.tms} onChange={e=>updateRelay(i,'tms',e.target.value.replace(',','.'))} className="w-full bg-[#111] border border-[#333] text-white text-sm rounded-lg px-3 py-2 outline-none mt-1"/></div>
+          </div>
+        </div>
+      ))}
+      <button onClick={addRelay} className="w-full bg-[#1c1c1c] border border-[#2a2a2a] text-gray-400 py-2.5 rounded-xl text-sm mb-3">+ Add Relay Level</button>
+      <NumInput label="Fault Current to Check" value={faultI} onChange={setFaultI} unit="A"/>
+      <CalcButton onClick={calculate} label="CHECK GRADING"/>
+      {result&&<>
+        <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-4">
+          <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]"><span className="text-amber-400 text-xs font-bold">GRADING RESULTS AT {faultI}A</span></div>
+          {result.map((r,i)=>(
+            <div key={i} className={`px-4 py-3 border-b border-[#1a1a1a] last:border-0 ${!r.ok?'bg-[#1a0000]':''}`}>
+              <div className="flex justify-between items-center">
+                <span className="text-white text-sm font-bold">{r.name}</span>
+                <span className={`text-lg font-bold ${r.time===Infinity?'text-gray-500':r.ok?'text-green-400':'text-red-400'}`}>{r.time===Infinity?'No trip':`${r.time.toFixed(3)}s`}</span>
+              </div>
+              {r.margin!==null&&<div className={`text-xs mt-1 ${r.ok?'text-green-600':'text-red-400'}`}>
+                {r.ok?`✓ Margin: ${r.margin}s (min 0.3s)`:`✗ Margin only ${r.margin}s — increase TMS of upstream relay`}
+              </div>}
+            </div>
+          ))}
+        </div>
+      </>}
     </div>
   )
 }
