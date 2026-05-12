@@ -256,29 +256,217 @@ function ConduitFill() {
   )
 }
 
-const GLANDS=[[3,7,'20S','M20'],[6,12,'20','M20'],[10,17,'25','M25'],[14,21,'32','M32'],[18,25,'40','M40'],[22,32,'50','M50'],[29,38,'63','M63'],[35,45,'75','M75'],[42,54,'90','M90'],[50,65,'110','M110']]
+// ── GLAND DATA ──────────────────────────────────────────────────────────────
+// Standard metric cable gland sizes 0–7
+// [size number, OD min, OD max, thread, A2(unarm), CW(SWA)]
+const GLAND_SIZES = [
+  { size: '0',  min: 3,   max: 7,   thread: 'M16',  a2: 'Size 0',  cw: 'CW0'  },
+  { size: '1',  min: 6,   max: 12,  thread: 'M20',  a2: 'Size 1',  cw: 'CW1'  },
+  { size: '2',  min: 10,  max: 17,  thread: 'M25',  a2: 'Size 2',  cw: 'CW2'  },
+  { size: '3',  min: 14,  max: 21,  thread: 'M32',  a2: 'Size 3',  cw: 'CW3'  },
+  { size: '4',  min: 18,  max: 27,  thread: 'M40',  a2: 'Size 4',  cw: 'CW4'  },
+  { size: '5',  min: 24,  max: 34,  thread: 'M50',  a2: 'Size 5',  cw: 'CW5'  },
+  { size: '6',  min: 30,  max: 45,  thread: 'M63',  a2: 'Size 6',  cw: 'CW6'  },
+  { size: '7',  min: 42,  max: 60,  thread: 'M75',  a2: 'Size 7',  cw: 'CW7'  },
+]
+
+// Typical OD table: [conductor mm², cores, PVC-unarm OD, PVC-SWA OD, XLPE-unarm OD, XLPE-SWA OD]
+const CABLE_OD_TABLE = [
+  // size,  cores, PVC-UA, PVC-A,  XLPE-UA, XLPE-A
+  [1.5,  2,  8.2,   11.0,  8.5,   11.5 ],
+  [1.5,  3,  8.8,   11.8,  9.0,   12.0 ],
+  [1.5,  4,  9.8,   13.0,  10.0,  13.5 ],
+  [2.5,  2,  9.0,   12.0,  9.5,   12.5 ],
+  [2.5,  3,  9.8,   13.0,  10.2,  13.5 ],
+  [2.5,  4,  11.0,  14.5,  11.5,  15.0 ],
+  [4,    2,  10.0,  13.5,  10.5,  14.0 ],
+  [4,    3,  11.0,  14.5,  11.5,  15.0 ],
+  [4,    4,  12.5,  16.5,  13.0,  17.0 ],
+  [6,    2,  11.0,  14.5,  11.5,  15.0 ],
+  [6,    3,  12.2,  16.0,  12.8,  16.8 ],
+  [6,    4,  14.0,  18.0,  14.5,  18.8 ],
+  [10,   2,  12.8,  16.8,  13.5,  17.5 ],
+  [10,   3,  14.2,  18.5,  15.0,  19.5 ],
+  [10,   4,  16.5,  21.0,  17.0,  22.0 ],
+  [16,   2,  14.5,  19.0,  15.2,  20.0 ],
+  [16,   3,  16.5,  21.5,  17.0,  22.5 ],
+  [16,   4,  19.0,  24.5,  20.0,  25.5 ],
+  [25,   2,  17.0,  22.0,  17.8,  23.0 ],
+  [25,   3,  19.5,  25.5,  20.5,  26.5 ],
+  [25,   4,  22.5,  29.0,  23.5,  30.0 ],
+  [35,   2,  19.0,  25.0,  20.0,  26.0 ],
+  [35,   3,  22.0,  28.5,  23.0,  30.0 ],
+  [35,   4,  25.5,  33.0,  26.5,  34.5 ],
+  [50,   2,  21.5,  28.5,  22.5,  30.0 ],
+  [50,   3,  25.0,  32.5,  26.0,  34.0 ],
+  [50,   4,  29.0,  37.5,  30.5,  39.5 ],
+  [70,   2,  24.5,  32.5,  25.5,  34.0 ],
+  [70,   3,  28.5,  37.0,  30.0,  39.0 ],
+  [70,   4,  33.5,  43.0,  35.0,  45.0 ],
+  [95,   2,  27.5,  36.5,  29.0,  38.5 ],
+  [95,   3,  32.5,  42.0,  34.0,  44.0 ],
+  [95,   4,  38.0,  49.0,  40.0,  51.5 ],
+  [120,  2,  30.5,  40.5,  32.0,  42.5 ],
+  [120,  3,  36.0,  46.5,  37.5,  48.5 ],
+  [120,  4,  42.5,  54.5,  44.5,  57.0 ],
+  [150,  2,  33.5,  44.5,  35.0,  46.5 ],
+  [150,  3,  39.5,  51.0,  41.5,  53.5 ],
+  [150,  4,  46.5,  59.5,  49.0,  62.5 ],
+  [185,  2,  37.0,  49.0,  39.0,  51.5 ],
+  [185,  3,  43.5,  56.5,  45.5,  59.0 ],
+  [185,  4,  51.5,  65.5,  54.0,  68.5 ],
+  [240,  3,  49.0,  63.0,  51.5,  66.0 ],
+  [300,  3,  55.0,  70.0,  58.0,  73.5 ],
+]
+
+const CONDUCTOR_SIZES = [...new Set(CABLE_OD_TABLE.map(r => r[0]))].map(s => [String(s), `${s} mm²`])
+const CORE_OPTIONS = [['2','2 Core'],['3','3 Core'],['4','4 Core']]
+const ARMOUR_OPTIONS = [['unarm','Unarmoured'],['swa','SWA (Steel Wire Armoured)']]
+const INSUL_OPTIONS  = [['pvc','PVC'],['xlpe','XLPE']]
+
+function getOD(size, cores, armoured, insul) {
+  const row = CABLE_OD_TABLE.find(r => r[0] === size && r[1] === cores)
+  if (!row) return null
+  if (armoured === 'swa') return insul === 'xlpe' ? row[5] : row[3]
+  return insul === 'xlpe' ? row[4] : row[2]
+}
+
+function findGland(od) {
+  return GLAND_SIZES.find(g => od >= g.min && od <= g.max) || null
+}
 
 function GlandSize() {
-  const [od,setOd]=useState(''),[result,setResult]=useState(null),[error,setError]=useState('')
-  const calculate=()=>{
+  const [method, setMethod]   = useState('conductor')
+  // Method 1 — conductor
+  const [condSize, setCondSize] = useState('16')
+  const [cores, setCores]       = useState('3')
+  const [armour, setArmour]     = useState('unarm')
+  const [insul, setInsul]       = useState('pvc')
+  // Method 2 — OD
+  const [od, setOd]             = useState('')
+  const [result, setResult]     = useState(null)
+  const [error, setError]       = useState('')
+
+  const calculate = () => {
     setError('')
-    const OD=pf(od)
-    if(!OD){setError('Enter cable OD');return}
-    const m=GLANDS.find(r=>OD>=r[0]&&OD<=r[1])
-    if(!m){setError('OD outside standard range');return}
-    setResult({gland:m[2],thread:m[3],min:m[0],max:m[1]})
+    setResult(null)
+    if (method === 'conductor') {
+      const size = pf(condSize), coreN = pf(cores)
+      const typOD = getOD(size, coreN, armour, insul)
+      if (!typOD) { setError('No data for this combination'); return }
+      const gland = findGland(typOD)
+      if (!gland) { setError('Cable OD outside standard gland range'); return }
+      setResult({
+        od: typOD,
+        gland: gland.size,
+        thread: gland.thread,
+        type: armour === 'swa' ? gland.cw : gland.a2,
+        glandType: armour === 'swa' ? 'CW (SWA Armoured)' : 'A2 (Unarmoured)',
+        min: gland.min, max: gland.max,
+        conductor: condSize, cores, armour, insul,
+      })
+    } else {
+      const OD = pf(od)
+      if (!OD) { setError('Enter cable outer diameter'); return }
+      const gland = findGland(OD)
+      if (!gland) { setError('OD outside standard gland range (3–60mm)'); return }
+      setResult({
+        od: OD,
+        gland: gland.size,
+        thread: gland.thread,
+        type: `${gland.a2} (unarm) / ${gland.cw} (SWA)`,
+        glandType: 'Check armour type',
+        min: gland.min, max: gland.max,
+      })
+    }
   }
-  return(
+
+  return (
     <div className="px-4 py-3">
-      <InfoBox title="Cable Gland Size Selector" lines={['Enter measured cable outer diameter','Metric thread standard (IEC)']}/>
-      <NumInput label="Cable Outer Diameter (measured)" value={od} onChange={setOd} unit="mm" placeholder="e.g. 18.5"/>
+      <InfoBox title="Cable Gland Size Selector" lines={['Standard metric gland sizes 0–7','A2 = unarmoured PVC | CW/BW = SWA armoured']}/>
+
+      {/* Method toggle */}
+      <div className="mb-4">
+        <label className="text-gray-400 text-xs mb-2 block">Selection Method</label>
+        <div className="flex gap-2">
+          {[['conductor','By Cable Size'],['od','By Measured OD']].map(([id,l]) => (
+            <button key={id} onClick={() => { setMethod(id); setResult(null); setError('') }}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${method===id?'bg-amber-500 text-black':'bg-[#1c1c1c] text-gray-400'}`}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {method === 'conductor' ? (
+        <>
+          <SelectInput label="Conductor Size" value={condSize} onChange={setCondSize} options={CONDUCTOR_SIZES}/>
+          <div className="mb-3">
+            <label className="text-gray-400 text-xs mb-2 block">Number of Cores</label>
+            <div className="flex gap-2">
+              {CORE_OPTIONS.map(([id,l]) => (
+                <button key={id} onClick={() => setCores(id)}
+                  className={`flex-1 py-2.5 rounded-xl text-sm ${cores===id?'bg-amber-500 text-black':'bg-[#1c1c1c] text-gray-400'}`}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div className="mb-3">
+            <label className="text-gray-400 text-xs mb-2 block">Cable Type</label>
+            <div className="flex gap-2">
+              {ARMOUR_OPTIONS.map(([id,l]) => (
+                <button key={id} onClick={() => setArmour(id)}
+                  className={`flex-1 py-2.5 rounded-xl text-sm ${armour===id?'bg-blue-600 text-white':'bg-[#1c1c1c] text-gray-400'}`}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div className="mb-4">
+            <label className="text-gray-400 text-xs mb-2 block">Insulation</label>
+            <div className="flex gap-2">
+              {INSUL_OPTIONS.map(([id,l]) => (
+                <button key={id} onClick={() => setInsul(id)}
+                  className={`flex-1 py-2.5 rounded-xl text-sm ${insul===id?'bg-[#1a3a5a] text-blue-300':'bg-[#1c1c1c] text-gray-400'}`}>{l}</button>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : (
+        <NumInput label="Cable Outer Diameter (measured)" value={od} onChange={setOd} unit="mm" placeholder="e.g. 18.5"/>
+      )}
+
       <CalcButton onClick={calculate} label="SELECT GLAND"/>
       <ErrBox msg={error}/>
-      {result&&<ResultBox rows={[
-        {label:'Gland Size',value:result.gland,unit:'',accent:true},
-        {label:'Thread',value:result.thread,unit:'',accent:true},
-        {label:'Cable OD Range',value:`${result.min}–${result.max}`,unit:'mm'},
-      ]}/>}
+
+      {result && (
+        <>
+          <ResultBox rows={[
+            { label: 'Typical Cable OD', value: result.od, unit: 'mm' },
+            { label: '➤ Gland Size', value: `Size ${result.gland}`, unit: '', accent: true },
+            { label: '➤ Thread Size', value: result.thread, unit: '', accent: true },
+            { label: '➤ Gland Type', value: result.type, unit: '', accent: true },
+            { label: 'Type Description', value: result.glandType, unit: '' },
+            { label: 'OD Range for this Size', value: `${result.min}–${result.max}`, unit: 'mm' },
+          ]} />
+
+          {/* Size reference table */}
+          <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-4">
+            <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]">
+              <span className="text-amber-400 text-xs font-bold">FULL GLAND SIZE REFERENCE</span>
+            </div>
+            <div className="grid grid-cols-4 text-[10px] text-gray-500 font-bold px-4 py-2 border-b border-[#1a1a1a]">
+              <span>SIZE</span><span>OD RANGE</span><span>THREAD</span><span>TYPE</span>
+            </div>
+            {GLAND_SIZES.map(g => (
+              <div key={g.size}
+                className={`grid grid-cols-4 px-4 py-2.5 border-b border-[#1a1a1a] last:border-0 text-xs ${g.size===result.gland?'bg-[#1a1500]':''}`}>
+                <span className={`font-bold ${g.size===result.gland?'text-amber-400':'text-white'}`}>Size {g.size}</span>
+                <span className="text-gray-300">{g.min}–{g.max}mm</span>
+                <span className="text-gray-400">{g.thread}</span>
+                <span className="text-gray-500">{g.a2}/{g.cw}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }

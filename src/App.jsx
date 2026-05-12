@@ -48,7 +48,7 @@ export default function App() {
 
   return (
     <HistoryContext.Provider value={{ history, addHistory }}>
-      <div className="flex flex-col h-full bg-black overflow-hidden" style={{paddingBottom:'env(safe-area-inset-bottom,0px)'}}>
+      <div className="flex flex-col h-full bg-black overflow-hidden" style={{paddingTop:'env(safe-area-inset-top,24px)',paddingBottom:'env(safe-area-inset-bottom,0px)'}}>
 
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-[#111] border-b border-[#2a2a2a]">
