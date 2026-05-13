@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { SubTabBar, SelectInput, CalcButton } from './shared'
+import { SubTabBar, SelectInput, CalcButton, ResultCard, useResultCard } from './shared'
 import { useSite } from './SiteContext'
+import ContactorOLR from './ContactorOLR'
 
 const SQRT3 = Math.sqrt(3)
 const pf = (v) => parseFloat(String(v).replace(',', '.')) || 0
@@ -61,8 +62,9 @@ function InfoBox({ title, color = 'blue', lines }) {
 }
 
 // ── FLA ────────────────────────────────────────────────────────────────────
-function FlaCalc({ addHistory }) {
+function FlaCalc({ addHistory, onFlaCalculated }) {
   const { site } = useSite()
+  const { cardData, showCard, hideCard } = useResultCard()
   const [phase, setPhase] = useState(site.phase || '3ph')
   const [inputType, setInputType] = useState('kw')
   const [kw, setKw] = useState('')
@@ -86,6 +88,7 @@ function FlaCalc({ addHistory }) {
     const res = { fla: fla.toFixed(2), kva: kva.toFixed(3), kvar: kvar.toFixed(3), inputkW: (inputPower/1000).toFixed(3), startCurrent: (fla*6).toFixed(1), ctRatio }
     setResult(res)
     addHistory({ tab: 'Motor-FLA', expr: `${phase} ${inputType==='kw'?kw+'kW':hp+'HP'} @${V}V`, result: `${res.fla}A` })
+    if (onFlaCalculated) onFlaCalculated({ kw: inputType==='kw'?kw:String(pf(hp)*0.7457), voltage: String(V), phase, pfVal: String(PF), eff: String(EFF*100), fla: res.fla })
   }
 
   return (
@@ -112,14 +115,43 @@ function FlaCalc({ addHistory }) {
       <NumInput label="Motor Efficiency" value={eff} onChange={setEff} unit="%" />
       <button onClick={calculate} className="w-full bg-amber-500 text-black font-bold py-4 rounded-xl text-lg mb-4">CALCULATE</button>
       <ErrBox msg={error} />
-      {result && <ResultBox rows={[
-        { label: 'Full Load Current (FLA)', value: result.fla, unit: 'A', accent: true },
-        { label: 'Apparent Power', value: result.kva, unit: 'kVA' },
-        { label: 'Reactive Power', value: result.kvar, unit: 'kVAr' },
-        { label: 'Input Power (drawn)', value: result.inputkW, unit: 'kW' },
-        { label: 'DOL Start Current (×6)', value: result.startCurrent, unit: 'A' },
-        { label: 'Suggested CT Ratio', value: `${result.ctRatio}/5`, unit: 'A' },
-      ]} />}
+      {result && <>
+        <ResultBox rows={[
+          { label: 'Full Load Current (FLA)', value: result.fla, unit: 'A', accent: true },
+          { label: 'Apparent Power', value: result.kva, unit: 'kVA' },
+          { label: 'Reactive Power', value: result.kvar, unit: 'kVAr' },
+          { label: 'Input Power (drawn)', value: result.inputkW, unit: 'kW' },
+          { label: 'DOL Start Current (×6)', value: result.startCurrent, unit: 'A' },
+          { label: 'Suggested CT Ratio', value: `${result.ctRatio}/5`, unit: 'A' },
+        ]} />
+        <button onClick={() => showCard({
+          calculator: 'Motor FLA Calculation',
+          standard: 'IEC 60034 / SANS 10142-1',
+          site: site.name,
+          inputs: [
+            { label: 'Motor Power', value: `${inputType==='kw'?kw+' kW':hp+' HP'}` },
+            { label: 'Supply Voltage', value: `${voltage} V (${phase})` },
+            { label: 'Power Factor', value: pfVal },
+            { label: 'Efficiency', value: `${eff}%` },
+          ],
+          sections: [{
+            title: 'RESULTS',
+            rows: [
+              { label: 'Full Load Current (FLA)', value: `${result.fla} A`, accent: true },
+              { label: 'Apparent Power', value: `${result.kva} kVA` },
+              { label: 'Reactive Power', value: `${result.kvar} kVAr` },
+              { label: 'Input Power', value: `${result.inputkW} kW` },
+              { label: 'DOL Starting Current', value: `${result.startCurrent} A` },
+              { label: 'Suggested CT Ratio', value: `${result.ctRatio}/5 A` },
+            ]
+          }],
+          notes: 'FLA is the continuous rated current. Use for cable sizing, contactor selection (Q), and overload relay setting (F).'
+        })}
+          className="w-full bg-[#1a1a2e] border border-[#2a2a5a] text-blue-300 font-bold py-3 rounded-xl text-sm mb-4">
+          📄 Generate Result Card
+        </button>
+      </>}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
@@ -229,7 +261,7 @@ function EpcMs1() {
           { label: '➤ I∆n Setting (left dial)', value: result.settingMa, unit: 'mA', accent: true },
           { label: '➤ Instantaneous (right dial)', value: result.instantaneous, unit: 'mA', accent: true },
         ]} />
-        <InfoBox title="EPC MS1 Notes" color="amber" lines={[
+        <InfoBox title="Core Balance Relay Setting Notes" color="amber" lines={[
           '• Setting must be above normal leakage to avoid nuisance trips',
           '• Instantaneous = 2–4× the I∆n setting',
           '• LV typical: 250–500mA | Sensitive circuits: 30–100mA',
@@ -373,26 +405,28 @@ function BreakerCalc({ addHistory }) {
 // ── MAIN ───────────────────────────────────────────────────────────────────
 const MOTOR_TABS = [
   { id: 'fla',       label: 'FLA',      icon: '⚡' },
-  { id: 'newelec',   label: '327M',     icon: '🔧' },
-  { id: 'epc',       label: 'EPC MS1',  icon: '🛡' },
-  { id: 'contactor', label: 'Contactor',icon: '⊕' },
-  { id: 'overload',  label: 'Overload', icon: '🌡' },
+  { id: 'qf',        label: 'Q+F+K',    icon: '⊕' },
   { id: 'breaker',   label: 'Breaker',  icon: '⊞' },
+  { id: 'newelec',   label: 'MPM Relay',icon: '🔧' },
+  { id: 'epc',       label: 'CBR Relay',icon: '🛡' },
   { id: 'reaccel',   label: 'V-Dip',    icon: '📉' },
   { id: 'ie',        label: 'IE Class', icon: '♻' },
 ]
 
 export default function MotorCalculator({ addHistory }) {
   const [sub, setSub] = useState('fla')
+  const [flaSnapshot, setFlaSnapshot] = useState(null)
+
+  const onFlaCalculated = (snapshot) => setFlaSnapshot(snapshot)
+
   const map = {
-    fla:       <FlaCalc addHistory={addHistory} />,
-    newelec:   <NewElec327M />,
-    epc:       <EpcMs1 />,
-    contactor: <ContactorCalc addHistory={addHistory} />,
-    overload:  <OverloadCalc addHistory={addHistory} />,
-    breaker:   <BreakerCalc addHistory={addHistory} />,
-    reaccel:   <Reacceleration addHistory={addHistory} />,
-    ie:        <IeComparison addHistory={addHistory} />,
+    fla:     <FlaCalc addHistory={addHistory} onFlaCalculated={onFlaCalculated} />,
+    qf:      <ContactorOLR addHistory={addHistory} flaSnapshot={flaSnapshot} />,
+    breaker: <BreakerCalc addHistory={addHistory} />,
+    newelec: <NewElec327M />,
+    epc:     <EpcMs1 />,
+    reaccel: <Reacceleration addHistory={addHistory} />,
+    ie:      <IeComparison addHistory={addHistory} />,
   }
   return (
     <div className="flex flex-col h-full overflow-hidden">

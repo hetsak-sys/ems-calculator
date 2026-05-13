@@ -119,3 +119,189 @@ export function SubTabBar({ tabs, active, onChange }) {
     </div>
   )
 }
+
+// ── Result Card — professional output for field use ────────────────────────
+export function ResultCard({ data, onClose }) {
+  const [copied, setCopied] = useState(false)
+
+  const formatAsText = () => {
+    const line = '─'.repeat(38)
+    const dline = '═'.repeat(38)
+    let out = []
+    out.push(dline)
+    out.push('   EMS CALCULATOR — RESULT RECORD')
+    out.push(dline)
+    out.push(`Site:     ${data.site || '—'}`)
+    out.push(`Date:     ${new Date().toLocaleDateString('en-ZA')}  ${new Date().toLocaleTimeString('en-ZA', {hour:'2-digit',minute:'2-digit'})}`)
+    out.push(`Calc:     ${data.calculator}`)
+    out.push(`Standard: ${data.standard || 'IEC / SANS'}`)
+    out.push(line)
+    if (data.inputs?.length) {
+      out.push('INPUTS')
+      data.inputs.forEach(i => out.push(`  ${i.label.padEnd(22)} ${i.value}`))
+      out.push(line)
+    }
+    data.sections?.forEach(s => {
+      out.push(s.title)
+      s.rows?.forEach(r => out.push(`  ${r.label.padEnd(22)} ${r.value}`))
+      out.push(line)
+    })
+    if (data.notes) {
+      out.push('NOTE')
+      out.push(`  ${data.notes}`)
+      out.push(line)
+    }
+    out.push('EMS Calculator — Maseru, Lesotho')
+    out.push(dline)
+    return out.join('\n')
+  }
+
+  const handleShare = async () => {
+    const text = formatAsText()
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'EMS Calculator Result', text })
+      } else {
+        await navigator.clipboard.writeText(text)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      }
+    } catch {
+      try {
+        await navigator.clipboard.writeText(text)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      } catch { /* silent */ }
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col" onClick={onClose}>
+      {/* Dimmed backdrop */}
+      <div className="flex-1 bg-black/70" />
+
+      {/* Card */}
+      <div className="bg-[#111] border-t border-[#2a2a2a] rounded-t-3xl pb-6 max-h-[85vh] flex flex-col"
+        onClick={e => e.stopPropagation()}>
+
+        {/* Handle */}
+        <div className="flex justify-center py-3">
+          <div className="w-10 h-1 bg-[#333] rounded-full" />
+        </div>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pb-3 border-b border-[#2a2a2a]">
+          <div>
+            <div className="text-amber-400 font-black text-base">{data.calculator}</div>
+            <div className="text-gray-500 text-xs">{data.site} · {new Date().toLocaleDateString('en-ZA')}</div>
+          </div>
+          <button onClick={onClose} className="text-gray-600 text-xl px-2">✕</button>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto px-5 py-3">
+
+          {/* Standard badge */}
+          {data.standard && (
+            <div className="bg-[#0a1a2e] border border-[#1a3a5a] rounded-xl px-3 py-2 mb-3">
+              <span className="text-blue-400 text-xs font-bold">Standard: </span>
+              <span className="text-blue-300 text-xs">{data.standard}</span>
+            </div>
+          )}
+
+          {/* Inputs */}
+          {data.inputs?.length > 0 && (
+            <div className="mb-3">
+              <div className="text-gray-600 text-[10px] font-bold uppercase tracking-wider mb-1.5">Inputs</div>
+              <div className="bg-[#0a0a0a] rounded-xl overflow-hidden border border-[#1a1a1a]">
+                {data.inputs.map((inp, i) => (
+                  <div key={i} className="flex justify-between px-4 py-2 border-b border-[#1a1a1a] last:border-0 text-sm">
+                    <span className="text-gray-500">{inp.label}</span>
+                    <span className="text-white font-medium">{inp.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Result sections */}
+          {data.sections?.map((section, si) => (
+            <div key={si} className="mb-3">
+              <div className="text-amber-400 text-xs font-bold uppercase tracking-wider mb-1.5">{section.title}</div>
+              <div className="bg-[#0a0a0a] rounded-xl overflow-hidden border border-[#2a2a1a]">
+                {section.rows?.map((row, ri) => (
+                  <div key={ri}
+                    className={`flex justify-between items-start px-4 py-2.5 border-b border-[#1a1a1a] last:border-0 ${row.accent ? 'bg-[#1a1500]' : ''}`}>
+                    <span className={`text-sm flex-1 pr-2 ${row.sub ? 'text-gray-600 text-xs pl-2' : 'text-gray-400'}`}>{row.label}</span>
+                    <span className={`text-sm font-bold text-right flex-shrink-0 ${row.accent ? 'text-amber-400' : row.warn ? 'text-red-400' : 'text-white'}`}>
+                      {row.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {/* Notes */}
+          {data.notes && (
+            <div className="bg-[#1a1000] border border-[#3a2000] rounded-xl px-4 py-3 mb-3">
+              <div className="text-orange-400 text-xs font-bold mb-1">⚠ Note</div>
+              <div className="text-gray-400 text-xs leading-relaxed">{data.notes}</div>
+            </div>
+          )}
+
+          {/* Legend — always shown */}
+          <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-3 mb-3">
+            <div className="text-gray-600 text-[10px] font-bold uppercase tracking-wider mb-2">Legend</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+              {[
+                ['Q',      'Main power contactor (AC-3)'],
+                ['F',      'Overload / protective relay'],
+                ['K',      'Control / contactor relay'],
+                ['FLA',    'Full Load Amperes'],
+                ['AC-3',   'IEC motor switching duty'],
+                ['OLR',    'Overload Relay'],
+                ['DOL',    'Direct On-Line starting'],
+                ['MPM',    'Motor Protection Monitor'],
+                ['CBR',    'Core Balance Relay'],
+                ['NER',    'Neutral Earthing Resistor'],
+                ['NCRT',   'Neutral CT / ratio transformer'],
+                ['IDMT',   'Inverse Definite Min. Time relay'],
+                ['TMS',    'Time Multiplier Setting'],
+                ['PF',     'Power Factor'],
+                ['VD',     'Voltage Drop'],
+                ['THD',    'Total Harmonic Distortion'],
+                ['GPR',    'Ground Potential Rise'],
+                ['IE3/IE4','Motor efficiency class (IEC)'],
+              ].map(([abbr, desc]) => (
+                <div key={abbr} className="flex gap-1.5 text-[10px]">
+                  <span className="text-amber-500 font-bold flex-shrink-0 w-10">{abbr}</span>
+                  <span className="text-gray-500">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex gap-3 px-5 pt-3 border-t border-[#2a2a2a]">
+          <button onClick={handleShare}
+            className={`flex-1 py-3.5 rounded-2xl font-bold text-sm ${copied ? 'bg-green-600 text-white' : 'bg-amber-500 text-black'}`}>
+            {copied ? '✓ Copied!' : (typeof navigator !== 'undefined' && navigator.share ? '📤 Share' : '📋 Copy')}
+          </button>
+          <button onClick={onClose}
+            className="px-6 py-3.5 bg-[#1c1c1c] text-gray-400 rounded-2xl text-sm">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function useResultCard() {
+  const [cardData, setCardData] = useState(null)
+  const showCard = (data) => setCardData(data)
+  const hideCard = () => setCardData(null)
+  return { cardData, showCard, hideCard }
+}
