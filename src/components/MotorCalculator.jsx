@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { SubTabBar, SelectInput, CalcButton, ResultCard, useResultCard } from './shared'
+import { SubTabBar, SelectInput, CalcButton, ResultCard, useResultCard, UnitNumInput, POWER_UNITS, VOLTAGE_UNITS } from './shared'
 import { useSite } from './SiteContext'
 import ContactorOLR from './ContactorOLR'
 
@@ -109,7 +109,9 @@ function FlaCalc({ addHistory, onFlaCalculated }) {
           ))}
         </div>
       </div>
-      {inputType==='kw' ? <NumInput label="Motor Output Power" value={kw} onChange={setKw} unit="kW" /> : <NumInput label="Motor Output Power" value={hp} onChange={setHp} unit="HP" />}
+      {inputType==='kw'
+        ? <UnitNumInput label="Motor Output Power" value={kw} onChange={(v, base) => { setKw(v); }} units={POWER_UNITS} />
+        : <NumInput label="Motor Output Power" value={hp} onChange={setHp} unit="HP" />}
       <NumInput label={`Supply Voltage ${phase==='3ph'?'(L-L)':'(L-N)'}`} value={voltage} onChange={setVoltage} unit="V" />
       <NumInput label="Power Factor" value={pfVal} onChange={setPf} unit="PF" />
       <NumInput label="Motor Efficiency" value={eff} onChange={setEff} unit="%" />
@@ -362,8 +364,9 @@ function OverloadCalc({ addHistory }) {
 // ── Breaker ────────────────────────────────────────────────────────────────
 const MCCB_TRIPS = [6,10,16,20,25,32,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600]
 
-function BreakerCalc({ addHistory }) {
-  const [fla, setFla] = useState('')
+function BreakerCalc({ addHistory, flaSnapshot }) {
+  const snap = flaSnapshot || {}
+  const [fla, setFla] = useState(snap.fla || '')
   const [startFactor, setStartFactor] = useState('6')
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
@@ -422,7 +425,7 @@ export default function MotorCalculator({ addHistory }) {
   const map = {
     fla:     <FlaCalc addHistory={addHistory} onFlaCalculated={onFlaCalculated} />,
     qf:      <ContactorOLR addHistory={addHistory} flaSnapshot={flaSnapshot} />,
-    breaker: <BreakerCalc addHistory={addHistory} />,
+    breaker: <BreakerCalc addHistory={addHistory} flaSnapshot={flaSnapshot} />,
     newelec: <NewElec327M />,
     epc:     <EpcMs1 />,
     reaccel: <Reacceleration addHistory={addHistory} />,

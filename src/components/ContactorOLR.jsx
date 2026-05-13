@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { SQRT3, pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, ResultCard, useResultCard } from './shared'
+import { SQRT3, pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, ResultCard, useResultCard, UnitNumInput, POWER_UNITS, VOLTAGE_UNITS } from './shared'
 import { useSite } from './SiteContext'
 
 // ── IEC 60947-4-1 / SANS 60947-4-1 Data ────────────────────────────────────
@@ -229,8 +229,8 @@ export default function ContactorOLR({ addHistory, flaSnapshot }) {
         )}
 
         <ToggleInput label="Phase" options={[['1ph','1φ Single'],['3ph','3φ Three']]} value={phase} onChange={setPhase} />
-        <NumInput label="Motor Power" value={kw} onChange={setKw} unit="kW" />
-        <NumInput label="Supply Voltage (L-L)" value={voltage} onChange={setVoltage} unit="V" />
+        <UnitNumInput label="Motor Power" value={kw} onChange={(v)=>setKw(v)} units={POWER_UNITS} />
+        <UnitNumInput label="Supply Voltage (L-L)" value={voltage} onChange={(v)=>setVoltage(v)} units={VOLTAGE_UNITS} />
         <NumInput label="Power Factor" value={pfVal} onChange={setPf} unit="PF" />
         <NumInput label="Motor Efficiency" value={eff} onChange={setEff} unit="%" />
 

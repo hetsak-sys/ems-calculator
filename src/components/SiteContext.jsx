@@ -2,25 +2,6 @@ import { createContext, useContext, useState } from 'react'
 
 export const SITES = [
   {
-    id: 'letseng',
-    name: 'Letseng Mine',
-    flag: '🇱🇸',
-    voltages:   ['230', '400', '525'],
-    mvVoltages: ['11000', '33000'],
-    defaultLV:  '525',
-    defaultMV:  '11000',
-    altitude:   '3100',
-    ambient:    '10',
-    frequency:  '50',
-    currency:   'LSL',
-    tariff:     '2.80',
-    phase:      '3ph',
-    material:   'Cu',
-    maxVd:      '3',
-    pf:         '0.85',
-    efficiency: '90',
-  },
-  {
     id: 'sa_surface',
     name: 'SA Mine (Surface)',
     flag: '🇿🇦',
@@ -33,6 +14,25 @@ export const SITES = [
     frequency:  '50',
     currency:   'ZAR',
     tariff:     '2.50',
+    phase:      '3ph',
+    material:   'Cu',
+    maxVd:      '3',
+    pf:         '0.85',
+    efficiency: '90',
+  },
+  {
+    id: 'lesotho_highlands',
+    name: 'Lesotho Highlands Mine',
+    flag: '🇱🇸',
+    voltages:   ['230', '400', '525'],
+    mvVoltages: ['11000', '33000'],
+    defaultLV:  '525',
+    defaultMV:  '11000',
+    altitude:   '3100',
+    ambient:    '10',
+    frequency:  '50',
+    currency:   'LSL',
+    tariff:     '2.80',
     phase:      '3ph',
     material:   'Cu',
     maxVd:      '3',
@@ -125,7 +125,7 @@ export const SiteContext = createContext({
 })
 
 export function SiteProvider({ children }) {
-  const [siteId, setSiteId] = useState('letseng')
+  const [siteId, setSiteId] = useState('sa_surface')
   const [customSite, setCustomSite] = useState({ ...SITES[5] })
 
   const setSiteById = (id) => setSiteId(id)

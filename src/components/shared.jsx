@@ -27,6 +27,72 @@ export function NumInput({ label, value, onChange, unit, placeholder = '0', note
   )
 }
 
+// Unit-aware number input — tap unit label to cycle through options
+// units: e.g. [['W',1],['kW',1000],['MW',1000000]]  (label, multiplier to base)
+export function UnitNumInput({ label, value, onChange, units, note }) {
+  const [unitIdx, setUnitIdx] = useState(0)
+  const unit = units[unitIdx]
+  const cycleUnit = () => {
+    const next = (unitIdx + 1) % units.length
+    // Convert current displayed value to new unit
+    if (value) {
+      const baseVal = parseFloat(String(value).replace(',','.')) * unit[1]
+      const newDisplayVal = baseVal / units[next][1]
+      // Format cleanly
+      const formatted = newDisplayVal >= 1000 ? newDisplayVal.toFixed(0)
+        : newDisplayVal >= 1 ? parseFloat(newDisplayVal.toFixed(4)).toString()
+        : parseFloat(newDisplayVal.toPrecision(4)).toString()
+      onChange(formatted, baseVal)
+    }
+    setUnitIdx(next)
+  }
+  const handleChange = (v) => {
+    const cleaned = v.replace(',','.')
+    const baseVal = (parseFloat(cleaned) || 0) * unit[1]
+    onChange(cleaned, baseVal)
+  }
+  return (
+    <div className="mb-3">
+      {label && <label className="text-gray-400 text-xs mb-1 block">{label}{note && <span className="text-gray-600 ml-1 italic">— {note}</span>}</label>}
+      <div className="flex items-center bg-[#1c1c1c] border border-[#2a2a2a] rounded-xl overflow-hidden">
+        <input
+          type="text" inputMode="decimal" value={value}
+          onChange={e => handleChange(e.target.value)}
+          placeholder="0"
+          className="flex-1 bg-transparent text-white text-lg px-4 py-3 outline-none"
+        />
+        <button onClick={cycleUnit}
+          className="flex items-center gap-1 bg-[#2a2a2a] border-l border-[#3a3a3a] px-4 py-3 text-amber-400 font-bold text-sm flex-shrink-0 active:bg-[#3a3a3a]">
+          {unit[0]}
+          <span className="text-gray-600 text-xs">▾</span>
+        </button>
+      </div>
+      {units.length > 1 && (
+        <div className="flex gap-1.5 mt-1.5 px-1">
+          {units.map((u, i) => (
+            <button key={u[0]} onClick={() => {
+              if (i !== unitIdx) {
+                const baseVal = (parseFloat(String(value).replace(',','.')) || 0) * unit[1]
+                const newVal = baseVal / u[1]
+                const fmt = newVal >= 1000 ? newVal.toFixed(0) : parseFloat(newVal.toPrecision(4)).toString()
+                onChange(fmt, baseVal)
+                setUnitIdx(i)
+              }
+            }}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium ${i===unitIdx?'bg-amber-500 text-black':'bg-[#1a1a1a] text-gray-500'}`}>
+              {u[0]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export const POWER_UNITS   = [['kW',1000],['W',1],['MW',1000000]]
+export const VOLTAGE_UNITS = [['V',1],['kV',1000]]
+export const CURRENT_UNITS = [['A',1],['mA',0.001],['kA',1000]]
+
 export function SelectInput({ label, value, onChange, options }) {
   return (
     <div className="mb-3">
@@ -283,14 +349,15 @@ export function ResultCard({ data, onClose }) {
           </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex gap-3 px-5 pt-3 border-t border-[#2a2a2a]">
+        {/* Action buttons — padded above phone navigation bar */}
+        <div className="flex gap-3 px-5 pt-3 border-t border-[#2a2a2a]"
+          style={{paddingBottom:'max(env(safe-area-inset-bottom,0px),12px)'}}>
           <button onClick={handleShare}
-            className={`flex-1 py-3.5 rounded-2xl font-bold text-sm ${copied ? 'bg-green-600 text-white' : 'bg-amber-500 text-black'}`}>
-            {copied ? '✓ Copied!' : (typeof navigator !== 'undefined' && navigator.share ? '📤 Share' : '📋 Copy')}
+            className={`flex-1 py-4 rounded-2xl font-bold text-base ${copied ? 'bg-green-600 text-white' : 'bg-amber-500 text-black'}`}>
+            {copied ? '✓ Copied to clipboard!' : (typeof navigator !== 'undefined' && navigator.share ? '📤 Share Result' : '📋 Copy Result')}
           </button>
           <button onClick={onClose}
-            className="px-6 py-3.5 bg-[#1c1c1c] text-gray-400 rounded-2xl text-sm">
+            className="px-6 py-4 bg-[#1c1c1c] text-gray-400 rounded-2xl text-sm font-medium">
             Close
           </button>
         </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { SQRT3, pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, SubTabBar } from './shared'
+import { SQRT3, pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, SubTabBar, UnitNumInput, VOLTAGE_UNITS, ResultCard, useResultCard } from './shared'
 import { useSite } from './SiteContext'
 
 const CABLE_DATA = [
@@ -19,6 +19,7 @@ const INSTALL={'Clipped direct':1.00,'Free air':1.04,'Conduit in wall':0.77,'Tru
 
 function CableSizing({ addHistory }) {
   const { site } = useSite()
+  const { cardData, showCard, hideCard } = useResultCard()
   const [phase,setPhase]=useState(site.phase||'3ph'),[current,setCurrent]=useState(''),[length,setLength]=useState('')
   const [voltage,setVoltage]=useState(site.defaultLV||'400'),[insul,setInsul]=useState(site.insulation||'PVC'),[material,setMat]=useState(site.material||'Cu')
   const [ambient,setAmbient]=useState(site.ambient||'30'),[groups,setGroups]=useState('1'),[install,setInstall]=useState('Clipped direct')
@@ -55,7 +56,7 @@ function CableSizing({ addHistory }) {
       <ToggleInput label="Conductor" options={[['Cu','Copper'],['Al','Aluminium']]} value={material} onChange={setMat}/>
       <NumInput label="Design Current" value={current} onChange={setCurrent} unit="A"/>
       <NumInput label="Cable Length (one-way)" value={length} onChange={setLength} unit="m"/>
-      <NumInput label="System Voltage" value={voltage} onChange={setVoltage} unit="V"/>
+      <UnitNumInput label="System Voltage" value={voltage} onChange={(v)=>setVoltage(v)} units={VOLTAGE_UNITS}/>
       <NumInput label="Max Voltage Drop" value={maxVd} onChange={setMaxVd} unit="%"/>
       <SelectInput label="Ambient Temperature" value={ambient} onChange={setAmbient} options={Object.keys(AMBIENT).map(t=>[t,`${t}°C (×${AMBIENT[t]})`])}/>
       <SelectInput label="Grouped Circuits" value={groups} onChange={setGroups} options={Object.entries(GROUP).map(([g,f])=>[g,`${g} circuit${g>1?'s':''} (×${f})`])}/>

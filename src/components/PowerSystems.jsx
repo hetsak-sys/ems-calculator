@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { SQRT3, pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, SubTabBar } from './shared'
+import { SQRT3, pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, SubTabBar, UnitNumInput, POWER_UNITS, VOLTAGE_UNITS } from './shared'
 import { useSite } from './SiteContext'
 
 // ── Transformer ────────────────────────────────────────────────────────────
@@ -46,8 +46,8 @@ function TransformerCalc({ addHistory }) {
         </div>
       </div>
       <ToggleInput label="Type" options={[['1ph','1φ Single'],['3ph','3φ Three']]} value={phase} onChange={setPhase}/>
-      <NumInput label="Primary Voltage (Vp)" value={vp} onChange={setVp} unit="V"/>
-      <NumInput label="Secondary Voltage (Vs)" value={vs} onChange={setVs} unit="V"/>
+      <UnitNumInput label="Primary Voltage (Vp)" value={vp} onChange={(v)=>setVp(v)} units={VOLTAGE_UNITS} />
+      <UnitNumInput label="Secondary Voltage (Vs)" value={vs} onChange={(v)=>setVs(v)} units={VOLTAGE_UNITS} />
       {mode==='currents'&&<NumInput label="Rating" value={kva} onChange={setKva} unit="kVA"/>}
       {mode==='kva'&&<NumInput label="Primary Current (Ip)" value={ip} onChange={setIp} unit="A"/>}
       {mode==='voltage'&&<><NumInput label="Rating" value={kva} onChange={setKva} unit="kVA"/><NumInput label="Turns Ratio (n = Vp/Vs)" value={ratio} onChange={setRatio} unit=":1"/></>}
@@ -86,8 +86,8 @@ function PowerFactorCalc({ addHistory }) {
   return(
     <div className="px-4 py-3">
       <ToggleInput label="System" options={[['1ph','Single Phase'],['3ph','Three Phase']]} value={phase} onChange={setPhase}/>
-      <NumInput label="Active Power" value={kw} onChange={setKw} unit="kW"/>
-      <NumInput label="System Voltage (L-L)" value={voltage} onChange={setVoltage} unit="V"/>
+      <UnitNumInput label="Active Power" value={kw} onChange={(v)=>setKw(v)} units={POWER_UNITS} />
+      <UnitNumInput label="System Voltage (L-L)" value={voltage} onChange={(v)=>setVoltage(v)} units={VOLTAGE_UNITS} />
       <NumInput label="Current Power Factor" value={curPF} onChange={setCurPF} unit="PF" placeholder="e.g. 0.72"/>
       <NumInput label="Target Power Factor" value={tgtPF} onChange={setTgtPF} unit="PF" placeholder="e.g. 0.95"/>
       <NumInput label="Frequency" value={freq} onChange={setFreq} unit="Hz"/>
@@ -107,7 +107,38 @@ function PowerFactorCalc({ addHistory }) {
           {label:'Current (before → after)',value:`${result.curI} → ${result.tgtI}`,unit:'A'},
           {label:'Current Reduction',value:result.reduction,unit:'%',accent:true},
         ]}/>
-        <InfoBox color="amber" title="⚠ VFD / Non-Linear Loads" lines={['Standard capacitors may cause harmonic resonance','Use detuned reactor banks (p-factor 5–7%) for VFD-driven loads']}/>
+        {/* Reactor sizing for detuned banks */}
+        <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-4">
+          <div className="bg-[#1a0a1a] px-4 py-2 border-b border-[#2a2a2a]">
+            <span className="text-purple-400 text-xs font-bold">DETUNED REACTOR BANK SIZING</span>
+            <span className="text-gray-600 text-xs ml-2">for VFD / non-linear loads</span>
+          </div>
+          {[
+            { p: 5.67, f: 210, label: 'p=5.67% (tuned to 210Hz — most common, SA standard)' },
+            { p: 7.0,  f: 189, label: 'p=7%    (tuned to 189Hz — conservative, heavy harmonics)' },
+            { p: 14.0, f: 134, label: 'p=14%   (tuned to 134Hz — very high harmonic content)' },
+          ].map(({ p, f, label }) => {
+            const XL = (p / 100) * (pf(voltage) * pf(voltage)) / (pf(result?.kvarCap || 1) * 1000)
+            const Lmh = (XL / (2 * Math.PI * 50) * 1000).toFixed(2)
+            const Xc = (pf(voltage) * pf(voltage)) / (pf(result?.kvarCap || 1) * 1000)
+            const reactorXL = (p / 100) * Xc
+            const reactorL = (reactorXL / (2 * Math.PI * 50) * 1000).toFixed(2)
+            return (
+              <div key={p} className="px-4 py-3 border-b border-[#1a1a1a] last:border-0">
+                <div className="text-purple-300 text-xs font-medium mb-1">{label}</div>
+                <div className="flex gap-4 text-xs">
+                  <span className="text-gray-400">Tuning freq: <span className="text-white font-bold">{f} Hz</span></span>
+                  <span className="text-gray-400">Reactor L: <span className="text-white font-bold">{reactorL} mH</span></span>
+                </div>
+              </div>
+            )
+          })}
+          <div className="px-4 py-2 bg-[#0a0a0a] text-[10px] text-gray-600">
+            Reactor rated current = capacitor bank rated current · Voltage rating ≥ system voltage
+          </div>
+        </div>
+
+        <InfoBox color="amber" title="⚠ VFD / Non-Linear Loads" lines={['Standard capacitors cause harmonic resonance with VFDs','Detuned reactor banks detune below dominant harmonic (5th = 250Hz)','p=5.67% is standard in SA mining — verify with power quality study']}/>
       </>}
     </div>
   )
