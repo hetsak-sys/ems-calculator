@@ -1,15 +1,8 @@
 {
-  "appId": "com.ems.calculator",
-  "appName": "EMS Calculator",
+  "appId": "com.hetsa.powersuite",
+  "appName": "Hetsa PowerSuite",
   "webDir": "dist",
-  "android": {
-    "allowMixedContent": true
-  },
-  "plugins": {
-    "SplashScreen": {
-      "launchShowDuration": 1500,
-      "backgroundColor": "#000000",
-      "showSpinner": false
-    }
+  "server": {
+    "androidScheme": "https"
   }
 }

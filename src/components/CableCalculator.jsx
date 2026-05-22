@@ -260,7 +260,7 @@ function ConduitFill() {
 }
 
 // ── GLAND DATA ──────────────────────────────────────────────────────────────
-// Standard metric cable gland sizes 0–7
+// Standard metric cable gland sizes 0–9
 // [size number, OD min, OD max, thread, A2(unarm), CW(SWA)]
 const GLAND_SIZES = [
   { size: '0',  min: 3,   max: 7,   thread: 'M16',  a2: 'Size 0',  cw: 'CW0'  },
@@ -271,8 +271,246 @@ const GLAND_SIZES = [
   { size: '5',  min: 24,  max: 34,  thread: 'M50',  a2: 'Size 5',  cw: 'CW5'  },
   { size: '6',  min: 30,  max: 45,  thread: 'M63',  a2: 'Size 6',  cw: 'CW6'  },
   { size: '7',  min: 42,  max: 60,  thread: 'M75',  a2: 'Size 7',  cw: 'CW7'  },
+  { size: '8', min: 60, max: 75, thread: 'M90',  a2: 'Size 8', cw: 'CW8' },
+  { size: '9', min: 75, max: 95, thread: 'M100', a2: 'Size 9', cw: 'CW9' },
 ]
 
+const PRATLEY_SWA_TABLE = {
+  '2-1.5': {
+  gland: '0',
+  cw: 'CW16',
+  min: 8,
+  max: 11
+},
+
+'3-1.5': {
+  gland: '0',
+  cw: 'CW16',
+  min: 9,
+  max: 12
+},
+
+'4-1.5': {
+  gland: '1',
+  cw: 'CW20',
+  min: 10,
+  max: 13
+},
+
+'2-2.5': {
+  gland: '0',
+  cw: 'CW16',
+  min: 9,
+  max: 12
+},
+
+'3-2.5': {
+  gland: '1',
+  cw: 'CW20',
+  min: 10,
+  max: 13
+},
+
+'4-2.5': {
+  gland: '1',
+  cw: 'CW20',
+  min: 12,
+  max: 15
+},
+
+'2-4': {
+  gland: '1',
+  cw: 'CW20',
+  min: 10,
+  max: 14
+},
+
+'3-4': {
+  gland: '1',
+  cw: 'CW20',
+  min: 12,
+  max: 15
+},
+
+'4-4': {
+  gland: '1',
+  cw: 'CW20',
+  min: 14,
+  max: 17
+},
+
+'2-6': {
+  gland: '1',
+  cw: 'CW20',
+  min: 11,
+  max: 15
+},
+
+'3-6': {
+  gland: '1',
+  cw: 'CW20',
+  min: 13,
+  max: 17
+},
+
+'4-6': {
+  gland: '1',
+  cw: 'CW20',
+  min: 15,
+  max: 18
+},
+
+'2-10': {
+  gland: '1',
+  cw: 'CW20',
+  min: 14,
+  max: 18
+},
+
+'3-10': {
+  gland: '1',
+  cw: 'CW20',
+  min: 16,
+  max: 20
+},
+
+'4-10': {
+  gland: '1',
+  cw: 'CW20',
+  min: 17,
+  max: 21
+},
+  '4-16': {
+    gland: '2',
+    cw: 'CW25',
+    min: 20,
+    max: 27
+  },
+
+  '4-25': {
+    gland: '3',
+    cw: 'CW32',
+    min: 26,
+    max: 33
+  },
+
+  '4-35': {
+    gland: '4',
+    cw: 'CW40',
+    min: 31,
+    max: 38
+    },
+    
+    '3-50': {
+  gland: '5',
+  cw: 'CW50',
+  min: 36,
+  max: 44
+},
+
+'4-50': {
+  gland: '5',
+  cw: 'CW50',
+  min: 38,
+  max: 46
+},
+
+'3-70': {
+  gland: '5',
+  cw: 'CW50',
+  min: 40,
+  max: 48
+},
+
+'4-70': {
+  gland: '6',
+  cw: 'CW63',
+  min: 44,
+  max: 52
+},
+
+'3-95': {
+  gland: '6',
+  cw: 'CW63',
+  min: 46,
+  max: 54
+},
+
+'4-95': {
+  gland: '6',
+  cw: 'CW63',
+  min: 48,
+  max: 56
+},
+
+'3-120': {
+  gland: '6',
+  cw: 'CW63',
+  min: 50,
+  max: 58
+},
+
+'4-120': {
+  gland: '7',
+  cw: 'CW75',
+  min: 54,
+  max: 60
+},
+'3-150': {
+  gland: '7',
+  cw: 'CW7',
+  min: 58,
+  max: 64
+},
+
+'4-150': {
+  gland: '7',
+  cw: 'CW7',
+  min: 60,
+  max: 66
+},
+
+'3-185': {
+  gland: '8',
+  cw: 'CW8',
+  min: 65,
+  max: 72
+},
+
+'4-185': {
+  gland: '8',
+  cw: 'CW8',
+  min: 68,
+  max: 75
+},
+
+'3-240': {
+  gland: '9',
+  cw: 'CW9',
+  min: 74,
+  max: 82
+},
+
+'4-240': {
+  gland: '9',
+  cw: 'CW9',
+  min: 78,
+  max: 86
+},
+'3-300': {
+  gland: '9',
+  cw: 'CW9',
+  min: 82,
+  max: 90
+},
+
+'4-300': {
+  gland: '9',
+  cw: 'CW9',
+  min: 86,
+  max: 95
+},
+};
 // Typical OD table: [conductor mm², cores, PVC-unarm OD, PVC-SWA OD, XLPE-unarm OD, XLPE-SWA OD]
 const CABLE_OD_TABLE = [
   // size,  cores, PVC-UA, PVC-A,  XLPE-UA, XLPE-A
@@ -315,11 +553,13 @@ const CABLE_OD_TABLE = [
   [150,  2,  33.5,  44.5,  35.0,  46.5 ],
   [150,  3,  39.5,  51.0,  41.5,  53.5 ],
   [150,  4,  46.5,  59.5,  49.0,  62.5 ],
-  [185,  2,  37.0,  49.0,  39.0,  51.5 ],
-  [185,  3,  43.5,  56.5,  45.5,  59.0 ],
-  [185,  4,  51.5,  65.5,  54.0,  68.5 ],
-  [240,  3,  49.0,  63.0,  51.5,  66.0 ],
-  [300,  3,  55.0,  70.0,  58.0,  73.5 ],
+  [185, 2, 37.0, 49.0, 39.0, 51.5],
+  [185, 3, 43.5, 56.5, 45.5, 59.0],
+  [185, 4, 51.5, 65.5, 54.0, 68.5],
+  [240, 3, 66.0, 80.0, 69.0, 83.0],
+  [240, 4, 70.0, 84.0, 73.0, 87.0],
+  [300, 3, 74.0, 88.0, 77.0, 91.0],
+  [300, 4, 78.0, 92.0, 81.0, 95.0],
 ]
 
 const CONDUCTOR_SIZES = [...new Set(CABLE_OD_TABLE.map(r => r[0]))].map(s => [String(s), `${s} mm²`])
@@ -334,7 +574,26 @@ function getOD(size, cores, armoured, insul) {
   return insul === 'xlpe' ? row[4] : row[2]
 }
 
-function findGland(od) {
+function findGland(od, cores, size, armour) {
+
+  // Use Pratley SWA overrides first
+  if (armour === 'swa') {
+    const key = `${cores}-${size}`
+    const pratley = PRATLEY_SWA_TABLE[key]
+
+    if (pratley) {
+      return {
+        size: pratley.gland,
+        min: pratley.min,
+        max: pratley.max,
+        thread: pratley.cw,
+        a2: `Size ${pratley.gland}`,
+        cw: pratley.cw
+      }
+    }
+  }
+
+  // fallback to normal OD table
   return GLAND_SIZES.find(g => od >= g.min && od <= g.max) || null
 }
 
@@ -357,14 +616,17 @@ function GlandSize() {
       const size = pf(condSize), coreN = pf(cores)
       const typOD = getOD(size, coreN, armour, insul)
       if (!typOD) { setError('No data for this combination'); return }
-      const gland = findGland(typOD)
+      const gland = findGland(typOD, coreN, size, armour)
       if (!gland) { setError('Cable OD outside standard gland range'); return }
       setResult({
         od: typOD,
         gland: gland.size,
         thread: gland.thread,
         type: armour === 'swa' ? gland.cw : gland.a2,
-        glandType: armour === 'swa' ? 'CW (SWA Armoured)' : 'A2 (Unarmoured)',
+        glandType:
+  armour === 'swa'
+    ? 'BW (Indoor) / CW (Outdoor)'
+    : 'A2 (Unarmoured)',
         min: gland.min, max: gland.max,
         conductor: condSize, cores, armour, insul,
       })

@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">EMS Calculator</string>
-    <string name="title_activity_main">EMS Calculator</string>
-    <string name="package_name">com.ems.calculator</string>
-    <string name="custom_url_scheme">com.ems.calculator</string>
+    <string name="app_name">Hetsa PowerSuite</string>
+    <string name="title_activity_main">Hetsa PowerSuite</string>
+    <string name="package_name">com.hetsa.powersuite</string>
+    <string name="custom_url_scheme">com.hetsa.powersuite</string>
 </resources>

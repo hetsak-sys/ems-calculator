@@ -52,15 +52,18 @@ function AppContent() {
   }
 
   return (
-    <HistoryContext.Provider value={{ history, addHistory }}>
-      <div className="flex flex-col h-full bg-black overflow-hidden"
-        style={{ paddingTop: 'env(safe-area-inset-top, 24px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-
-        {/* Header with site selector */}
+  <HistoryContext.Provider value={{ history, addHistory }}>
+    <div
+      className="flex flex-col h-full bg-black overflow-hidden"
+      style={{
+        paddingTop: 'env(safe-area-inset-top, 24px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)'
+      }}
+    >
         <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 bg-[#111] border-b border-[#2a2a2a]">
           <div className="flex items-center gap-2">
-            <span className="text-amber-400 font-black text-xl tracking-tight">EMS</span>
-            <span className="text-[#444] text-xs">v3.0</span>
+            <span className="text-amber-400 font-black text-xl tracking-tight">Hetsa PowerSuite</span>
+            <span className="text-[#444] text-xs">v1.0</span>
           </div>
           <SiteSelector />
         </div>
