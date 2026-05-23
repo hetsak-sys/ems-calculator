@@ -122,7 +122,15 @@ export default function App() {
           <div className="flex items-baseline gap-2">
             <span
               className="font-black tracking-tight"
-              style={{ fontSize: '17px', color: T.accent, fontFamily: "'Rajdhani', 'Share Tech Mono', monospace" }}
+              style={{
+  fontSize: isInTool ? '15px' : '17px',
+  color: T.accent,
+  fontFamily: "'Rajdhani', 'Share Tech Mono', monospace",
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  maxWidth: '180px',
+}}
             >
               {isInTool ? SCREEN_LABELS[screen] : 'Hetsa PowerSuite'}
             </span>
@@ -147,17 +155,19 @@ export default function App() {
             {themeMode === 'dark' ? '☀️' : '🌙'}
           </button>
 
-          {/* Site summary pill */}
-          <div
-            className="px-3 py-1.5 rounded-full text-xs font-mono"
-            style={{
-              backgroundColor: T.accentDim,
-              border: `1px solid ${T.accentBorder}`,
-              color: T.accentText,
-            }}
-          >
-            {siteLabel}
-          </div>
+          {/* Site summary pill — hidden inside tools to save header space */}
+{!isInTool && (
+  <div
+    className="px-3 py-1.5 rounded-full text-xs font-mono"
+    style={{
+      backgroundColor: T.accentDim,
+      border: `1px solid ${T.accentBorder}`,
+      color: T.accentText,
+    }}
+  >
+    {siteLabel}
+  </div>
+)}
         </div>
       </div>
 

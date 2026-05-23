@@ -347,10 +347,9 @@ export default function QuickMath({ onClose, addHistory }) {
             {BTN_ROWS.map((row, ri) => (
               <div key={ri} className="flex gap-1.5 mb-1.5">
                 {row.map((btn, bi) => {
-                  const c = COLOR[btn.color] || COLOR.num
-                  if (btn.span) return null // handled by equals below
-                  // Equals button spans 2 cols
-                  if (btn.action === 'equals') {
+  const c = COLOR[btn.color] || COLOR.num
+  // Equals MUST be checked before span — it uses span:2 for width
+  if (btn.action === 'equals') {
                     return (
                       <button
                         key={bi}

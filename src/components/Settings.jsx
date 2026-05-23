@@ -155,13 +155,8 @@ export default function Settings({ siteConfig, setSiteConfig, themeMode, setThem
           {/* Common altitude presets */}
           <div className="flex flex-wrap gap-2 mt-2">
             {[
-              { label: 'Sea Level',    val: 0    },
-              { label: 'Bloemfontein',val: 1395  },
-              { label: 'Johannesburg',val: 1753  },
-              { label: 'Maseru',       val: 1600 },
-              { label: 'Letseng',      val: 3100 },
-            ].map(p => (
-              <button
+              { label: 'Sea Level', val: 0 },
+            ].map(p => (<button
                 key={p.val}
                 onClick={() => update('altitude', p.val)}
                 className="px-3 py-1.5 rounded-full text-xs"
