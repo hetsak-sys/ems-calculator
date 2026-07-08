@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { checkLicenseStatus, activateLicense, formatLicenseInput } from '../services/LicenseManager'
+import { checkLicenseStatus, activateLicense, formatLicenseSuffix, buildFullLicenseKey, LICENSE_PREFIX } from '../services/LicenseManager'
 
 function GateShell({ theme: T, children }) {
   return (
@@ -97,22 +97,29 @@ function ActivationScreen({ theme: T, keyInput, onKeyChange, onActivate, activat
           Enter your license key to unlock Hetsa PowerSuite.
         </div>
 
-        <input
-          type="text"
-          inputMode="text"
-          autoCapitalize="characters"
-          autoCorrect="off"
-          spellCheck={false}
-          placeholder="HETSA-XXXX-XXXX-XXXX"
-          value={keyInput}
-          onChange={(e) => onKeyChange(formatLicenseInput(e.target.value))}
-          className="w-full text-center rounded-xl px-3 py-2.5 mb-3 font-mono tracking-wider text-sm"
-          style={{
-            backgroundColor: T.inputBg,
-            border: `1px solid ${T.inputBorder}`,
-            color: T.textPrimary,
-          }}
-        />
+        <div
+          className="flex rounded-xl mb-3 overflow-hidden"
+          style={{ border: `1px solid ${T.inputBorder}`, backgroundColor: T.inputBg }}
+        >
+          <div
+            className="flex items-center px-3 font-mono tracking-wider text-sm font-bold"
+            style={{ color: T.textMuted, backgroundColor: T.surface2Bg, borderRight: `1px solid ${T.inputBorder}` }}
+          >
+            {LICENSE_PREFIX.replace('-', '')}
+          </div>
+          <input
+            type="text"
+            inputMode="text"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder="XXXX-XXXX-XXXX"
+            value={keyInput}
+            onChange={(e) => onKeyChange(formatLicenseSuffix(e.target.value))}
+            className="flex-1 text-center px-3 py-2.5 font-mono tracking-wider text-sm"
+            style={{ backgroundColor: 'transparent', color: T.textPrimary, minWidth: 0 }}
+          />
+        </div>
 
         {error && (
           <div
@@ -125,13 +132,13 @@ function ActivationScreen({ theme: T, keyInput, onKeyChange, onActivate, activat
 
         <button
           onClick={onActivate}
-          disabled={activating || keyInput.replace(/-/g, '').length < 17}
+          disabled={activating || keyInput.replace(/-/g, '').length < 12}
           className="w-full py-2.5 rounded-xl font-semibold text-sm"
           style={{
             backgroundColor: T.btnEquals.bg,
             color: T.btnEquals.text,
             border: `1px solid ${T.btnEquals.border}`,
-            opacity: activating || keyInput.replace(/-/g, '').length < 17 ? 0.5 : 1,
+            opacity: activating || keyInput.replace(/-/g, '').length < 12 ? 0.5 : 1,
           }}
         >
           {activating ? 'Activating…' : 'Activate'}
@@ -222,7 +229,7 @@ export default function LicenseGate({ theme: T, themeMode, children }) {
     setActivating(true)
     setActivateError(null)
     try {
-      await activateLicense(keyInput)
+      await activateLicense(buildFullLicenseKey(keyInput))
       await runCheck({ force: true })
     } catch (err) {
       setActivateError(err.message || 'Activation failed. Check the key and try again.')

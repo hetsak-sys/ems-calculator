@@ -13,17 +13,29 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const CACHE_KEY = 'hetsa_license_status';
 
-// License keys are HETSA-XXXX-XXXX-XXXX. Auto-format as the user types so
-// they don't have to type dashes themselves; doesn't validate character
-// exclusions (O/0/I/1) client-side — the server is the source of truth,
-// this is just input UX.
-// Lives here (not in a UI component) because it's pure string formatting
-// used by more than one screen (LicenseGate's post-expiry entry screen,
-// and Settings' "activate early" entry) — one shared definition avoids
-// the two drifting out of sync.
-export function formatLicenseInput(raw) {
-  const alnum = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 17)
-  const sizes = [5, 4, 4, 4]
+// Every key has the literal, unchanging prefix "HETSA-" — only the 12
+// characters after it vary between keys. Shown in the earlier version
+// as an editable placeholder ("HETSA-XXXX-XXXX-XXXX"), which real usage
+// showed is easy to misread as "HETSA" being a static brand label rather
+// than something to type — leading to a malformed key (missing prefix,
+// wrong grouping) getting submitted with no client-side way to catch it.
+// Fix: the prefix is now a fixed label in the UI, never part of what the
+// user types; this module only formats/reassembles the variable suffix.
+export const LICENSE_PREFIX = 'HETSA-';
+
+// Formats the 12-character variable portion as the user types it, into
+// XXXX-XXXX-XXXX. Tolerant of the user pasting the ENTIRE key including
+// the "HETSA" prefix (e.g. copy-pasted whole from a sales email) — in
+// that case the leading "HETSA" is stripped before grouping, so both
+// "TMSF-RRWQ-38BY" and "HETSA-TMSF-RRWQ-38BY" pasted into this field
+// produce the same correct result.
+export function formatLicenseSuffix(raw) {
+  let alnum = raw.toUpperCase().replace(/[^A-Z0-9]/g, '')
+  if (alnum.startsWith('HETSA')) {
+    alnum = alnum.slice(5)
+  }
+  alnum = alnum.slice(0, 12)
+  const sizes = [4, 4, 4]
   let i = 0
   const groups = []
   for (const size of sizes) {
@@ -32,6 +44,13 @@ export function formatLicenseInput(raw) {
     i += size
   }
   return groups.join('-')
+}
+
+// Reassembles the full key to actually send to the server. The prefix
+// lives in exactly one place (LICENSE_PREFIX above) so it can never get
+// out of sync between screens.
+export function buildFullLicenseKey(suffix) {
+  return LICENSE_PREFIX + suffix
 }
 
 // How often we're willing to re-hit the server, per status. This is the

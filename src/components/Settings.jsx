@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { checkLicenseStatus, activateLicense, formatLicenseInput } from '../services/LicenseManager'
+import { checkLicenseStatus, activateLicense, formatLicenseSuffix, buildFullLicenseKey, LICENSE_PREFIX } from '../services/LicenseManager'
 
 const VOLTAGE_OPTIONS = [
   { label: '220 V',  value: 220  },
@@ -49,7 +49,7 @@ export default function Settings({ siteConfig, setSiteConfig, themeMode, setThem
     setActivating(true)
     setActivateError(null)
     try {
-      await activateLicense(licenseKeyInput)
+      await activateLicense(buildFullLicenseKey(licenseKeyInput))
       setActivateSuccess(true)
       // Full reload rather than local state update: LicenseGate only
       // checks license status once on mount (by design — see its own
@@ -261,17 +261,28 @@ export default function Settings({ siteConfig, setSiteConfig, themeMode, setThem
               the trial to end.
             </div>
 
-            <input
-              type="text"
-              inputMode="text"
-              autoCapitalize="characters"
-              autoCorrect="off"
-              spellCheck={false}
-              placeholder="HETSA-XXXX-XXXX-XXXX"
-              value={licenseKeyInput}
-              onChange={e => setLicenseKeyInput(formatLicenseInput(e.target.value))}
-              style={{ ...input, textAlign: 'center', letterSpacing: '0.05em', marginBottom: '12px' }}
-            />
+            <div
+              className="flex rounded-xl mb-3 overflow-hidden"
+              style={{ border: `1px solid ${T.inputBorder}`, backgroundColor: T.inputBg }}
+            >
+              <div
+                className="flex items-center px-3 font-mono tracking-wider text-sm font-bold"
+                style={{ color: T.textMuted, backgroundColor: T.surface2Bg, borderRight: `1px solid ${T.inputBorder}` }}
+              >
+                {LICENSE_PREFIX.replace('-', '')}
+              </div>
+              <input
+                type="text"
+                inputMode="text"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="XXXX-XXXX-XXXX"
+                value={licenseKeyInput}
+                onChange={e => setLicenseKeyInput(formatLicenseSuffix(e.target.value))}
+                style={{ flex: 1, textAlign: 'center', letterSpacing: '0.05em', padding: '12px 14px', backgroundColor: 'transparent', border: 'none', color: T.textPrimary, fontSize: '15px', fontFamily: 'monospace', outline: 'none', minWidth: 0 }}
+              />
+            </div>
 
             {activateError && (
               <div
@@ -284,12 +295,12 @@ export default function Settings({ siteConfig, setSiteConfig, themeMode, setThem
 
             <button
               onClick={handleActivateInSettings}
-              disabled={activating || licenseKeyInput.replace(/-/g, '').length < 17}
+              disabled={activating || licenseKeyInput.replace(/-/g, '').length < 12}
               className="w-full py-2.5 rounded-xl font-semibold text-sm"
               style={{
                 backgroundColor: T.accent,
                 color: '#000000',
-                opacity: activating || licenseKeyInput.replace(/-/g, '').length < 17 ? 0.5 : 1,
+                opacity: activating || licenseKeyInput.replace(/-/g, '').length < 12 ? 0.5 : 1,
               }}
             >
               {activating ? 'Activating…' : 'Activate'}
