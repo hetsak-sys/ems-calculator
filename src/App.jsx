@@ -12,6 +12,7 @@ import HistoryView from './components/HistoryView'
 import Settings from './components/Settings'
 import PowerSysCalculator from './components/PowerSysCalculator'
 import PQCalculator from './components/PQCalculator'
+import LicenseGate from './components/LicenseGate'
 
 const SCREEN_LABELS = {
   motor:      'Motors & Drives',
@@ -98,6 +99,7 @@ export default function App() {
   const siteLabel = `${siteConfig.voltage}V · ${siteConfig.freq}Hz · ${siteConfig.altitude}m`
 
   return (
+    <LicenseGate theme={T} themeMode={themeMode}>
     <div
       className="flex flex-col h-screen overflow-hidden select-none"
       style={{ backgroundColor: T.appBg, color: T.textPrimary, transition: 'background-color 0.3s, color 0.3s' }}
@@ -241,5 +243,6 @@ export default function App() {
         })}
       </div>
     </div>
+    </LicenseGate>
   )
 }

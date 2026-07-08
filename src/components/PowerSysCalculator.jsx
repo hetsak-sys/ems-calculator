@@ -1,3 +1,4 @@
+import GeneratorSizingPro from './GeneratorSizing'
 import React, { useState } from 'react'
 
 const TABS = [
@@ -6,6 +7,7 @@ const TABS = [
   { id: 'generator',   label: 'Generator'   },
   { id: 'busbar',      label: 'Busbar'      },
   { id: 'starting',    label: 'Starting'    },
+  { id: 'gensize', label: 'Gen Sizing', icon: '🔌' }
 ]
 
 const Field = ({ label, unit, value, onChange, hint }) => (
@@ -407,12 +409,13 @@ export default function PowerSysCalculator({ addHistory, siteConfig }) {
         ))}
       </div>
       <div className="flex-1 overflow-y-auto px-4 pt-4">
-        {tab === 'transformer' && <TransformerCalc  siteConfig={siteConfig} />}
-        {tab === 'pf'          && <PFCorrection     siteConfig={siteConfig} />}
-        {tab === 'generator'   && <GeneratorSizing  siteConfig={siteConfig} />}
-        {tab === 'busbar'      && <BusbarRating      siteConfig={siteConfig} />}
-        {tab === 'starting'    && <MotorStarting     siteConfig={siteConfig} />}
-      </div>
-    </div>
+  {tab === 'transformer' && <TransformerCalc  siteConfig={siteConfig} />}
+  {tab === 'pf'          && <PFCorrection     siteConfig={siteConfig} />}
+  {tab === 'generator'   && <GeneratorSizing  siteConfig={siteConfig} />}
+  {tab === 'busbar'      && <BusbarRating     siteConfig={siteConfig} />}
+  {tab === 'starting'    && <MotorStarting    siteConfig={siteConfig} />}
+  {tab === 'gensize'     && <GeneratorSizingPro addHistory={addHistory} />}
+</div> </div>
   )
 }
+  

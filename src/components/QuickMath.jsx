@@ -218,22 +218,70 @@ export default function QuickMath({ onClose, addHistory }) {
         setDisplay(d => d.startsWith('-') ? d.slice(1) : '-' + d)
         break
       case 'equals': {
-        try {
-          let evalExpr = expr || display
-          // Handle ^ for power
-          evalExpr = evalExpr.replace(/\^/g, '**')
-          const res = Function('"use strict"; return (' + evalExpr + ')')()
-          const resStr = Number.isInteger(res) ? String(res) : parseFloat(res.toPrecision(10)).toString()
-          setResult(resStr)
-          setDisplay(resStr)
-          setExpr(resStr)
-          setAns(parseFloat(resStr))
-          if (addHistory) addHistory({ tool: 'Quick Math', inputs: { expression: expr }, result: resStr })
-        } catch {
-          setDisplay('Error'); setExpr('')
-        }
-        break
-      }
+  try {
+    let evalExpr = expr || display
+
+    // Power operator
+    evalExpr = evalExpr.replace(/\^/g, '**')
+
+    // Calculator-style percentages
+
+    // 500*15% = 75
+    evalExpr = evalExpr.replace(
+      /(\d+(?:\.\d+)?)\*(\d+(?:\.\d+)?)%/g,
+      '($1*($2/100))'
+    )
+
+    // 500/15% = 3333.3333
+    evalExpr = evalExpr.replace(
+      /(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)%/g,
+      '($1/($2/100))'
+    )
+
+    // 500+15% = 575
+    evalExpr = evalExpr.replace(
+      /(\d+(?:\.\d+)?)\+(\d+(?:\.\d+)?)%/g,
+      '($1+($1*$2/100))'
+    )
+
+    // 500-15% = 425
+    evalExpr = evalExpr.replace(
+      /(\d+(?:\.\d+)?)\-(\d+(?:\.\d+)?)%/g,
+      '($1-($1*$2/100))'
+    )
+
+    // Standalone percentage
+    evalExpr = evalExpr.replace(
+      /(\d+(?:\.\d+)?)%/g,
+      '($1/100)'
+    )
+
+    const res = Function(
+      '"use strict"; return (' + evalExpr + ')'
+    )()
+
+    const resStr = Number.isInteger(res)
+      ? String(res)
+      : parseFloat(res.toPrecision(10)).toString()
+
+    setResult(resStr)
+    setDisplay(resStr)
+    setExpr(resStr)
+    setAns(parseFloat(resStr))
+
+    if (addHistory) {
+      addHistory({
+        tool: 'Quick Math',
+        inputs: { expression: expr },
+        result: resStr
+      })
+    }
+  } catch {
+    setDisplay('Error')
+    setExpr('')
+  }
+  break
+}
       case 'ans':
         setDisplay(d => d === '0' ? String(ans) : d + String(ans))
         setExpr(e => e + String(ans))
