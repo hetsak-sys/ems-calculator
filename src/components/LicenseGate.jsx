@@ -1,22 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { checkLicenseStatus, activateLicense } from '../services/LicenseManager'
-
-// License keys are HETSA-XXXX-XXXX-XXXX. Auto-format as the user types so
-// they don't have to type dashes themselves; doesn't validate character
-// exclusions (O/0/I/1) client-side — the server is the source of truth,
-// this is just input UX.
-function formatLicenseInput(raw) {
-  const alnum = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 17)
-  const sizes = [5, 4, 4, 4]
-  let i = 0
-  const groups = []
-  for (const size of sizes) {
-    if (i >= alnum.length) break
-    groups.push(alnum.slice(i, i + size))
-    i += size
-  }
-  return groups.join('-')
-}
+import { checkLicenseStatus, activateLicense, formatLicenseInput } from '../services/LicenseManager'
 
 function GateShell({ theme: T, children }) {
   return (

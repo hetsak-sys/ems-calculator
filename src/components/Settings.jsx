@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { checkLicenseStatus, activateLicense, formatLicenseInput } from '../services/LicenseManager'
 
 const VOLTAGE_OPTIONS = [
   { label: '220 V',  value: 220  },
@@ -26,6 +27,42 @@ const CURRENCY_OPTIONS = [
 export default function Settings({ siteConfig, setSiteConfig, themeMode, setThemeMode, theme: T }) {
   const [local, setLocal] = useState({ ...siteConfig })
   const [saved, setSaved] = useState(false)
+
+  // ── License ───────────────────────────────────────────────────
+  // Reads from the same cache LicenseGate uses (no forced network hit —
+  // this is just a status display, doesn't need to be perfectly fresh).
+  // Independent of LicenseGate's own state; doesn't require any wiring
+  // through App.jsx. Lets a user activate a key BEFORE their trial
+  // expires, which LicenseGate's gate screen alone can't do (it only
+  // shows the key-entry screen once status is 'trial_expired').
+  const [licenseStatus, setLicenseStatus] = useState(null)
+  const [licenseKeyInput, setLicenseKeyInput] = useState('')
+  const [activating, setActivating] = useState(false)
+  const [activateError, setActivateError] = useState(null)
+  const [activateSuccess, setActivateSuccess] = useState(false)
+
+  useEffect(() => {
+    checkLicenseStatus().then(setLicenseStatus)
+  }, [])
+
+  const handleActivateInSettings = async () => {
+    setActivating(true)
+    setActivateError(null)
+    try {
+      await activateLicense(licenseKeyInput)
+      setActivateSuccess(true)
+      // Full reload rather than local state update: LicenseGate only
+      // checks license status once on mount (by design — see its own
+      // comments), so the currently-mounted gate won't drop its trial
+      // badge on its own even though the cache is now 'paid'. A reload
+      // remounts LicenseGate, which reads the fresh cache immediately.
+      setTimeout(() => window.location.reload(), 1200)
+    } catch (err) {
+      setActivateError(err.message || 'Activation failed. Check the key and try again.')
+    } finally {
+      setActivating(false)
+    }
+  }
 
   const update = (key, val) => setLocal(c => ({ ...c, [key]: val }))
 
@@ -185,6 +222,80 @@ export default function Settings({ siteConfig, setSiteConfig, themeMode, setThem
             ))}
           </select>
         </div>
+      </div>
+
+      {/* ── LICENSE ───────────────────────────────────── */}
+      <div style={section}>
+        <div style={sectionTitle}>License</div>
+
+        {!licenseStatus ? (
+          <div style={{ fontSize: '13px', color: T.textMuted }}>Checking license status…</div>
+
+        ) : licenseStatus.isOwner || licenseStatus.status === 'paid' ? (
+          <div className="flex items-center gap-2 py-1">
+            <span style={{ color: '#22c55e', fontSize: '16px' }}>✓</span>
+            <span style={{ fontSize: '13px', color: T.textPrimary, fontWeight: '600' }}>
+              Licensed — fully unlocked
+            </span>
+          </div>
+
+        ) : activateSuccess ? (
+          <div className="flex items-center gap-2 py-1">
+            <span style={{ color: '#22c55e', fontSize: '16px' }}>✓</span>
+            <span style={{ fontSize: '13px', color: T.textPrimary, fontWeight: '600' }}>
+              Activated! Reloading…
+            </span>
+          </div>
+
+        ) : (
+          <>
+            <div style={fieldLabel}>
+              {licenseStatus.status === 'trial'
+                ? `Trial — ${licenseStatus.daysLeft ?? '?'} day${licenseStatus.daysLeft === 1 ? '' : 's'} left`
+                : licenseStatus.status === 'trial_expired'
+                ? 'Trial expired'
+                : 'License status unavailable (offline)'}
+            </div>
+            <div style={{ fontSize: '12px', color: T.textMuted, marginBottom: '12px' }}>
+              Already have a key? Activate it now — you don't need to wait for
+              the trial to end.
+            </div>
+
+            <input
+              type="text"
+              inputMode="text"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder="HETSA-XXXX-XXXX-XXXX"
+              value={licenseKeyInput}
+              onChange={e => setLicenseKeyInput(formatLicenseInput(e.target.value))}
+              style={{ ...input, textAlign: 'center', letterSpacing: '0.05em', marginBottom: '12px' }}
+            />
+
+            {activateError && (
+              <div
+                className="text-xs rounded-lg px-3 py-2 mb-3"
+                style={{ backgroundColor: '#7f1d1d33', color: '#fca5a5', border: '1px solid #7f1d1d' }}
+              >
+                {activateError}
+              </div>
+            )}
+
+            <button
+              onClick={handleActivateInSettings}
+              disabled={activating || licenseKeyInput.replace(/-/g, '').length < 17}
+              className="w-full py-2.5 rounded-xl font-semibold text-sm"
+              style={{
+                backgroundColor: T.accent,
+                color: '#000000',
+                opacity: activating || licenseKeyInput.replace(/-/g, '').length < 17 ? 0.5 : 1,
+              }}
+            >
+              {activating ? 'Activating…' : 'Activate'}
+            </button>
+          </>
+        )}
       </div>
 
       {/* ── SAVE BUTTON ───────────────────────────────── */}
