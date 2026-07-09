@@ -90,13 +90,18 @@ const FORMULAS = [
     category: "Useful Constants",
     color: 'gray',
     items: [
-      { name: "√3", formula: "1.7321", note: "Used in all 3-phase" },
+      { name: "√2", formula: "1.41421356", note: "" },
+      { name: "√3", formula: "1.73205081", note: "Used in all 3-phase" },
+      { name: "π (Pi)", formula: "3.14159265", note: "" },
+      { name: "e (Euler's number)", formula: "2.71828183", note: "" },
       { name: "Cu resistivity (20°C)", formula: "ρ = 0.0175 Ω·mm²/m", note: "" },
       { name: "Al resistivity (20°C)", formula: "ρ = 0.028 Ω·mm²/m", note: "" },
+      { name: "Cu temp coefficient", formula: "αCu = 0.00393 /°C", note: "" },
       { name: "1 HP", formula: "= 745.7 W", note: "" },
       { name: "1 kWh", formula: "= 3 600 000 J", note: "" },
+      { name: "Speed of light", formula: "c = 2.998 × 10⁸ m/s", note: "" },
       { name: "ε₀ (permittivity)", formula: "8.854 × 10⁻¹² F/m", note: "" },
-      { name: "μ₀ (permeability)", formula: "4π × 10⁻⁷ H/m", note: "" },
+      { name: "μ₀ (permeability)", formula: "4π × 10⁻⁷ H/m ≈ 1.2566 × 10⁻⁶", note: "" },
     ]
   },
 ]
