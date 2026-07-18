@@ -1,4 +1,7 @@
 import React, { useState } from 'react'
+import { batteryBankSizingFromEnergy } from '../lib/batterySizing.js'
+import { ResultCard, useResultCard } from './shared'
+import { useSite } from './SiteContext'
 
 const TABS = [
   { id: 'harmonics', label: 'Harmonics' },
@@ -38,8 +41,22 @@ const CalcBtn = ({ onCalc }) => (
   </button>
 )
 
+// Shared "Export PDF" trigger — kept visually distinct from CalcBtn (outline,
+// not filled) so it doesn't compete with the primary Calculate action.
+// Matches the [DES-1] shared-core pattern: one button style, all three
+// sub-calcs below wire it to the same ResultCard/useResultCard plumbing
+// lifted to the parent PQCalculator component.
+const ExportBtn = ({ onExport }) => (
+  <button onClick={onExport}
+    className="w-full py-3 rounded-xl font-bold text-sm mb-4"
+    style={{ background: 'transparent', border: '1px solid #a3e635', color: '#a3e635' }}>
+    📄 Export PDF
+  </button>
+)
+
 // ── 1. Harmonics / THD ─────────────────────────────────────────────────────
-function HarmonicsCalc() {
+function HarmonicsCalc({ showCard }) {
+  const { site } = useSite()
   const [I1, setI1]   = useState('100')   // fundamental A
   const [I3, setI3]   = useState('5')
   const [I5, setI5]   = useState('20')
@@ -76,6 +93,38 @@ function HarmonicsCalc() {
     })
   }
 
+  const exportPdf = () => {
+    if (!res) return
+    const notes = []
+    if (!res.passIEC) notes.push('THD exceeds 8% — mitigation may be required (IEC 61000-3-2 Class A).')
+    if (parseFloat(res.K) > 4) notes.push(`K-Factor > 4 — use K-rated transformer or derate by ${(100 - parseFloat(res.derate)).toFixed(1)}%.`)
+
+    showCard({
+      calculator: 'Power Quality — Harmonics / THD',
+      site: site.name,
+      standard: 'IEC 61000-3-2 / IEEE 519',
+      inputs: [
+        { label: 'Fundamental (1st)', value: `${I1} A` },
+        { label: '3rd Harmonic',      value: `${I3} A` },
+        { label: '5th Harmonic',      value: `${I5} A` },
+        { label: '7th Harmonic',      value: `${I7} A` },
+        { label: '11th Harmonic',     value: `${I11} A` },
+        { label: '13th Harmonic',     value: `${I13} A` },
+      ],
+      sections: [{
+        title: 'Results',
+        rows: [
+          { label: 'Current THD',            value: `${res.THD} %`, accent: true },
+          { label: 'True RMS Current',        value: `${res.Irms} A` },
+          { label: 'K-Factor',                value: res.K, accent: true },
+          { label: 'Transformer Derating',    value: `${res.derate} % of rated` },
+          { label: 'IEC 61000-3-2 Class A',   value: res.passIEC ? 'Within limits' : 'Exceeded', warn: !res.passIEC },
+        ],
+      }],
+      notes: notes.length ? notes.join(' ') : undefined,
+    })
+  }
+
   return (
     <div>
       <div className="text-xs mb-3 px-1" style={{ color: '#6b7280' }}>
@@ -104,12 +153,14 @@ function HarmonicsCalc() {
           )}
         </div>
       )}
+      {res && <div className="mt-3"><ExportBtn onExport={exportPdf} /></div>}
     </div>
   )
 }
 
 // ── 2. Battery / UPS Sizing ──────────────────────────────────────────────────
-function BatterySizing({ siteConfig }) {
+function BatterySizing({ showCard }) {
+  const { site } = useSite()
   const [load_kw, setLoadKw]   = useState('10')
   const [pf, setPf]            = useState('0.9')
   const [runtime, setRuntime]  = useState('30')    // minutes
@@ -119,15 +170,35 @@ function BatterySizing({ siteConfig }) {
   const [res, setRes]          = useState(null)
 
   const calc = () => {
-    const P = parseFloat(load_kw) * 1000
+    const loadKw = parseFloat(load_kw)
+    const P = loadKw * 1000
     const p = parseFloat(pf), t = parseFloat(runtime) / 60  // hours
     const V = parseFloat(vdc)
     const d = parseFloat(dod) / 100, e = parseFloat(eta) / 100
-    if ([P, p, t, V, d, e].some(isNaN)) return
+    if ([loadKw, P, p, t, V, d, e].some(isNaN)) return
 
-    const kVA     = P / p
-    const Wh_load = (P / e) * t          // energy needed at DC side
-    const Ah_req  = (Wh_load / V) / d   // accounting for DoD
+    // BUG FIX: kVA must be computed from loadKw (kW), not P (W) — the previous
+    // `P / p` used P already in watts, producing a value in VA displayed as
+    // "kVA" (1000x too large). Verified against hand-calculation before fixing;
+    // see upsMigration.verify.mjs.
+    const kVA = loadKw / p
+
+    // Energy drawn at the DC/battery side, accounting for inverter efficiency.
+    // Unchanged from the original formula — this is NOT run through the
+    // shared core's efficiency divisor, since it's already applied here.
+    const Wh_load = (P / e) * t
+
+    // Battery bank capacity sizing — migrated onto the shared core also used
+    // by the Renewable Energy module's off-grid battery sizing (src/lib/batterySizing.js),
+    // per the recorded [DES-1] shared-core decision. dodFraction accounts for
+    // usable-capacity derating; roundTripEfficiency is 1 here because Wh_load
+    // already has inverter efficiency baked in above (avoids double-applying it).
+    const { requiredCapacityAh } = batteryBankSizingFromEnergy({
+      requiredUsableEnergyWh: Wh_load,
+      dodFraction: d,
+      systemVoltageV: V,
+      roundTripEfficiency: 1,
+    })
 
     // Standard battery sizes (Ah at 48V)
     const cells = Math.ceil(V / 2)       // 2V cells
@@ -137,9 +208,36 @@ function BatterySizing({ siteConfig }) {
     setRes({
       kVA:      kVA.toFixed(1),
       Wh:       (Wh_load / 1000).toFixed(2),
-      Ah:       Ah_req.toFixed(0),
+      Ah:       requiredCapacityAh.toFixed(0),
       cells:    strings_hint,
       inv_A:    (kVA * 1000 / V).toFixed(0),
+    })
+  }
+
+  const exportPdf = () => {
+    if (!res) return
+    showCard({
+      calculator: 'Power Quality — Battery / UPS Sizing',
+      site: site.name,
+      standard: 'IEC 62040 (UPS systems) — general engineering practice',
+      inputs: [
+        { label: 'Load Power',              value: `${load_kw} kW` },
+        { label: 'Load Power Factor',       value: pf },
+        { label: 'Required Runtime',        value: `${runtime} min` },
+        { label: 'Battery Voltage',         value: `${vdc} Vdc` },
+        { label: 'Max Depth of Discharge',  value: `${dod} %` },
+        { label: 'Inverter Efficiency',     value: `${eta} %` },
+      ],
+      sections: [{
+        title: 'Results',
+        rows: [
+          { label: 'UPS/Inverter Rating', value: `${res.kVA} kVA`, accent: true },
+          { label: 'Energy Required',     value: `${res.Wh} kWh` },
+          { label: 'Battery Bank',        value: `${res.Ah} Ah`, accent: true },
+          { label: 'Max Inverter DC',     value: `${res.inv_A} A` },
+          { label: 'Battery Config',      value: res.cells },
+        ],
+      }],
     })
   }
 
@@ -161,12 +259,14 @@ function BatterySizing({ siteConfig }) {
           <ResultRow label="Battery Config"      value={res.cells} unit="" />
         </div>
       )}
+      {res && <div className="mt-3"><ExportBtn onExport={exportPdf} /></div>}
     </div>
   )
 }
 
 // ── 3. Lighting Design ──────────────────────────────────────────────────────
-function LightingCalc() {
+function LightingCalc({ showCard }) {
+  const { site } = useSite()
   const [area, setArea]   = useState('100')    // m²
   const [lux, setLux]     = useState('300')    // required lux
   const [CU, setCU]       = useState('0.65')   // coefficient of utilization
@@ -202,6 +302,33 @@ function LightingCalc() {
       W:       totalW.toFixed(0),
       Wm2:     W_per_m2.toFixed(1),
       lux_act: actual_lux.toFixed(0),
+    })
+  }
+
+  const exportPdf = () => {
+    if (!res) return
+    showCard({
+      calculator: 'Power Quality — Lighting Design (Lumen Method)',
+      site: site.name,
+      standard: 'SANS 10114-1 / IES',
+      inputs: [
+        { label: 'Room Area',                       value: `${area} m²` },
+        { label: 'Required Illuminance',             value: `${lux} lux` },
+        { label: 'Coefficient of Utilization (CU)',  value: CU },
+        { label: 'Maintenance Factor (MF)',          value: MF },
+        { label: 'Fitting Output',                   value: `${lumens} lm` },
+        { label: 'Fitting Wattage',                  value: `${watts} W` },
+      ],
+      sections: [{
+        title: 'Results',
+        rows: [
+          { label: 'Fittings Required',    value: `${res.N} → ${res.N_ceil}`, accent: true },
+          { label: 'Actual Illuminance',   value: `${res.lux_act} lux`, accent: true },
+          { label: 'Total Load',           value: `${res.W} W` },
+          { label: 'Power Density',        value: `${res.Wm2} W/m²` },
+        ],
+      }],
+      notes: 'SANS 204 max power density guideline: offices 15 W/m², industrial 20 W/m².',
     })
   }
 
@@ -247,13 +374,15 @@ function LightingCalc() {
           </div>
         </div>
       )}
+      {res && <div className="mt-3"><ExportBtn onExport={exportPdf} /></div>}
     </div>
   )
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
-export default function PQCalculator({ addHistory, siteConfig }) {
+export default function PQCalculator({ addHistory }) {
   const [tab, setTab] = useState('harmonics')
+  const { cardData, showCard, hideCard } = useResultCard()
 
   return (
     <div className="flex flex-col h-full">
@@ -272,10 +401,11 @@ export default function PQCalculator({ addHistory, siteConfig }) {
         ))}
       </div>
       <div className="flex-1 overflow-y-auto px-4 pt-4">
-        {tab === 'harmonics' && <HarmonicsCalc />}
-        {tab === 'battery'   && <BatterySizing siteConfig={siteConfig} />}
-        {tab === 'lighting'  && <LightingCalc />}
+        {tab === 'harmonics' && <HarmonicsCalc showCard={showCard} />}
+        {tab === 'battery'   && <BatterySizing showCard={showCard} />}
+        {tab === 'lighting'  && <LightingCalc showCard={showCard} />}
       </div>
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
