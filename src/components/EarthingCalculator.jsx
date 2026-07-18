@@ -269,7 +269,7 @@ function FaultLoop() {
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
-export default function EarthingCalculator({ addHistory, siteConfig }) {
+export default function EarthingCalculator({ addHistory }) {
   const [tab, setTab] = useState('electrode')
 
   return (

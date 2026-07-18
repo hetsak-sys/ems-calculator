@@ -11,7 +11,7 @@ function GateShell({ theme: T, children }) {
         className="font-black tracking-tight mb-1"
         style={{ fontSize: '20px', color: T.accent, fontFamily: "'Rajdhani', 'Share Tech Mono', monospace" }}
       >
-        Hetsa PowerSuite
+        PowerSuite
       </div>
       <div className="w-full max-w-sm mt-4">{children}</div>
     </div>
@@ -94,7 +94,7 @@ function ActivationScreen({ theme: T, keyInput, onKeyChange, onActivate, activat
           Trial expired
         </div>
         <div className="text-xs mb-4" style={{ color: T.textMuted }}>
-          Enter your license key to unlock Hetsa PowerSuite.
+          Enter your license key to unlock PowerSuite.
         </div>
 
         <div
@@ -145,7 +145,7 @@ function ActivationScreen({ theme: T, keyInput, onKeyChange, onActivate, activat
         </button>
 
         <div className="text-[11px] mt-4" style={{ color: T.textMuted }}>
-          Don't have a key? Contact your supplier or Hetsa PowerSuite sales
+          Don't have a key? Contact your supplier or PowerSuite sales
           to purchase a once-off unlock.
         </div>
       </div>

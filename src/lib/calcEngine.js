@@ -1,4 +1,4 @@
-// calcEngine.js — standalone expression engine for Hetsa PowerSuite
+// calcEngine.js — standalone expression engine for PowerSuite
 //
 // Used by QuickMath's Calculator tab AND its Programs (user formula) tab.
 // Deliberately has no React/DOM dependency so any other module can import it

@@ -151,7 +151,11 @@ const emptyPassFail = () => ({
 
 export default function QuickMath({ onClose, addHistory }) {
   const [tab, setTab] = useState('calc') // 'calc' | 'prog'
-  const [degMode, setDegMode] = useState(true)
+  // Fixed to degrees — standard convention for angles in this domain (PF
+  // angles, phase angles, etc.). The DEG/RAD toggle was removed since the
+  // calculator no longer exposes trig buttons directly; this still matters
+  // for saved formulas that use sin/cos/tan/acos/etc.
+  const degMode = true
 
   // ── Calculator state ─────────────────────────────────────────────────
   const [exprInput, setExprInput] = useState('')
@@ -429,18 +433,6 @@ export default function QuickMath({ onClose, addHistory }) {
       >
         <div className="flex items-center gap-3">
           <span className="text-amber-400 font-bold text-base">⚡ Quick Math</span>
-          <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid #2a2a2a' }} title="Affects trig functions used inside saved formulas">
-            {['DEG', 'RAD'].map(m => (
-              <button
-                key={m}
-                onClick={() => setDegMode(m === 'DEG')}
-                className="px-3 py-1 text-xs font-bold"
-                style={{ backgroundColor: (m === 'DEG') === degMode ? '#f59e0b' : '#111', color: (m === 'DEG') === degMode ? '#000' : '#666' }}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
         </div>
         <button onClick={onClose} className="text-gray-500 text-2xl leading-none px-1">✕</button>
       </div>
