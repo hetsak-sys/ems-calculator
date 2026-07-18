@@ -1,4 +1,4 @@
-package com.ems.calculator;
+package com.hetsa.powersuite;
 
 import com.getcapacitor.BridgeActivity;
 

@@ -7,10 +7,10 @@ if (localPropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.ems.calculator"
+    namespace = "com.hetsa.powersuite"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.ems.calculator"
+        applicationId "com.hetsa.powersuite"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

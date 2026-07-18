@@ -1,6 +1,6 @@
 {
   "appId": "com.hetsa.powersuite",
-  "appName": "Hetsa PowerSuite",
+  "appName": "PowerSuite",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"
