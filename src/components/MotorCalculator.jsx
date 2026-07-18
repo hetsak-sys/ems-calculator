@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { SubTabBar, SelectInput, CalcButton, ResultCard, useResultCard, UnitNumInput, POWER_UNITS, VOLTAGE_UNITS } from './shared'
 import { useSite } from './SiteContext'
+import { useWorkspace } from './WorkspaceContext'
 import ContactorOLR from './ContactorOLR'
 
 const SQRT3 = Math.sqrt(3)
@@ -64,6 +65,7 @@ function InfoBox({ title, color = 'blue', lines }) {
 // ── FLA ────────────────────────────────────────────────────────────────────
 function FlaCalc({ addHistory, onFlaCalculated }) {
   const { site } = useSite()
+  const { setFlaSnapshot } = useWorkspace()
   const { cardData, showCard, hideCard } = useResultCard()
   const [phase, setPhase] = useState(site.phase || '3ph')
   const [inputType, setInputType] = useState('kw')
@@ -88,7 +90,9 @@ function FlaCalc({ addHistory, onFlaCalculated }) {
     const res = { fla: fla.toFixed(2), kva: kva.toFixed(3), kvar: kvar.toFixed(3), inputkW: (inputPower/1000).toFixed(3), startCurrent: (fla*6).toFixed(1), ctRatio }
     setResult(res)
     addHistory({ tab: 'Motor-FLA', expr: `${phase} ${inputType==='kw'?kw+'kW':hp+'HP'} @${V}V`, result: `${res.fla}A` })
-    if (onFlaCalculated) onFlaCalculated({ kw: inputType==='kw'?kw:String(pf(hp)*0.7457), voltage: String(V), phase, pfVal: String(PF), eff: String(EFF*100), fla: res.fla })
+    const snapshot = { kw: inputType==='kw'?kw:String(pf(hp)*0.7457), voltage: String(V), phase, pfVal: String(PF), eff: String(EFF*100), fla: res.fla }
+    if (onFlaCalculated) onFlaCalculated(snapshot)
+    setFlaSnapshot(snapshot)
   }
 
   return (
@@ -470,7 +474,7 @@ function Reacceleration({ addHistory }) {
 
   return(
     <div className="px-4 py-3">
-      <InfoBox title="Motor Starting Voltage Dip" lines={['Calculates voltage depression during DOL motor starting','Critical for large motors on weak transformers or at Letseng altitude']}/>
+      <InfoBox title="Motor Starting Voltage Dip" lines={['Calculates voltage depression during DOL motor starting','Critical for large motors on weak transformers or at high altitude (2000 m and above)']}/>
       <NumInput label="Motor Power" value={motorKW} onChange={setMotorKW} unit="kW"/>
       <NumInput label="Supply Voltage (L-L)" value={voltage} onChange={setVoltage} unit="V"/>
       <NumInput label="Transformer Rating" value={xfmrKVA} onChange={setXfmrKVA} unit="kVA"/>
@@ -493,7 +497,7 @@ function Reacceleration({ addHistory }) {
           '• 5–15% : Acceptable for most installations',
           '• 15–25% : May cause other equipment to trip or dim lights',
           '• >25% : Likely to cause problems — use soft starter or VFD',
-          '• At Letseng altitude, derated transformers worsen this effect',
+          '• At high altitude (2000 m and above), derated transformers worsen this effect',
         ]}/>
       </>}
     </div>

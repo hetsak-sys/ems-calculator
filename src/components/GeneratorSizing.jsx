@@ -1,6 +1,6 @@
 /**
  * GeneratorSizing.jsx
- * Hetsa PowerSuite — Power Systems Tab › Generator Sizing sub-tab
+ * PowerSuite — Power Systems Tab › Generator Sizing sub-tab
  *
  * Drop into: src/components/GeneratorSizing.jsx
  *
@@ -15,6 +15,21 @@
  * Props:
  *   addHistory(obj) — same shape as all other sub-tabs:
  *     { tab: string, expr: string, result: string }
+ *   (No siteConfig prop — site name for PDF exports comes from useSite()/
+ *   SiteContext directly, same verified pattern as MotorCalculator.jsx's
+ *   FlaCalc. Confirmed against PowerSysCalculator.jsx: the real call site
+ *   invokes this component as `<GeneratorSizingPro addHistory={addHistory} />`
+ *   with no siteConfig at all, so a siteConfig prop here would silently
+ *   never receive a value — useSite() is self-contained and doesn't depend
+ *   on the parent wiring it through.)
+ *
+ * PDF export (added this session):
+ *   Generator, Transformer and Impedance tabs each get a "📄 Export PDF"
+ *   button below their result card, wired to shared.jsx's ResultCard /
+ *   useResultCard — same plumbing as PQCalculator.jsx and MotorCalculator.jsx.
+ *   Loads tab has no export of its own: its inputs are captured as context
+ *   inside the Generator export instead, since Loads has no single
+ *   "governing result" of its own.
  *
  * Engineering references:
  *   - ISO 8528-1  : Generator set ratings and altitude/temp de-rating
@@ -24,17 +39,14 @@
  */
 
 import { useState, useMemo } from 'react'
+import { calculateGeneratorDerating, GEN_SIZES } from '../lib/generatorDerating.js'
+import { useWorkspace } from './WorkspaceContext'
+import { ResultCard, useResultCard } from './shared'
+import { useSite } from './SiteContext'
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
 const SQRT3 = Math.sqrt(3)
-
-/** Standard generator nameplate kVA (IEC/ISO commercial sizes) */
-const GEN_SIZES = [
-  10, 15, 20, 25, 30, 40, 50, 62.5, 75, 100,
-  125, 150, 175, 200, 250, 300, 350, 400, 500,
-  600, 750, 1000, 1250, 1500, 2000,
-]
 
 /** Standard distribution transformer kVA (IEC 60076) */
 const TRAFO_SIZES = [
@@ -219,6 +231,10 @@ function RowVal({ label, value, accent }) {
 // ─── Main component ────────────────────────────────────────────────────────
 
 export default function GeneratorSizing({ addHistory }) {
+  const { site } = useSite()
+
+  // ── PDF export (ResultCard/useResultCard, shared.jsx) ──────────────────
+  const { cardData, showCard, hideCard } = useResultCard()
 
   // ── Load list state ────────────────────────────────────────────────────
   const [loads, setLoads] = useState([
@@ -230,9 +246,11 @@ export default function GeneratorSizing({ addHistory }) {
   const [editId, setEditId] = useState(null)
 
   // ── Generator de-rating state ──────────────────────────────────────────
-  // Defaults set for Maseru / central Lesotho
-  const [altitude,  setAltitude]  = useState('1600')
-  const [ambTemp,   setAmbTemp]   = useState('30')
+  // Seeded from the real configured site (Settings), not a hardcoded
+  // location. Previously defaulted to '1600'/'30' — Maseru/central Lesotho
+  // values baked in regardless of where the user actually is.
+  const [altitude,  setAltitude]  = useState(String(site.altitude || '1000'))
+  const [ambTemp,   setAmbTemp]   = useState(String(site.ambient || '30'))
   const [margin,    setMargin]    = useState('25')
   const [genPF,     setGenPF]     = useState('0.8')
 
@@ -247,6 +265,17 @@ export default function GeneratorSizing({ addHistory }) {
 
   // ── Active tab ─────────────────────────────────────────────────────────
   const [tab, setTab] = useState('loads')
+
+  // ── Cross-module prefill (WorkspaceContext) ───────────────────────────
+  // Publishes this tab's sizing result so RenewableEnergyCalculator's
+  // Hybrid tab can prefill from it — same pattern as MotorCalculator's
+  // flaSnapshot -> Cable Calculator. Per MotorCalculator.jsx's actual
+  // implementation, the publish happens on an explicit user action
+  // (there: the CALCULATE button; here: "Save to history"), NOT
+  // automatically on every recalculation — opening this tab with its
+  // default placeholder loads should not silently prefill Hybrid with
+  // data nobody actually chose.
+  const { setGeneratorSnapshot } = useWorkspace()
 
   // ─── Derived calculations ──────────────────────────────────────────────
 
@@ -311,9 +340,14 @@ export default function GeneratorSizing({ addHistory }) {
     const mar = pf(margin, 25) / 100
     const gpf = pf(genPF, 0.8)
 
-    const altFactor  = alt > 1000 ? 1 - ((alt - 1000) / 500) * 0.03 : 1
-    const tempFactor = tmp > 40   ? 1 - (tmp - 40) * 0.01           : 1
-    const netFactor  = altFactor * tempFactor
+    // Migrated to shared lib function — was inline here, also duplicated
+    // in RenewableEnergyCalculator.jsx's Hybrid tab, now a single source.
+    // Verified behavior-identical before migrating; see
+    // generatorDeratingMigration.verify.mjs.
+    const { altFactor, tempFactor, netFactor } = calculateGeneratorDerating({
+      altitudeM: alt,
+      ambientTempC: tmp,
+    })
 
     const governing  = Math.max(totals.totKVA, totals.maxStartKVA)
     const withMargin = governing * (1 + mar)
@@ -321,7 +355,7 @@ export default function GeneratorSizing({ addHistory }) {
     const stdSize    = nextStd(GEN_SIZES, required)
 
     // Push to history on calculation
-    return { altFactor, tempFactor, netFactor, governing, withMargin, required, stdSize, gpf }
+    return { altFactor, tempFactor, netFactor, governing, withMargin, required, stdSize, gpf, altitudeM: alt, ambientTempC: tmp }
   }, [totals, altitude, ambTemp, margin, genPF])
 
   /**
@@ -417,6 +451,122 @@ export default function GeneratorSizing({ addHistory }) {
       tab:    'Gen Sizing',
       expr:   `${loads.length} loads · ${altitude}m · ${ambTemp}°C`,
       result: `Gen ${genRes.stdSize}kVA / Trafo ${trafoRes.stdKVA}kVA`,
+    })
+    setGeneratorSnapshot({
+      stdSize: genRes.stdSize,
+      netFactor: genRes.netFactor,
+      altFactor: genRes.altFactor,
+      tempFactor: genRes.tempFactor,
+      gpf: genRes.gpf,
+      altitudeM: genRes.altitudeM,
+      ambientTempC: genRes.ambientTempC,
+      timestamp: Date.now(),
+    })
+  }
+
+  // ─── PDF export handlers ────────────────────────────────────────────────
+  // Each mirrors the calculation actually shown on its tab — same source
+  // values as the on-screen RowVal rows, not re-derived.
+
+  const exportGenerator = () => {
+    showCard({
+      calculator: 'Power Systems — Generator Sizing',
+      site: site.name,
+      standard: 'ISO 8528-1 (de-rating) · SANS 10142 (demand factors)',
+      inputs: [
+        { label: 'Connected loads',    value: `${loads.length}` },
+        { label: 'Altitude',           value: `${altitude} m AMSL` },
+        { label: 'Ambient temp',       value: `${ambTemp} °C` },
+        { label: 'Safety margin',      value: `${margin} %` },
+        { label: 'Generator rated PF', value: genPF },
+      ],
+      sections: [
+        {
+          title: 'Load summary',
+          rows: [
+            { label: 'System load (vector sum)', value: `${totals.totKVA.toFixed(2)} kVA` },
+            { label: 'Largest motor start kVA',   value: `${totals.maxStartKVA.toFixed(0)} kVA` },
+            { label: 'System PF',                  value: `${totals.sysPF.toFixed(3)} lag`, warn: totals.sysPF < 0.8 },
+          ],
+        },
+        {
+          title: 'Sizing calculation',
+          rows: [
+            { label: 'Governing value',            value: `${genRes.governing.toFixed(2)} kVA` },
+            { label: `+ ${margin}% margin`,         value: `${genRes.withMargin.toFixed(2)} kVA` },
+            { label: 'Altitude de-rate factor',     value: `${(genRes.altFactor * 100).toFixed(1)} %` },
+            { label: 'Temperature de-rate factor',  value: `${(genRes.tempFactor * 100).toFixed(1)} %` },
+            { label: 'Combined de-rate',            value: `${(genRes.netFactor * 100).toFixed(1)} %` },
+            { label: 'Required nameplate kVA',      value: `${genRes.required.toFixed(1)} kVA`, warn: true },
+            { label: 'Recommended standard size',   value: `${genRes.stdSize} kVA`, accent: true },
+            { label: 'Shaft output @ rated PF',      value: `${(genRes.stdSize * pf(genPF, 0.8)).toFixed(0)} kW` },
+          ],
+        },
+      ],
+      notes: totals.sysPF < 0.8
+        ? `System PF ${totals.sysPF.toFixed(2)} is below 0.8 — consider capacitor correction to reduce kVAR burden and generator sizing penalty.`
+        : undefined,
+    })
+  }
+
+  const exportTransformer = () => {
+    showCard({
+      calculator: 'Power Systems — Transformer Sizing',
+      site: site.name,
+      standard: 'IEC 60076',
+      inputs: [
+        { label: 'Primary voltage',   value: `${vPri} V` },
+        { label: 'Secondary voltage', value: `${vSec} V` },
+        { label: 'Vector group',      value: conn },
+        { label: 'Transformer %Z',   value: `${pctZ} %` },
+        { label: 'Input (generator std size)', value: `${trafoRes.kva.toFixed(1)} kVA` },
+      ],
+      sections: [{
+        title: 'Calculated values',
+        rows: [
+          { label: 'Turns ratio n = Vp / Vs',          value: `${trafoRes.ratio.toFixed(3)} : 1` },
+          { label: 'Primary current Ip (3φ)',           value: `${trafoRes.ip.toFixed(2)} A` },
+          { label: 'Secondary current Is (3φ)',         value: `${trafoRes.is_.toFixed(2)} A` },
+          { label: 'Base impedance (secondary)',        value: `${trafoRes.zBase.toFixed(4)} Ω` },
+          { label: '%Z ohmic equivalent (Vs base)',     value: `${trafoRes.zOhm.toFixed(4)} Ω` },
+          { label: 'Standard transformer size',         value: `${trafoRes.stdKVA} kVA`, accent: true },
+        ],
+      }],
+    })
+  }
+
+  const exportImpedance = () => {
+    showCard({
+      calculator: 'Power Systems — Fault Level / Impedance',
+      site: site.name,
+      standard: 'IEC 60909 (simplified series model)',
+      inputs: [
+        { label: "Generator Xd'' ",   value: `${xdPct} %` },
+        { label: 'Transformer %Z',    value: `${pctZ} %` },
+        { label: 'Secondary voltage', value: `${pf(vSec, 400)} V` },
+      ],
+      sections: [
+        {
+          title: 'Per-unit system base (secondary)',
+          rows: [
+            { label: 'Base kVA',           value: `${impedRes.baseVA.toFixed(0)} VA` },
+            { label: 'Base impedance Zbase', value: `${impedRes.zBase.toFixed(4)} Ω` },
+            { label: 'Base current Ibase',  value: `${impedRes.iBase.toFixed(2)} A` },
+          ],
+        },
+        {
+          title: '3φ fault current — generator + transformer',
+          rows: [
+            { label: "Gen Xd'' (p.u.)",   value: impedRes.xdPu.toFixed(4) },
+            { label: 'Trafo Z (p.u.)',     value: impedRes.zTraPu.toFixed(4) },
+            { label: 'Total Z (p.u.)',     value: `${impedRes.zTot.toFixed(4)} p.u.` },
+            { label: 'Isc 3φ — secondary bus', value: `${impedRes.isc3.toFixed(0)} A`, warn: true },
+            { label: 'Fault level',         value: `${impedRes.kAsc.toFixed(3)} kA`, warn: true },
+            { label: 'Short-circuit MVA',   value: `${impedRes.mvasc.toFixed(3)} MVA` },
+          ],
+        },
+      ],
+      notes: 'Simplified model — series impedance only. No R component, no grid infeed, no cable impedance, no 1.05 voltage factor (IEC 60909 Clause 8). Use for initial breaker/fuse kA rating only; final protection coordination requires ETAP, DigSILENT PowerFactory, or manual IEC 60909 calculation.',
     })
   }
 
@@ -640,7 +790,7 @@ export default function GeneratorSizing({ addHistory }) {
             <div style={S.grid2}>
               <Inp
                 label="Altitude (m AMSL)"
-                sub="Maseru ≈1600m · Mokhotlong ≈2200m · Sani ≈2874m"
+                sub="Uses your configured site altitude by default — override for a different site"
                 type="number" value={altitude} onChange={e => setAltitude(e.target.value)}
               />
               <Inp
@@ -693,6 +843,17 @@ export default function GeneratorSizing({ addHistory }) {
               }}
             >
               Save to history
+            </button>
+
+            <button
+              onClick={exportGenerator}
+              style={{
+                marginTop: '8px', width: '100%', padding: '7px',
+                borderRadius: '8px', border: '0.5px solid rgba(255,255,255,0.15)',
+                background: 'transparent', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: '12px',
+              }}
+            >
+              📄 Export PDF
             </button>
           </div>
         </div>
@@ -772,6 +933,17 @@ export default function GeneratorSizing({ addHistory }) {
                 {(pf(vPri) / 1000).toFixed(pf(vPri) >= 1000 ? 0 : 1)} kV / {vSec} V  ·  {conn}  ·  {pctZ}% Z
               </div>
             </div>
+
+            <button
+              onClick={exportTransformer}
+              style={{
+                marginTop: '10px', width: '100%', padding: '7px',
+                borderRadius: '8px', border: '0.5px solid rgba(255,255,255,0.15)',
+                background: 'transparent', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: '12px',
+              }}
+            >
+              📄 Export PDF
+            </button>
           </div>
         </div>
       )}
@@ -826,10 +998,22 @@ export default function GeneratorSizing({ addHistory }) {
             <div style={S.warn}>
               ⚠  SIMPLIFIED MODEL — series impedance only. No R component, no grid infeed, no cable impedance, no 1.05 voltage factor (IEC 60909 Clause 8). Use this for initial breaker/fuse kA rating only. Final protection coordination requires ETAP, DigSILENT PowerFactory, or manual IEC 60909 calculation.
             </div>
+
+            <button
+              onClick={exportImpedance}
+              style={{
+                marginTop: '10px', width: '100%', padding: '7px',
+                borderRadius: '8px', border: '0.5px solid rgba(255,255,255,0.15)',
+                background: 'transparent', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: '12px',
+              }}
+            >
+              📄 Export PDF
+            </button>
           </div>
         </div>
       )}
 
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }

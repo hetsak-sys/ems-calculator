@@ -1,4 +1,5 @@
 import React from 'react'
+import { useSite } from './SiteContext'
 
 const TOOL_GRID = [
   { id: 'motor',      label: 'Motors & Drives',  icon: '⚙',  desc: 'FLA · Starting · Relays · VFD',          bgKey: 'motorBg',   borderKey: 'motorBorder',   accentKey: 'motorAccent'   },
@@ -7,11 +8,13 @@ const TOOL_GRID = [
   { id: 'protection', label: 'Protection',       icon: '🛡',  desc: 'NER · IDMT · Arc Flash · CT/VT',         bgKey: 'protBg',    borderKey: 'protBorder',    accentKey: 'protAccent'    },
   { id: 'powersys',   label: 'Power Systems',    icon: '⚡',  desc: 'Transformer · Generator · PF',           bgKey: 'powerBg',   borderKey: 'powerBorder',   accentKey: 'powerAccent'   },
   { id: 'pq',         label: 'Power Quality',    icon: '∿',   desc: 'Harmonics · Battery · Lighting',         bgKey: 'pqBg',      borderKey: 'pqBorder',      accentKey: 'pqAccent'      },
+  { id: 'renewable',  label: 'Renewable Energy', icon: '☀',  desc: 'PV Arrays · Battery · Grid-Tie · Hybrid', bgKey: 'renewableBg', borderKey: 'renewableBorder', accentKey: 'renewableAccent' },
   { id: 'convert',    label: 'Unit Converter',   icon: '⇄',  desc: '12 engineering categories',               bgKey: 'convertBg', borderKey: 'convertBorder', accentKey: 'convertAccent' },
   { id: 'formulas',   label: 'Formula Library',  icon: '∑',  desc: 'IEC · SANS · Reference cards',            bgKey: 'formulaBg', borderKey: 'formulaBorder', accentKey: 'formulaAccent' },
 ]
 
-export default function Dashboard({ onNavigate, siteConfig, theme: T, themeMode }) {
+export default function Dashboard({ onNavigate, theme: T, themeMode }) {
+  const { site } = useSite()
   return (
     <div className="px-4 pt-4 pb-2">
 
@@ -30,7 +33,7 @@ export default function Dashboard({ onNavigate, siteConfig, theme: T, themeMode 
             ENGINEERING FIELD PLATFORM
           </div>
           <div className="text-xs mt-0.5" style={{ color: T.textMuted }}>
-            {siteConfig.voltage}V · {siteConfig.freq}Hz · {siteConfig.altitude}m ASL
+            {site.defaultLV}V · {site.frequency}Hz · {site.altitude}m ASL
           </div>
         </div>
         <div className="text-3xl" style={{ filter: `drop-shadow(0 0 8px ${T.accent}88)` }}>
@@ -105,14 +108,14 @@ export default function Dashboard({ onNavigate, siteConfig, theme: T, themeMode 
         <div>
           <div className="text-xs font-bold" style={{ color: T.accent }}>Quick Math available</div>
           <div className="text-xs" style={{ color: T.textMuted }}>
-            Tap ⚡ below for the full scientific calculator
+            Tap ⚡ below for the calculator and saved formulas
           </div>
         </div>
       </div>
 
       {/* Footer */}
       <div className="text-center py-3 text-xs" style={{ color: T.textDisabled }}>
-        Hetsa PowerSuite v1.0 · Built for field engineers
+        PowerSuite v1.0 · Built for field engineers
       </div>
     </div>
   )

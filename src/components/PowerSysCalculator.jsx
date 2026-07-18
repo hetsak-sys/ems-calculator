@@ -1,5 +1,7 @@
 import GeneratorSizingPro from './GeneratorSizing'
 import React, { useState } from 'react'
+import { calculateGeneratorDerating } from '../lib/generatorDerating.js'
+import { useSite } from './SiteContext'
 
 const TABS = [
   { id: 'transformer', label: 'Transformer' },
@@ -43,10 +45,11 @@ const CalcBtn = ({ onCalc }) => (
 )
 
 // ── Transformer ─────────────────────────────────────────────────────────────
-function TransformerCalc({ siteConfig }) {
+function TransformerCalc() {
+  const { site } = useSite()
   const [kva, setKva]   = useState('1000')
   const [vpri, setVpri] = useState('11000')
-  const [vsec, setVsec] = useState(String(siteConfig?.voltage || 400))
+  const [vsec, setVsec] = useState(String(site.defaultLV || '400'))
   const [zpc, setZpc]   = useState('6')      // impedance %
   const [pf, setPf]     = useState('0.85')
   const [eff, setEff]   = useState('98')
@@ -103,11 +106,12 @@ function TransformerCalc({ siteConfig }) {
 }
 
 // ── Power Factor Correction ──────────────────────────────────────────────────
-function PFCorrection({ siteConfig }) {
+function PFCorrection() {
+  const { site } = useSite()
   const [kw, setKw]     = useState('500')
   const [pf1, setPf1]   = useState('0.75')
   const [pf2, setPf2]   = useState('0.95')
-  const [vv, setVv]     = useState(String(siteConfig?.voltage || 400))
+  const [vv, setVv]     = useState(String(site.defaultLV || '400'))
   const [res, setRes]   = useState(null)
 
   const calc = () => {
@@ -156,12 +160,13 @@ function PFCorrection({ siteConfig }) {
 }
 
 // ── Generator Sizing ─────────────────────────────────────────────────────────
-function GeneratorSizing({ siteConfig }) {
+function GeneratorSizing() {
+  const { site } = useSite()
   const [kw, setKw]       = useState('200')
   const [pf, setPf]       = useState('0.8')
   const [eff, setEff]     = useState('90')
-  const [altitude, setAlt] = useState(String(siteConfig?.altitude || 1200))
-  const [temp, setTemp]   = useState('40')
+  const [altitude, setAlt] = useState(String(site.altitude || '1000'))
+  const [temp, setTemp]   = useState(String(site.ambient || '30'))
   const [largestMotorKw, setLmKw] = useState('37')
   const [startMethod, setStart]   = useState('dol')
   const [res, setRes]     = useState(null)
@@ -174,11 +179,16 @@ function GeneratorSizing({ siteConfig }) {
     const T = parseFloat(temp), Pm = parseFloat(largestMotorKw)
     if ([P, p, e, alt, T, Pm].some(isNaN)) return
 
-    // Altitude derating (approx 1% per 100m above 1000m)
-    const altDerate = alt > 1000 ? 1 - ((alt - 1000) / 100) * 0.01 : 1
-    // Temperature derating (1% per degree above 25°C)
-    const tempDerate = T > 25 ? 1 - (T - 25) * 0.01 : 1
-    const derate = altDerate * tempDerate
+    // Altitude/temperature derating — migrated onto the shared ISO 8528-1
+    // reference function (src/lib/generatorDerating.js), replacing this
+    // tab's own formula. The previous local formula derated from 25°C
+    // (rather than the ~40°C "no derate needed" convention most gensets
+    // use) and applied 1%/°C, which computed a ~25% loss at 50°C — roughly
+    // 4x more severe than commonly published figures (~5-7% at 50°C).
+    // This was producing a materially different, more pessimistic answer
+    // than the "Gen Sizing" (Pro) tab for the same site inputs. Now both
+    // tabs give the same answer for the same inputs, by construction.
+    const { netFactor: derate } = calculateGeneratorDerating({ altitudeM: alt, ambientTempC: T })
 
     const kVA_load  = (P / p) / e
     // Motor starting kVA
@@ -240,12 +250,13 @@ function GeneratorSizing({ siteConfig }) {
 }
 
 // ── Busbar Rating ─────────────────────────────────────────────────────────────
-function BusbarRating({ siteConfig }) {
+function BusbarRating() {
+  const { site } = useSite()
   const [mat, setMat]   = useState('cu')
   const [w, setW]       = useState('50')      // width mm
   const [thick, setThick] = useState('5')     // thickness mm
   const [bars, setBars] = useState('1')       // bars per phase
-  const [temp, setTemp] = useState('40')      // ambient °C
+  const [temp, setTemp] = useState(String(site.ambient || '30'))      // ambient °C
   const [res, setRes]   = useState(null)
 
   const calc = () => {
@@ -312,9 +323,10 @@ function BusbarRating({ siteConfig }) {
 }
 
 // ── Motor Starting ─────────────────────────────────────────────────────────────
-function MotorStarting({ siteConfig }) {
+function MotorStarting() {
+  const { site } = useSite()
   const [kw, setKw]     = useState('75')
-  const [vv, setVv]     = useState(String(siteConfig?.voltage || 400))
+  const [vv, setVv]     = useState(String(site.defaultLV || '400'))
   const [eff, setEff]   = useState('92')
   const [pf, setPf]     = useState('0.88')
   const [method, setMethod] = useState('dol')
@@ -389,7 +401,7 @@ function MotorStarting({ siteConfig }) {
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
-export default function PowerSysCalculator({ addHistory, siteConfig }) {
+export default function PowerSysCalculator({ addHistory }) {
   const [tab, setTab] = useState('transformer')
 
   return (
@@ -409,11 +421,11 @@ export default function PowerSysCalculator({ addHistory, siteConfig }) {
         ))}
       </div>
       <div className="flex-1 overflow-y-auto px-4 pt-4">
-  {tab === 'transformer' && <TransformerCalc  siteConfig={siteConfig} />}
-  {tab === 'pf'          && <PFCorrection     siteConfig={siteConfig} />}
-  {tab === 'generator'   && <GeneratorSizing  siteConfig={siteConfig} />}
-  {tab === 'busbar'      && <BusbarRating     siteConfig={siteConfig} />}
-  {tab === 'starting'    && <MotorStarting    siteConfig={siteConfig} />}
+  {tab === 'transformer' && <TransformerCalc />}
+  {tab === 'pf'          && <PFCorrection />}
+  {tab === 'generator'   && <GeneratorSizing />}
+  {tab === 'busbar'      && <BusbarRating />}
+  {tab === 'starting'    && <MotorStarting />}
   {tab === 'gensize'     && <GeneratorSizingPro addHistory={addHistory} />}
 </div> </div>
   )

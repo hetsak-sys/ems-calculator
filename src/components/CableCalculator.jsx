@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { SQRT3, pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, SubTabBar, UnitNumInput, VOLTAGE_UNITS, ResultCard, useResultCard } from './shared'
 import { useSite } from './SiteContext'
+import { useWorkspace } from './WorkspaceContext'
 
 const CABLE_DATA = [
   [1.5,  17.5,16.5,12.10,20.00,0.10],[2.5,  24,  23,  7.41, 12.10,0.10],
@@ -19,8 +20,9 @@ const INSTALL={'Clipped direct':1.00,'Free air':1.04,'Conduit in wall':0.77,'Tru
 
 function CableSizing({ addHistory }) {
   const { site } = useSite()
+  const { flaSnapshot } = useWorkspace()
   const { cardData, showCard, hideCard } = useResultCard()
-  const [phase,setPhase]=useState(site.phase||'3ph'),[current,setCurrent]=useState(''),[length,setLength]=useState('')
+  const [phase,setPhase]=useState(flaSnapshot?.phase||site.phase||'3ph'),[current,setCurrent]=useState(flaSnapshot?.fla||''),[length,setLength]=useState('')
   const [voltage,setVoltage]=useState(site.defaultLV||'400'),[insul,setInsul]=useState(site.insulation||'PVC'),[material,setMat]=useState(site.material||'Cu')
   const [ambient,setAmbient]=useState(site.ambient||'30'),[groups,setGroups]=useState('1'),[install,setInstall]=useState('Clipped direct')
   const [maxVd,setMaxVd]=useState(site.maxVd||'3'),[results,setResults]=useState(null),[error,setError]=useState('')
@@ -51,6 +53,15 @@ function CableSizing({ addHistory }) {
 
   return(
     <div className="px-4 py-3">
+      {flaSnapshot && (
+        <div className="bg-[#001a00] border border-[#1a3a1a] rounded-xl px-4 py-2.5 mb-3 flex items-center gap-2">
+          <span className="text-green-400 text-lg">✓</span>
+          <div>
+            <div className="text-green-400 text-xs font-bold">FLA loaded from Motor tab</div>
+            <div className="text-gray-500 text-[10px]">{flaSnapshot.fla} A · {flaSnapshot.kw} kW · {flaSnapshot.voltage}V · {flaSnapshot.phase}</div>
+          </div>
+        </div>
+      )}
       <ToggleInput label="Phase" options={[['1ph','1φ Single'],['3ph','3φ Three']]} value={phase} onChange={setPhase}/>
       <ToggleInput label="Insulation" options={[['PVC','PVC 70°C'],['XLPE','XLPE 90°C']]} value={insul} onChange={setInsul}/>
       <ToggleInput label="Conductor" options={[['Cu','Copper'],['Al','Aluminium']]} value={material} onChange={setMat}/>
@@ -86,7 +97,8 @@ function CableSizing({ addHistory }) {
 }
 
 function VoltDrop({ addHistory }) {
-  const [phase,setPhase]=useState('3ph'),[current,setCurrent]=useState(''),[pfVal,setPf]=useState('0.85')
+  const { flaSnapshot } = useWorkspace()
+  const [phase,setPhase]=useState(flaSnapshot?.phase||'3ph'),[current,setCurrent]=useState(flaSnapshot?.fla||''),[pfVal,setPf]=useState(flaSnapshot?.pfVal||'0.85')
   const [length,setLength]=useState(''),[voltage,setVoltage]=useState('400'),[size,setSize]=useState('16')
   const [material,setMat]=useState('Cu'),[result,setResult]=useState(null),[error,setError]=useState('')
 
@@ -107,6 +119,15 @@ function VoltDrop({ addHistory }) {
 
   return(
     <div className="px-4 py-3">
+      {flaSnapshot && (
+        <div className="bg-[#001a00] border border-[#1a3a1a] rounded-xl px-4 py-2.5 mb-3 flex items-center gap-2">
+          <span className="text-green-400 text-lg">✓</span>
+          <div>
+            <div className="text-green-400 text-xs font-bold">FLA loaded from Motor tab</div>
+            <div className="text-gray-500 text-[10px]">{flaSnapshot.fla} A · {flaSnapshot.kw} kW · {flaSnapshot.voltage}V · {flaSnapshot.phase}</div>
+          </div>
+        </div>
+      )}
       <InfoBox title="Detailed Voltage Drop — IEC Method" lines={['Uses R×cosφ + X×sinφ for accuracy','More precise than simple resistivity method']}/>
       <ToggleInput label="Phase" options={[['1ph','1φ Single'],['3ph','3φ Three']]} value={phase} onChange={setPhase}/>
       <ToggleInput label="Conductor" options={[['Cu','Copper'],['Al','Aluminium']]} value={material} onChange={setMat}/>
@@ -177,7 +198,8 @@ const TRAILING=[
 ]
 
 function TrailingCable({ addHistory }) {
-  const [current,setCurrent]=useState(''),[length,setLength]=useState('')
+  const { flaSnapshot } = useWorkspace()
+  const [current,setCurrent]=useState(flaSnapshot?.fla||''),[length,setLength]=useState('')
   const [voltage,setVoltage]=useState('525'),[maxVd,setMaxVd]=useState('5')
   const [results,setResults]=useState(null),[error,setError]=useState('')
 
@@ -200,6 +222,15 @@ function TrailingCable({ addHistory }) {
 
   return(
     <div className="px-4 py-3">
+      {flaSnapshot && (
+        <div className="bg-[#001a00] border border-[#1a3a1a] rounded-xl px-4 py-2.5 mb-3 flex items-center gap-2">
+          <span className="text-green-400 text-lg">✓</span>
+          <div>
+            <div className="text-green-400 text-xs font-bold">FLA loaded from Motor tab</div>
+            <div className="text-gray-500 text-[10px]">{flaSnapshot.fla} A · {flaSnapshot.kw} kW · {flaSnapshot.voltage}V · {flaSnapshot.phase}</div>
+          </div>
+        </div>
+      )}
       <InfoBox title="Mining Trailing Cable" lines={['Derating factor 0.85 applied for flexible use','Common mine voltages: 525V, 1000V, 3300V']}/>
       <NumInput label="Load Current" value={current} onChange={setCurrent} unit="A"/>
       <NumInput label="Cable Length" value={length} onChange={setLength} unit="m"/>
@@ -841,7 +872,8 @@ function CableSchedule() {
 
 // ── VFD Cable Sizing ────────────────────────────────────────────────────────
 function VfdCable({ addHistory }) {
-  const [current,setCurrent]=useState(''),[length,setLength]=useState('')
+  const { flaSnapshot } = useWorkspace()
+  const [current,setCurrent]=useState(flaSnapshot?.fla||''),[length,setLength]=useState('')
   const [voltage,setVoltage]=useState('400'),[result,setResult]=useState(null),[error,setError]=useState('')
 
   const calculate=()=>{
@@ -872,6 +904,15 @@ function VfdCable({ addHistory }) {
 
   return(
     <div className="px-4 py-3">
+      {flaSnapshot && (
+        <div className="bg-[#001a00] border border-[#1a3a1a] rounded-xl px-4 py-2.5 mb-3 flex items-center gap-2">
+          <span className="text-green-400 text-lg">✓</span>
+          <div>
+            <div className="text-green-400 text-xs font-bold">FLA loaded from Motor tab</div>
+            <div className="text-gray-500 text-[10px]">{flaSnapshot.fla} A · {flaSnapshot.kw} kW · {flaSnapshot.voltage}V · {flaSnapshot.phase}</div>
+          </div>
+        </div>
+      )}
       <InfoBox title="VFD Output Cable Sizing" lines={['Screened cable required for VFD output','Derating applied: ×1.1 for harmonics, ×0.8 for screening effect']}/>
       <NumInput label="Motor FLA" value={current} onChange={setCurrent} unit="A"/>
       <NumInput label="Cable Length (drive to motor)" value={length} onChange={setLength} unit="m"/>

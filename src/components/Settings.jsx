@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { checkLicenseStatus, activateLicense, formatLicenseSuffix, buildFullLicenseKey, LICENSE_PREFIX } from '../services/LicenseManager'
+import { useSite } from './SiteContext'
+import { clearPendingResult } from './shared'
 
 const VOLTAGE_OPTIONS = [
   { label: '220 V',  value: 220  },
@@ -24,8 +26,9 @@ const CURRENCY_OPTIONS = [
   { label: 'EUR — Euro',               value: 'EUR' },
 ]
 
-export default function Settings({ siteConfig, setSiteConfig, themeMode, setThemeMode, theme: T }) {
-  const [local, setLocal] = useState({ ...siteConfig })
+export default function Settings({ themeMode, setThemeMode, theme: T }) {
+  const { site, setSiteFields } = useSite()
+  const [local, setLocal] = useState({ ...site })
   const [saved, setSaved] = useState(false)
 
   // ── License ───────────────────────────────────────────────────
@@ -67,12 +70,16 @@ export default function Settings({ siteConfig, setSiteConfig, themeMode, setThem
   const update = (key, val) => setLocal(c => ({ ...c, [key]: val }))
 
   const handleSave = () => {
-    setSiteConfig({ ...local })
+    setSiteFields({ ...local })
+    // A site-config change invalidates any old pending result's
+    // assumptions — don't let the recovery banner silently resurface a
+    // result calculated under different site parameters.
+    clearPendingResult()
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
 
-  const changed = JSON.stringify(local) !== JSON.stringify(siteConfig)
+  const changed = JSON.stringify(local) !== JSON.stringify(site)
 
   // ── Shared field styles ──────────────────────────────────────────
   const fieldLabel = { fontSize: '11px', fontWeight: '700', letterSpacing: '0.08em', color: T.textMuted, textTransform: 'uppercase', marginBottom: '8px' }
@@ -128,6 +135,20 @@ export default function Settings({ siteConfig, setSiteConfig, themeMode, setThem
       <div style={section}>
         <div style={sectionTitle}>Site Parameters</div>
 
+        {/* Site / Job Label — optional, free text, no assumed location.
+            Purely for record-keeping: shows as "Site:" on exported PDFs.
+            Left blank by default rather than guessing a location. */}
+        <div style={fieldWrap}>
+          <div style={fieldLabel}>Site / Job Label (optional)</div>
+          <input
+            type="text"
+            value={local.name || ''}
+            onChange={e => update('name', e.target.value)}
+            style={input}
+            placeholder="e.g. Client X — DB2 (shown on exported PDFs)"
+          />
+        </div>
+
         {/* Voltage */}
         <div style={fieldWrap}>
           <div style={fieldLabel}>System Voltage</div>
@@ -135,12 +156,12 @@ export default function Settings({ siteConfig, setSiteConfig, themeMode, setThem
             {VOLTAGE_OPTIONS.map(v => (
               <button
                 key={v.value}
-                onClick={() => update('voltage', v.value)}
+                onClick={() => update('defaultLV', String(v.value))}
                 className="py-2.5 rounded-xl text-xs font-bold text-center"
                 style={{
-                  backgroundColor: local.voltage === v.value ? T.accentDim : T.surface2Bg,
-                  border: `1px solid ${local.voltage === v.value ? T.accent : T.border}`,
-                  color: local.voltage === v.value ? T.accent : T.textSub,
+                  backgroundColor: String(local.defaultLV) === String(v.value) ? T.accentDim : T.surface2Bg,
+                  border: `1px solid ${String(local.defaultLV) === String(v.value) ? T.accent : T.border}`,
+                  color: String(local.defaultLV) === String(v.value) ? T.accent : T.textSub,
                 }}
               >
                 {v.label}
@@ -156,11 +177,11 @@ export default function Settings({ siteConfig, setSiteConfig, themeMode, setThem
             {[50, 60].map(f => (
               <button
                 key={f}
-                onClick={() => update('freq', f)}
+                onClick={() => update('frequency', String(f))}
                 className="flex-1 py-3 font-bold text-sm"
                 style={{
-                  backgroundColor: local.freq === f ? T.accent : T.surface2Bg,
-                  color: local.freq === f ? '#000000' : T.textSub,
+                  backgroundColor: String(local.frequency) === String(f) ? T.accent : T.surface2Bg,
+                  color: String(local.frequency) === String(f) ? '#000000' : T.textSub,
                   transition: 'all 0.2s',
                 }}
               >
@@ -178,7 +199,7 @@ export default function Settings({ siteConfig, setSiteConfig, themeMode, setThem
               type="number"
               inputMode="numeric"
               value={local.altitude}
-              onChange={e => update('altitude', parseInt(e.target.value) || 0)}
+              onChange={e => update('altitude', String(parseInt(e.target.value) || 0))}
               style={input}
               placeholder="e.g. 1500"
             />
@@ -195,12 +216,12 @@ export default function Settings({ siteConfig, setSiteConfig, themeMode, setThem
               { label: 'Sea Level', val: 0 },
             ].map(p => (<button
                 key={p.val}
-                onClick={() => update('altitude', p.val)}
+                onClick={() => update('altitude', String(p.val))}
                 className="px-3 py-1.5 rounded-full text-xs"
                 style={{
-                  backgroundColor: local.altitude === p.val ? T.accentDim : T.surface2Bg,
-                  border: `1px solid ${local.altitude === p.val ? T.accent : T.border}`,
-                  color: local.altitude === p.val ? T.accent : T.textMuted,
+                  backgroundColor: String(local.altitude) === String(p.val) ? T.accentDim : T.surface2Bg,
+                  border: `1px solid ${String(local.altitude) === String(p.val) ? T.accent : T.border}`,
+                  color: String(local.altitude) === String(p.val) ? T.accent : T.textMuted,
                 }}
               >
                 {p.label} ({p.val}m)
@@ -332,10 +353,11 @@ export default function Settings({ siteConfig, setSiteConfig, themeMode, setThem
       >
         <div style={{ ...sectionTitle, marginBottom: '8px' }}>Active Configuration</div>
         {[
-          { label: 'Voltage',   value: `${siteConfig.voltage} V` },
-          { label: 'Frequency', value: `${siteConfig.freq} Hz` },
-          { label: 'Altitude',  value: `${siteConfig.altitude} m ASL` },
-          { label: 'Currency',  value: siteConfig.currency },
+          ...(site.name ? [{ label: 'Site Label', value: site.name }] : []),
+          { label: 'Voltage',   value: `${site.defaultLV} V` },
+          { label: 'Frequency', value: `${site.frequency} Hz` },
+          { label: 'Altitude',  value: `${site.altitude} m ASL` },
+          { label: 'Currency',  value: site.currency },
           { label: 'Theme',     value: themeMode === 'dark' ? '🌙 Dark' : '☀️ Light' },
         ].map(row => (
           <div key={row.label} className="flex justify-between py-1.5" style={{ borderBottom: `1px solid ${T.border}` }}>
@@ -349,7 +371,7 @@ export default function Settings({ siteConfig, setSiteConfig, themeMode, setThem
 
       {/* App info */}
       <div className="text-center mt-6" style={{ color: T.textMuted, fontSize: '12px' }}>
-        Hetsa PowerSuite v1.0 · Field Engineering Platform
+        PowerSuite v1.0 · Field Engineering Platform
       </div>
     </div>
   )
