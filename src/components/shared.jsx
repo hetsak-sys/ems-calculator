@@ -1,5 +1,7 @@
-// Shared UI components and utilities for EMS Calculator
+// Shared UI components and utilities for PowerSuite
 import { useState } from 'react'
+import { defaultFilename, exportAndSharePdf } from '../lib/pdfExport'
+import { Preferences } from '@capacitor/preferences'
 
 export const SQRT3 = Math.sqrt(3)
 export const pf = (v) => parseFloat(String(v).replace(',', '.')) || 0
@@ -189,13 +191,18 @@ export function SubTabBar({ tabs, active, onChange }) {
 // ── Result Card — professional output for field use ────────────────────────
 export function ResultCard({ data, onClose }) {
   const [copied, setCopied] = useState(false)
+  const [showExport, setShowExport] = useState(false)
+  const [filename, setFilename] = useState('')
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState(null)
+  const [exported, setExported] = useState(false)
 
   const formatAsText = () => {
     const line = '─'.repeat(38)
     const dline = '═'.repeat(38)
     let out = []
     out.push(dline)
-    out.push('   EMS CALCULATOR — RESULT RECORD')
+    out.push('   POWERSUITE — RESULT RECORD')
     out.push(dline)
     out.push(`Site:     ${data.site || '—'}`)
     out.push(`Date:     ${new Date().toLocaleDateString('en-ZA')}  ${new Date().toLocaleTimeString('en-ZA', {hour:'2-digit',minute:'2-digit'})}`)
@@ -217,7 +224,7 @@ export function ResultCard({ data, onClose }) {
       out.push(`  ${data.notes}`)
       out.push(line)
     }
-    out.push('EMS Calculator — Maseru, Lesotho')
+    out.push('PowerSuite — field calculation, not a substitute for professional sign-off')
     out.push(dline)
     return out.join('\n')
   }
@@ -226,7 +233,7 @@ export function ResultCard({ data, onClose }) {
     const text = formatAsText()
     try {
       if (navigator.share) {
-        await navigator.share({ title: 'EMS Calculator Result', text })
+        await navigator.share({ title: 'PowerSuite Result', text })
       } else {
         await navigator.clipboard.writeText(text)
         setCopied(true)
@@ -238,6 +245,27 @@ export function ResultCard({ data, onClose }) {
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
       } catch { /* silent */ }
+    }
+  }
+
+  const openExportPanel = () => {
+    setFilename(defaultFilename(data))
+    setExportError(null)
+    setExported(false)
+    setShowExport(true)
+  }
+
+  const confirmExport = async () => {
+    setExporting(true)
+    setExportError(null)
+    try {
+      await exportAndSharePdf(data, filename)
+      setExported(true)
+      setShowExport(false)
+    } catch (e) {
+      setExportError(e?.message || 'Could not create the PDF. Try again.')
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -349,15 +377,49 @@ export function ResultCard({ data, onClose }) {
           </div>
         </div>
 
+        {/* Export PDF — filename confirm panel */}
+        {showExport && (
+          <div className="px-5 pt-3 border-t border-[#2a2a2a]">
+            <label className="text-gray-500 text-xs mb-1 block">Filename</label>
+            <input
+              type="text"
+              value={filename}
+              onChange={e => setFilename(e.target.value)}
+              className="w-full bg-[#1c1c1c] border border-[#2a2a2a] text-white text-sm rounded-xl px-3 py-2.5 mb-2 outline-none"
+            />
+            {exportError && <div className="text-red-400 text-xs mb-2">{exportError}</div>}
+            <div className="flex gap-3 mb-3">
+              <button
+                onClick={() => setShowExport(false)}
+                className="flex-1 py-3 bg-[#1c1c1c] text-gray-400 rounded-xl text-sm font-medium"
+                disabled={exporting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmExport}
+                className="flex-1 py-3 bg-amber-500 text-black rounded-xl text-sm font-bold disabled:opacity-60"
+                disabled={exporting || !filename.trim()}
+              >
+                {exporting ? 'Generating…' : 'Export PDF'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Action buttons — padded above phone navigation bar */}
         <div className="flex gap-3 px-5 pt-3 border-t border-[#2a2a2a]"
           style={{paddingBottom:'max(env(safe-area-inset-bottom,0px),12px)'}}>
           <button onClick={handleShare}
-            className={`flex-1 py-4 rounded-2xl font-bold text-base ${copied ? 'bg-green-600 text-white' : 'bg-amber-500 text-black'}`}>
-            {copied ? '✓ Copied to clipboard!' : (typeof navigator !== 'undefined' && navigator.share ? '📤 Share Result' : '📋 Copy Result')}
+            className={`flex-1 py-4 rounded-2xl font-bold text-sm ${copied ? 'bg-green-600 text-white' : 'bg-[#1c1c1c] text-gray-300'}`}>
+            {copied ? '✓ Copied!' : (typeof navigator !== 'undefined' && navigator.share ? '📤 Share Text' : '📋 Copy Text')}
+          </button>
+          <button onClick={openExportPanel}
+            className={`flex-1 py-4 rounded-2xl font-bold text-sm ${exported ? 'bg-green-600 text-white' : 'bg-amber-500 text-black'}`}>
+            {exported ? '✓ Exported' : '📄 Export PDF'}
           </button>
           <button onClick={onClose}
-            className="px-6 py-4 bg-[#1c1c1c] text-gray-400 rounded-2xl text-sm font-medium">
+            className="px-5 py-4 bg-[#1c1c1c] text-gray-400 rounded-2xl text-sm font-medium">
             Close
           </button>
         </div>
@@ -366,9 +428,72 @@ export function ResultCard({ data, onClose }) {
   )
 }
 
+// PENDING RESULT RECOVERY (Option A):
+//
+// Problem: if a user calculates a result and closes the app (by accident,
+// or the OS kills it) before tapping Export PDF / Share, that result was
+// only ever in React state — gone the instant the app process ends.
+//
+// Fix: every showCard() call also durably persists the exact same `data`
+// object via @capacitor/preferences (same storage LicenseManager.js and
+// SiteContext.jsx already use). On next launch, App.jsx checks for a
+// pending result and — if one exists — offers a small recovery banner
+// ("You have an unexported result — tap to view") that reopens the exact
+// same ResultCard, fully able to export/share, without needing to
+// reconstruct which calculator screen it came from: ResultCard only ever
+// needed the `data` object itself (see its props above), never anything
+// from its originating component.
+//
+// This is deliberately a SINGLE global "last result" slot, not one per
+// calculator tab — the recovery banner is app-level, so only the single
+// most recent unexported result is ever offered back. Clearing happens on:
+//   - hideCard() — explicit dismissal (in normal use, or via the recovery
+//     banner) means "I'm done with this," pending or not.
+//   - a fresh showCard() — a new calculation naturally supersedes the old
+//     pending one.
+//   - Settings saving a site-config change (see clearPendingResult(),
+//     called from Settings.jsx) — an old result calculated under
+//     different site parameters shouldn't be silently resurfaced as if
+//     still valid.
+const PENDING_RESULT_KEY = 'hetsa_pending_result'
+
 export function useResultCard() {
   const [cardData, setCardData] = useState(null)
-  const showCard = (data) => setCardData(data)
-  const hideCard = () => setCardData(null)
+
+  const showCard = (data) => {
+    setCardData(data)
+    Preferences.set({ key: PENDING_RESULT_KEY, value: JSON.stringify(data) }).catch(() => {})
+  }
+
+  const hideCard = () => {
+    setCardData(null)
+    Preferences.remove({ key: PENDING_RESULT_KEY }).catch(() => {})
+  }
+
   return { cardData, showCard, hideCard }
+}
+
+/**
+ * Reads any result left pending from before the app was last closed.
+ * Used once, on startup, by App.jsx to decide whether to offer the
+ * recovery banner. Returns null if there's nothing pending or the cache
+ * is corrupt — never throws, never blocks startup.
+ */
+export async function getPendingResult() {
+  try {
+    const { value } = await Preferences.get({ key: PENDING_RESULT_KEY })
+    return value ? JSON.parse(value) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Clears any pending result. Called from App.jsx when the recovery
+ * banner/card is dismissed, and from Settings.jsx's Save handler (a site
+ * config change invalidates the assumptions any old pending result was
+ * calculated under).
+ */
+export function clearPendingResult() {
+  Preferences.remove({ key: PENDING_RESULT_KEY }).catch(() => {})
 }

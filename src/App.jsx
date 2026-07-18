@@ -1,10 +1,10 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { getTheme } from './theme'
 import Dashboard from './components/Dashboard'
 import QuickMath from './components/QuickMath'
 import MotorCalculator from './components/MotorCalculator'
 import CableCalculator from './components/CableCalculator'
-import NerCalculator from './components/NerCalculator'
+import Protection from './components/Protection'
 import EarthingCalculator from './components/EarthingCalculator'
 import FormulaReference from './components/FormulaReference'
 import ConvertCalculator from './components/ConvertCalculator'
@@ -12,7 +12,11 @@ import HistoryView from './components/HistoryView'
 import Settings from './components/Settings'
 import PowerSysCalculator from './components/PowerSysCalculator'
 import PQCalculator from './components/PQCalculator'
+import RenewableEnergyCalculator from './components/RenewableEnergyCalculator'
 import LicenseGate from './components/LicenseGate'
+import { SiteProvider, useSite } from './components/SiteContext'
+import { WorkspaceProvider } from './components/WorkspaceContext'
+import { ResultCard, getPendingResult, clearPendingResult } from './components/shared'
 
 const SCREEN_LABELS = {
   motor:      'Motors & Drives',
@@ -21,18 +25,16 @@ const SCREEN_LABELS = {
   protection: 'Protection',
   powersys:   'Power Systems',
   pq:         'Power Quality',
+  renewable:  'Renewable Energy',
   convert:    'Unit Converter',
   formulas:   'Formula Library',
   history:    'Calculation History',
   settings:   'Settings',
 }
 
-const DEFAULT_SITE = {
-  voltage:  400,
-  freq:     50,
-  altitude: 1200,
-  currency: 'ZAR',
-}
+// Site parameters (voltage, altitude, frequency, currency, etc.) live in
+// SiteContext now — no separate flat default here. See SiteContext.jsx for
+// why: this used to be a second, disconnected copy of the same concept.
 
 export default function App() {
   const [screen, setScreen]             = useState('dashboard')
@@ -40,7 +42,23 @@ export default function App() {
   const [bottomTab, setBottomTab]       = useState('home')
   const [history, setHistory]           = useState([])
   const [themeMode, setThemeMode]       = useState('dark')   // 'dark' | 'light'
-  const [siteConfig, setSiteConfig]     = useState(DEFAULT_SITE)
+
+  // Result recovery (Option A): if a calculation was left unexported when
+  // the app last closed, offer it back via a small banner rather than
+  // silently losing it. See shared.jsx's PENDING RESULT RECOVERY comment
+  // for the full design and why it's a single global slot, not per-tab.
+  const [pendingResult, setPendingResult] = useState(null)   // the recovered data, once loaded
+  const [showRecoveredCard, setShowRecoveredCard] = useState(false)
+
+  useEffect(() => {
+    getPendingResult().then(setPendingResult)
+  }, [])
+
+  const dismissPendingResult = () => {
+    clearPendingResult()
+    setPendingResult(null)
+    setShowRecoveredCard(false)
+  }
 
   const T = getTheme(themeMode)
 
@@ -70,35 +88,37 @@ export default function App() {
   const isInTool = !['dashboard', 'history', 'settings'].includes(screen)
 
   const renderScreen = () => {
-    const props = { addHistory, siteConfig, theme: T, themeMode }
+    const props = { addHistory, theme: T, themeMode }
     switch (screen) {
-      case 'dashboard':  return <Dashboard onNavigate={navigate} siteConfig={siteConfig} theme={T} themeMode={themeMode} />
+      case 'dashboard':  return <Dashboard onNavigate={navigate} theme={T} themeMode={themeMode} />
       case 'motor':      return <MotorCalculator {...props} />
       case 'cable':      return <CableCalculator {...props} />
       case 'earthing':   return <EarthingCalculator {...props} />
-      case 'protection': return <NerCalculator {...props} />
+      case 'protection': return <Protection {...props} />
       case 'powersys':   return <PowerSysCalculator {...props} />
       case 'pq':         return <PQCalculator {...props} />
+      case 'renewable':  return <RenewableEnergyCalculator {...props} />
       case 'convert':    return <ConvertCalculator theme={T} themeMode={themeMode} />
       case 'formulas':   return <FormulaReference history={history} theme={T} themeMode={themeMode} />
       case 'history':    return <HistoryView history={history} onClear={() => setHistory([])} theme={T} themeMode={themeMode} />
       case 'settings':   return (
         <Settings
-          siteConfig={siteConfig}
-          setSiteConfig={setSiteConfig}
           themeMode={themeMode}
           setThemeMode={setThemeMode}
           theme={T}
         />
       )
-      default: return <Dashboard onNavigate={navigate} siteConfig={siteConfig} theme={T} themeMode={themeMode} />
+      default: return <Dashboard onNavigate={navigate} theme={T} themeMode={themeMode} />
     }
   }
 
-  // Summary label for header
-  const siteLabel = `${siteConfig.voltage}V · ${siteConfig.freq}Hz · ${siteConfig.altitude}m`
+  // Site summary text now comes from SiteContext, via the SiteSummaryPill
+  // component below — App itself sits above SiteProvider in the tree (it's
+  // the one creating the provider), so it can't call useSite() here directly.
 
   return (
+    <SiteProvider>
+    <WorkspaceProvider>
     <LicenseGate theme={T} themeMode={themeMode}>
     <div
       className="flex flex-col h-screen overflow-hidden select-none"
@@ -134,7 +154,7 @@ export default function App() {
   maxWidth: '180px',
 }}
             >
-              {isInTool ? SCREEN_LABELS[screen] : 'Hetsa PowerSuite'}
+              {isInTool ? SCREEN_LABELS[screen] : 'PowerSuite'}
             </span>
             {!isInTool && <span className="text-xs" style={{ color: T.textMuted }}>v1.0</span>}
           </div>
@@ -158,18 +178,7 @@ export default function App() {
           </button>
 
           {/* Site summary pill — hidden inside tools to save header space */}
-{!isInTool && (
-  <div
-    className="px-3 py-1.5 rounded-full text-xs font-mono"
-    style={{
-      backgroundColor: T.accentDim,
-      border: `1px solid ${T.accentBorder}`,
-      color: T.accentText,
-    }}
-  >
-    {siteLabel}
-  </div>
-)}
+{!isInTool && <SiteSummaryPill T={T} />}
         </div>
       </div>
 
@@ -180,6 +189,53 @@ export default function App() {
       >
         {renderScreen()}
       </main>
+
+      {/* ── PENDING RESULT RECOVERY BANNER ──────────────────────
+          Shown when a calculation was left unexported the last time the
+          app closed. Deliberately screen-agnostic — ResultCard only ever
+          needs the `data` object, so this works regardless of which
+          screen is currently open, with no need to know or navigate back
+          to whichever calculator originally produced it. */}
+      {pendingResult && !showRecoveredCard && (
+        <div
+          className="fixed z-40 left-3 right-3 rounded-2xl px-4 py-3 flex items-center gap-3"
+          style={{
+            top: 'calc(env(safe-area-inset-top) + 64px)',
+            backgroundColor: T.accentDim,
+            border: `1px solid ${T.accentBorder}`,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+          }}
+        >
+          <span style={{ fontSize: '18px' }}>📋</span>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-bold truncate" style={{ color: T.accentText }}>
+              Unexported result: {pendingResult.calculator}
+            </div>
+            <div className="text-[11px]" style={{ color: T.textMuted }}>
+              Left over from before the app last closed
+            </div>
+          </div>
+          <button
+            onClick={() => setShowRecoveredCard(true)}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold shrink-0"
+            style={{ backgroundColor: T.accent, color: '#000' }}
+          >
+            View
+          </button>
+          <button
+            onClick={dismissPendingResult}
+            className="text-lg px-1 shrink-0"
+            style={{ color: T.textMuted }}
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {showRecoveredCard && pendingResult && (
+        <ResultCard data={pendingResult} onClose={dismissPendingResult} />
+      )}
 
       {/* ── QUICK MATH OVERLAY ───────────────────────────────── */}
       {showQuickMath && (
@@ -244,5 +300,26 @@ export default function App() {
       </div>
     </div>
     </LicenseGate>
+    </WorkspaceProvider>
+    </SiteProvider>
+  )
+}
+
+// Small standalone component so it can call useSite() — it's rendered as a
+// child inside <SiteProvider>, whereas App() itself is the component that
+// creates the provider and so sits above it in the tree.
+function SiteSummaryPill({ T }) {
+  const { site } = useSite()
+  return (
+    <div
+      className="px-3 py-1.5 rounded-full text-xs font-mono"
+      style={{
+        backgroundColor: T.accentDim,
+        border: `1px solid ${T.accentBorder}`,
+        color: T.accentText,
+      }}
+    >
+      {site.defaultLV}V · {site.frequency}Hz · {site.altitude}m
+    </div>
   )
 }
