@@ -1,4 +1,4 @@
-// theme.js — central design tokens for Hetsa PowerSuite
+// theme.js — central design tokens for PowerSuite
 // Import this in any component: import { getTheme } from '../theme'
 
 export const THEMES = {
@@ -35,6 +35,7 @@ export const THEMES = {
     pqBg:       '#080f00',  pqBorder:   '#1e3d00',  pqAccent:   '#a3e635',
     convertBg:  '#0f0f00',  convertBorder:'#3d3800', convertAccent:'#fbbf24',
     formulaBg:  '#0a0010',  formulaBorder:'#2d0040', formulaAccent:'#c084fc',
+    renewableBg:'#001210',  renewableBorder:'#00473d', renewableAccent:'#2dd4bf',
 
     // Buttons
     btnNum:     { bg: '#141414', text: '#e5e7eb', border: '#222222' },
@@ -86,6 +87,7 @@ export const THEMES = {
     pqBg:       '#f7fee7',  pqBorder:   '#bef264',  pqAccent:   '#65a30d',
     convertBg:  '#fefce8',  convertBorder:'#fde047', convertAccent:'#ca8a04',
     formulaBg:  '#faf5ff',  formulaBorder:'#e9d5ff', formulaAccent:'#9333ea',
+    renewableBg:'#f0fdfa',  renewableBorder:'#99f6e4', renewableAccent:'#0d9488',
 
     // Buttons
     btnNum:     { bg: '#f5f3ee', text: '#111111', border: '#ddd9d0' },
