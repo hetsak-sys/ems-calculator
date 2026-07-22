@@ -58,7 +58,7 @@ const CalcBtn = ({ onCalc }) => (
   </button>
 )
 
-// ── Transformer ─────────────────────────────────────────────────────────────
+// ── Transformer ──────────────────────────────────────────────────────────────
 function TransformerCalc() {
   const { site } = useSite()
   const [kva, setKva]   = useState('1000')
@@ -201,7 +201,7 @@ function BusbarRating() {
     const Isc_1s   = mat === 'cu'
       ? A * n * 143        // k=143 for Cu PVC
       : A * n * 95         // k=95 for Al
-    const R_per_m  = (mat === 'cu' ? 0.0175 : 0.0282) / (A * n) * 1000  // mΩ/m
+    const R_per_m  = (mat === 'cu' ? 0.01724 : 0.0282) / (A * n) * 1000  // mΩ/m
 
     setRes({
       area:   (A * n).toFixed(0),
@@ -246,7 +246,7 @@ function BusbarRating() {
   )
 }
 
-// ── Motor Starting ─────────────────────────────────────────────────────────────
+// ── Motor Starting ────────────────────────────────────────────────────────────
 function MotorStarting() {
   const { site } = useSite()
   const [kw, setKw]     = useState('75')
@@ -324,7 +324,7 @@ function MotorStarting() {
   )
 }
 
-// ── Main ─────────────────────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
 export default function PowerSysCalculator({ addHistory }) {
   const [tab, setTab] = useState('transformer')
 
@@ -353,4 +353,3 @@ export default function PowerSysCalculator({ addHistory }) {
 </div> </div>
   )
 }
-  

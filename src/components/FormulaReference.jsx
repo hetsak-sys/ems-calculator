@@ -70,7 +70,7 @@ const FORMULAS = [
     color: 'orange',
     items: [
       { name: "Resistance", formula: "R = ρ × L / A", note: "ρ=resistivity, L=length, A=area" },
-      { name: "Volt Drop (1φ)", formula: "Vd = 2 × ρ × L × I / A", note: "V; ρ_Cu=0.0175" },
+      { name: "Volt Drop (1φ)", formula: "Vd = 2 × ρ × L × I / A", note: "V; ρ_Cu=0.01724" },
       { name: "Volt Drop (3φ)", formula: "Vd = √3 × ρ × L × I / A", note: "V; ρ_Al=0.028" },
       { name: "% Voltage Drop", formula: "%Vd = (Vd / V) × 100", note: "Max 3–5% (IEC)" },
       { name: "Current Density", formula: "J = I / A", note: "A/mm²; typical 1–4 A/mm²" },
@@ -94,7 +94,7 @@ const FORMULAS = [
       { name: "√3", formula: "1.73205081", note: "Used in all 3-phase" },
       { name: "π (Pi)", formula: "3.14159265", note: "" },
       { name: "e (Euler's number)", formula: "2.71828183", note: "" },
-      { name: "Cu resistivity (20°C)", formula: "ρ = 0.0175 Ω·mm²/m", note: "" },
+      { name: "Cu resistivity (20°C)", formula: "ρ = 0.01724 Ω·mm²/m", note: "" },
       { name: "Al resistivity (20°C)", formula: "ρ = 0.028 Ω·mm²/m", note: "" },
       { name: "Cu temp coefficient", formula: "αCu = 0.00393 /°C", note: "" },
       { name: "1 HP", formula: "= 745.7 W", note: "" },

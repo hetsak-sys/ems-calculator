@@ -78,7 +78,7 @@ const DURATIONS = [
   { label: 'Cont.', s: null },
 ]
 
-// ── NER Sizing ─────────────────────────────────────────────────────────────
+// ── NER Sizing ────────────────────────────────────────────────────────────────
 function NerSizing({ addHistory }) {
   const [voltIdx, setVoltIdx] = useState(2)   // default 6.6kV
   const [faultCurrent, setFaultCurrent] = useState('') // desired earth fault limit (A)
@@ -209,7 +209,7 @@ function NerSizing({ addHistory }) {
   )
 }
 
-// ── NCRT Monitoring ────────────────────────────────────────────────────────
+// ── NCRT Monitoring ───────────────────────────────────────────────────────────
 function NcrtMonitoring() {
   const [nerR, setNerR] = useState('')
   const [voltIdx, setVoltIdx] = useState(2)
@@ -297,7 +297,7 @@ function NcrtMonitoring() {
   )
 }
 
-// ── IDMT Relay Coordination (IEC 60255-151) ─────────────────────────────────
+// ── IDMT Relay Coordination (IEC 60255-151) ──────────────────────────────────
 const IDMT_CURVES = [
   { id: 'si', label: 'Standard Inverse (SI)',    k: 0.14, a: 0.02 },
   { id: 'vi', label: 'Very Inverse (VI)',        k: 13.5, a: 1.0  },
@@ -393,8 +393,8 @@ function IdmtCoordination({ addHistory }) {
   )
 }
 
-// ── CT Burden ────────────────────────────────────────────────────────────
-const RHO_CU = 0.0175 // Ω·mm²/m, consistent with Formula Reference
+// ── CT Burden ─────────────────────────────────────────────────────────────────
+const RHO_CU = 0.01724 // Ω·mm²/m, IEC 60228 measured value at 20°C, consistent with Formula Reference
 
 function CtBurden({ addHistory }) {
   const [secondary, setSecondary] = useState(5)
@@ -483,7 +483,7 @@ function CtBurden({ addHistory }) {
   )
 }
 
-// ── Insulation Resistance — PI & DAR (IEEE 43) ──────────────────────────────
+// ── Insulation Resistance — PI & DAR (IEEE 43) ───────────────────────────────
 function InsulationResistance({ addHistory }) {
   const [r30s, setR30s] = useState('')
   const [r1min, setR1min] = useState('')
@@ -557,7 +557,7 @@ function InsulationResistance({ addHistory }) {
   )
 }
 
-// ── Arc Flash — simplified LV estimate (IEEE 1584) ──────────────────────────
+// ── Arc Flash — simplified LV estimate (IEEE 1584) ───────────────────────────
 function ArcFlash({ addHistory }) {
   const [bolted, setBolted] = useState('')
   const [gap, setGap] = useState('25')
@@ -678,7 +678,7 @@ function ArcFlash({ addHistory }) {
   )
 }
 
-// ── Transformer Differential Protection ─────────────────────────────────────
+// ── Transformer Differential Protection ──────────────────────────────────────
 function TransformerDifferential({ addHistory }) {
   const [kva, setKva] = useState('')
   const [v1, setV1] = useState('11000')
@@ -767,7 +767,7 @@ function TransformerDifferential({ addHistory }) {
   )
 }
 
-// ── Protection Grading Reference Table ──────────────────────────────────────
+// ── Protection Grading Reference Table ───────────────────────────────────────
 function ProtectionGrading() {
   const rows = [
     ['Fuse — Fuse', '2:1 minimum current ratio between series fuses for time-based selectivity'],
@@ -798,7 +798,7 @@ function ProtectionGrading() {
   )
 }
 
-// ── MAIN ───────────────────────────────────────────────────────────────────
+// ── MAIN ──────────────────────────────────────────────────────────────────────
 const SUB_TABS = [
   { id: 'ner',      label: 'NER Size',  icon: '⏚' },
   { id: 'ncrt',     label: 'NCRT',      icon: '◎' },
