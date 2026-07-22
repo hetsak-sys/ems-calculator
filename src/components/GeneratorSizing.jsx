@@ -1,35 +1,69 @@
 /**
  * GeneratorSizing.jsx
- * PowerSuite — Power Systems Tab › Generator Sizing sub-tab
+ * PowerSuite — Power Systems Tab › Generator (merged component)
  *
  * Drop into: src/components/GeneratorSizing.jsx
  *
- * Integration in PowerSystems.jsx:
+ * ── Merge note (this session) ──────────────────────────────────────────────
+ * Previously two separate top-level tabs existed: a basic single-number
+ * calculator ("Generator", defined locally in PowerSysCalculator.jsx) and
+ * this file's four-stage load-schedule chain ("Gen Sizing"). Both were
+ * genuine, non-duplicate workflows, but the near-identical names caused
+ * real confusion about what fed what and which to use. Resolved by merging
+ * into one component behind a single "Generator" tab, offering an explicit
+ * labeled choice up front:
+ *
+ *   ┌─────────────────────┬───────────────────────┐
+ *   │  Known Load Sizing  │  Load Schedule Sizing  │   ← mode, segmented control
+ *   └─────────────────────┴───────────────────────┘
+ *
+ *   Known Load Sizing   — single total kW/kVA in, genset size out.
+ *                          Migrated from PowerSysCalculator.jsx's old local
+ *                          GeneratorSizing() function; now reuses the shared
+ *                          GEN_SIZES standard-sizes list (previously a second
+ *                          hardcoded copy — consolidated per [DEC-3]).
+ *   Load Schedule Sizing — build a load-by-load schedule, chained through
+ *                          Loads → Generator ("Gen") → Transformer →
+ *                          Fault Level (renamed from "Impedance" — states
+ *                          the output the user is solving for, not the
+ *                          calculation method). Navigated via a persistent
+ *                          flow-strip (replaces the old plain tab-bar) that
+ *                          shows every stage's live output at once, so the
+ *                          dependency chain is always visible instead of
+ *                          implied.
+ *
+ * Integration in PowerSystems.jsx / PowerSysCalculator.jsx:
  *   1. Add to imports:
- *        import GeneratorSizing from './GeneratorSizing'
+ *        import GeneratorSizingPro from './GeneratorSizing'
  *   2. Add to TABS array:
- *        { id: 'gensize', label: 'Gen Sizing', icon: '🔌' }
+ *        { id: 'generator', label: 'Generator' }
  *   3. Add to tab map:
- *        gensize: <GeneratorSizing addHistory={addHistory} />
+ *        generator: <GeneratorSizingPro addHistory={addHistory} />
  *
  * Props:
  *   addHistory(obj) — same shape as all other sub-tabs:
  *     { tab: string, expr: string, result: string }
  *   (No siteConfig prop — site name for PDF exports comes from useSite()/
  *   SiteContext directly, same verified pattern as MotorCalculator.jsx's
- *   FlaCalc. Confirmed against PowerSysCalculator.jsx: the real call site
- *   invokes this component as `<GeneratorSizingPro addHistory={addHistory} />`
- *   with no siteConfig at all, so a siteConfig prop here would silently
- *   never receive a value — useSite() is self-contained and doesn't depend
- *   on the parent wiring it through.)
+ *   FlaCalc.)
  *
- * PDF export (added this session):
- *   Generator, Transformer and Impedance tabs each get a "📄 Export PDF"
- *   button below their result card, wired to shared.jsx's ResultCard /
- *   useResultCard — same plumbing as PQCalculator.jsx and MotorCalculator.jsx.
- *   Loads tab has no export of its own: its inputs are captured as context
- *   inside the Generator export instead, since Loads has no single
- *   "governing result" of its own.
+ * History logging:
+ *   Both modes now log to history on explicit user action ("Save to
+ *   history"), tagged distinctly so the History list stays legible:
+ *     - Known Load Sizing  → tab: 'Generator › Known Load'
+ *     - Load Schedule Sizing → tab: 'Generator › Load Schedule'
+ *   (Previously, Known Load Sizing's predecessor had no history logging at
+ *   all — this closes that gap. PDF export for Known Load Sizing was
+ *   deliberately NOT added in this pass — flagged as an open follow-up,
+ *   not bundled into this structural change.)
+ *
+ * PDF export:
+ *   Generator, Transformer and Fault Level stages (within Load Schedule
+ *   Sizing) each get a "📄 Export PDF" button below their result card,
+ *   wired to shared.jsx's ResultCard / useResultCard — same plumbing as
+ *   PQCalculator.jsx and MotorCalculator.jsx. Loads stage has no export of
+ *   its own: its inputs are captured as context inside the Generator export
+ *   instead, since Loads has no single "governing result" of its own.
  *
  * Engineering references:
  *   - ISO 8528-1  : Generator set ratings and altitude/temp de-rating
@@ -38,7 +72,7 @@
  *   - SANS 10142  : SA wiring code (load demand factors)
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, Fragment } from 'react'
 import { calculateGeneratorDerating, GEN_SIZES } from '../lib/generatorDerating.js'
 import { useWorkspace } from './WorkspaceContext'
 import { ResultCard, useResultCard } from './shared'
@@ -127,6 +161,19 @@ const nextStd = (arr, val) => arr.find(s => s >= val) || arr[arr.length - 1]
 
 /** Safe parse float with fallback */
 const pf = (v, fallback = 0) => parseFloat(v) || fallback
+
+/**
+ * Comma-to-period normalization for Android decimal keyboards.
+ * Required per project convention: all numeric inputs use
+ * type="text" inputMode="decimal", never type="number" — Android's
+ * native number keyboard is locale-dependent and can emit a comma as
+ * the decimal separator (confirmed on-device this session: "0,8" typed
+ * into a type="number" field). parseFloat("0,8") silently returns 0,
+ * which — depending on which fallback a given field happens to use —
+ * can produce a wrong result with no visible error. Every numeric input
+ * in this file routes through this on the way into state.
+ */
+const toDecimal = v => v.replace(/,/g, '.')
 
 // ─── Sub-components ────────────────────────────────────────────────────────
 
@@ -228,6 +275,146 @@ function RowVal({ label, value, accent }) {
   )
 }
 
+// ─── Known Load Sizing (migrated from PowerSysCalculator.jsx) ─────────────
+//
+// Single total kW/kVA in, genset size out. No load schedule — for when the
+// user already has a site's total demand figure from elsewhere (an existing
+// panel schedule, a prior installation's known demand).
+//
+// Note on consolidation: the pre-migration version of this calc used its
+// own motor-starting multipliers (DOL 6×, Star-Delta 2×, VFD 1.1×) and its
+// own hardcoded standard-sizes list — both silently different from the
+// values already used by the Load Schedule Sizing chain in this same file
+// (START_MULT: DOL 6.5×, Star-Delta 2.3×, VFD 1.0×; GEN_SIZES for standard
+// sizes). Per [DEC-3] (a better pattern earns adoption everywhere the old
+// one occurs, not piecemeal), this migration converges both onto the one
+// shared source — so the two modes now agree on the same site's numbers by
+// construction, the same fix already applied to the derating formula.
+function KnownLoadSizing({ addHistory }) {
+  const { site } = useSite()
+  const [kw, setKw]         = useState('200')
+  const [kwPf, setKwPf]     = useState('0.8')
+  const [eff, setEff]       = useState('90')
+  const [altitude, setAlt]  = useState(String(site.altitude || '1000'))
+  const [temp, setTemp]     = useState(String(site.ambient || '30'))
+  const [largestMotorKw, setLmKw] = useState('37')
+  const [startMethod, setStart]   = useState('DOL')
+  const [res, setRes]       = useState(null)
+
+  const KNOWN_START_METHODS = ['DOL', 'Star-Delta', 'VFD']
+
+  const calc = () => {
+    const P = pf(kw), p = pf(kwPf, 0.8)
+    const e = pf(eff, 90) / 100, alt = pf(altitude)
+    const T = pf(temp, 25), Pm = pf(largestMotorKw)
+    if ([P, p, e, alt, T, Pm].some(v => isNaN(v))) return
+
+    const { netFactor: derate } = calculateGeneratorDerating({ altitudeM: alt, ambientTempC: T })
+
+    const kVA_load  = (P / p) / e
+    const kVA_start = Pm * (START_MULT[startMethod] || 0) / p
+
+    const kVA_required = Math.max(kVA_load, kVA_start)
+    const kVA_derated  = kVA_required / derate
+    const recommended  = nextStd(GEN_SIZES, kVA_derated)
+
+    setRes({
+      kVA_load:  kVA_load.toFixed(0),
+      kVA_start: kVA_start.toFixed(0),
+      derate:    (derate * 100).toFixed(1),
+      kVA_req:   kVA_derated.toFixed(0),
+      gen:       recommended,
+      altitudeM: alt,
+      ambientTempC: T,
+    })
+  }
+
+  const pushKnownHistory = () => {
+    if (!addHistory || !res) return
+    addHistory({
+      tab:    'Generator › Known Load',
+      expr:   `${kw} kW · ${altitude}m · ${temp}°C`,
+      result: `Gen ${res.gen}kVA`,
+    })
+  }
+
+  return (
+    <div>
+      <Inp label="Total Connected Load (kW)" type="text" inputMode="decimal" value={kw} onChange={e => setKw(toDecimal(e.target.value))} />
+      <Inp label="Overall Power Factor" type="text" inputMode="decimal" value={kwPf} onChange={e => setKwPf(toDecimal(e.target.value))} />
+      <Inp label="Load Efficiency (%)" type="text" inputMode="decimal" value={eff} onChange={e => setEff(toDecimal(e.target.value))} />
+      <Inp
+        label="Site Altitude (m)" type="text" inputMode="decimal" value={altitude}
+        onChange={e => setAlt(toDecimal(e.target.value))}
+        sub="Affects air cooling and combustion"
+      />
+      <Inp label="Ambient Temperature (°C)" type="text" inputMode="decimal" value={temp} onChange={e => setTemp(toDecimal(e.target.value))} />
+      <Inp label="Largest Motor (kW)" type="text" inputMode="decimal" value={largestMotorKw} onChange={e => setLmKw(toDecimal(e.target.value))} />
+
+      <div style={{ marginBottom: '12px' }}>
+        <span style={S.lbl}>Motor Start Method</span>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {KNOWN_START_METHODS.map(m => (
+            <button
+              key={m}
+              onClick={() => setStart(m)}
+              style={{
+                flex: 1, padding: '9px 4px', borderRadius: '10px', fontSize: '12px', fontWeight: '700',
+                cursor: 'pointer',
+                background: startMethod === m ? 'rgba(245,158,11,0.1)' : '#111',
+                border: `1px solid ${startMethod === m ? AMBER : '#2a2a2a'}`,
+                color: startMethod === m ? AMBER : 'rgba(255,255,255,0.55)',
+              }}
+            >
+              {m === 'Star-Delta' ? 'Y/Δ' : m}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <button
+        onClick={calc}
+        style={{
+          width: '100%', padding: '11px', borderRadius: '10px', fontWeight: '700', fontSize: '13.5px',
+          marginBottom: '14px', cursor: 'pointer', border: 'none', color: '#000',
+          background: `linear-gradient(135deg, ${AMBER}, #d97706)`,
+        }}
+      >
+        Calculate
+      </button>
+
+      {res && (
+        <div>
+          <div style={{ ...S.card, borderColor: `${AMBER}44` }}>
+            <RowVal label="Load kVA"           value={`${res.kVA_load} kVA`} />
+            <RowVal label="Motor Starting kVA" value={`${res.kVA_start} kVA`} accent={AMBER} />
+            <RowVal label="Derating Factor"    value={`${res.derate}%`} />
+            <RowVal label="Required (derated)" value={`${res.kVA_req} kVA`} accent={RED} />
+
+            <div style={{ ...S.result, background: 'rgba(245,158,11,0.10)', border: '0.5px solid rgba(245,158,11,0.25)' }}>
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)' }}>Recommended Generator</div>
+              <div style={{ fontSize: '28px', fontWeight: '500', color: AMBER, fontFamily: 'monospace' }}>
+                {res.gen} kVA
+              </div>
+            </div>
+
+            <button
+              onClick={pushKnownHistory}
+              style={{
+                marginTop: '10px', width: '100%', padding: '7px',
+                borderRadius: '8px', border: `0.5px solid ${AMBER}`,
+                background: 'transparent', color: AMBER, cursor: 'pointer', fontSize: '12px',
+              }}
+            >
+              Save to history
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main component ────────────────────────────────────────────────────────
 
 export default function GeneratorSizing({ addHistory }) {
@@ -265,6 +452,13 @@ export default function GeneratorSizing({ addHistory }) {
 
   // ── Active tab ─────────────────────────────────────────────────────────
   const [tab, setTab] = useState('loads')
+
+  // ── Mode: Known Load Sizing vs Load Schedule Sizing ────────────────────
+  // Default 'known' — matches the pre-merge default entry point (the old
+  // standalone "Generator" tab), so nothing changes for the common quick
+  // case; this is the lower-regret default if usage patterns turn out to
+  // favor the other mode more often (cheap, reversible per [DEC-1]).
+  const [mode, setMode] = useState('known')
 
   // ── Cross-module prefill (WorkspaceContext) ───────────────────────────
   // Publishes this tab's sizing result so RenewableEnergyCalculator's
@@ -380,9 +574,9 @@ export default function GeneratorSizing({ addHistory }) {
     const ratio  = vp / vs
     const ip     = (kva * 1000) / (SQRT3 * vp)
     const is_    = (kva * 1000) / (SQRT3 * vs)
-    const zBase  = (vs * vs)   / (kva * 1000)
-    const zOhm   = (z / 100)   * zBase
     const stdKVA = nextStd(TRAFO_SIZES, kva)
+    const zBase  = (vs * vs)   / (stdKVA * 1000)
+    const zOhm   = (z / 100)   * zBase
 
     return { vp, vs, kva, ratio, ip, is_, z, zBase, zOhm, stdKVA }
   }, [genRes, vPri, vSec, pctZ])
@@ -448,7 +642,7 @@ export default function GeneratorSizing({ addHistory }) {
   const pushHistory = () => {
     if (!addHistory) return
     addHistory({
-      tab:    'Gen Sizing',
+      tab:    'Generator › Load Schedule',
       expr:   `${loads.length} loads · ${altitude}m · ${ambTemp}°C`,
       result: `Gen ${genRes.stdSize}kVA / Trafo ${trafoRes.stdKVA}kVA`,
     })
@@ -537,7 +731,7 @@ export default function GeneratorSizing({ addHistory }) {
 
   const exportImpedance = () => {
     showCard({
-      calculator: 'Power Systems — Fault Level / Impedance',
+      calculator: 'Power Systems — Fault Level',
       site: site.name,
       standard: 'IEC 60909 (simplified series model)',
       inputs: [
@@ -572,63 +766,103 @@ export default function GeneratorSizing({ addHistory }) {
 
   // ─── Tab definitions ────────────────────────────────────────────────────
 
-  const TABS = [
+  // Stage tabs for Load Schedule Sizing. Labels deliberately avoid repeating
+  // "Generator" (the parent tab's own name) — the 'gen' stage displays as
+  // "Gen", short for Generator, to prevent the exact naming collision this
+  // whole restructure was meant to fix. 'imped' displays as "Fault Level" —
+  // states the output being solved for, not the calculation method used to
+  // get there (an impedance calc). IDs are unchanged from before to avoid
+  // touching every tab===... check below; only the user-facing label moved.
+  const STAGE_TABS = [
     { id: 'loads', label: 'Loads',        icon: '⚡' },
-    { id: 'gen',   label: 'Generator',    icon: '🔌' },
+    { id: 'gen',   label: 'Gen',          icon: '🔌' },
     { id: 'trafo', label: 'Transformer',  icon: '⚙'  },
-    { id: 'imped', label: 'Impedance',    icon: 'Ω'  },
+    { id: 'imped', label: 'Fault Level',  icon: 'Ω'  },
   ]
+
+  const stageValue = {
+    loads: `${totals.totKVA.toFixed(1)}`,
+    gen:   `${genRes.stdSize}`,
+    trafo: `${trafoRes.stdKVA}`,
+    imped: `${impedRes.kAsc.toFixed(1)}kA`,
+  }
+  const stageColor = { loads: ACCENT, gen: AMBER, trafo: GREEN, imped: PURPLE }
 
   // ─── Render ─────────────────────────────────────────────────────────────
 
   return (
     <div style={{ padding: '12px', fontFamily: 'sans-serif' }}>
 
-      {/* ── Summary banner ────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginBottom: '14px' }}>
-        {[
-          { l: 'Total load',   v: `${totals.totKVA.toFixed(1)} kVA`, c: ACCENT },
-          { l: 'Generator',    v: `${genRes.stdSize} kVA`,            c: AMBER  },
-          { l: 'Transformer',  v: `${trafoRes.stdKVA} kVA`,           c: GREEN  },
-        ].map(s => (
-          <div
-            key={s.l}
-            style={{
-              background: 'rgba(255,255,255,0.05)',
-              border: '0.5px solid rgba(255,255,255,0.1)',
-              borderRadius: '8px',
-              padding: '8px',
-              textAlign: 'center',
-            }}
-          >
-            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)' }}>{s.l}</div>
-            <div style={{ fontSize: '15px', fontWeight: '500', color: s.c, fontFamily: 'monospace' }}>{s.v}</div>
-          </div>
-        ))}
+      {/* ── Mode choice: Known Load Sizing vs Load Schedule Sizing ─────── */}
+      <div style={{ marginBottom: '4px' }}>
+        <div style={{ fontSize: '10px', fontWeight: '700', color: 'rgba(255,255,255,0.45)',
+          textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '8px' }}>
+          Choose your starting point
+        </div>
+        <div style={{ display: 'flex', background: '#111', borderRadius: '12px', padding: '4px',
+          border: '1px solid #2a2a2a', marginBottom: '14px' }}>
+          {[
+            { id: 'known',    t1: 'Known Load Sizing',    t2: 'I have one total kW/kVA' },
+            { id: 'schedule', t1: 'Load Schedule Sizing', t2: 'Build up load by load' },
+          ].map(m => (
+            <div
+              key={m.id}
+              onClick={() => setMode(m.id)}
+              style={{
+                flex: 1, textAlign: 'center', padding: '11px 6px', borderRadius: '9px', cursor: 'pointer',
+                background: mode === m.id ? 'rgba(34,211,238,0.12)' : 'transparent',
+                border: mode === m.id ? `1px solid ${ACCENT}` : '1px solid transparent',
+              }}
+            >
+              <div style={{ fontSize: '12.5px', fontWeight: '800', color: mode === m.id ? ACCENT : 'rgba(255,255,255,0.55)' }}>
+                {m.t1}
+              </div>
+              <div style={{ fontSize: '9.5px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
+                {m.t2}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* ── Tab bar ──────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: '4px', marginBottom: '14px' }}>
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            style={{
-              flex: '1',
-              padding: '7px 4px',
-              fontSize: '11px',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              border:      tab === t.id ? `1px solid ${ACCENT}` : '0.5px solid rgba(255,255,255,0.12)',
-              background:  tab === t.id ? 'rgba(34,211,238,0.1)' : 'rgba(255,255,255,0.04)',
-              color:       tab === t.id ? ACCENT : 'rgba(255,255,255,0.5)',
-              transition: 'all 0.15s',
-            }}
-          >
-            {t.icon} {t.label}
-          </button>
-        ))}
-      </div>
+      {/* ── Known Load Sizing ───────────────────────────────────────────── */}
+      {mode === 'known' && <KnownLoadSizing addHistory={addHistory} />}
+
+      {/* ── Load Schedule Sizing ─────────────────────────────────────────
+          Flow-strip replaces both the old 3-stat summary banner and the
+          old plain tab bar: it shows every stage's live output at once
+          (including Fault Level, which the old banner omitted) and doubles
+          as stage navigation, so the Loads→Gen→Transformer→Fault Level
+          dependency chain is always visible instead of implied by four
+          equal-looking tabs. */}
+      {mode === 'schedule' && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', overflowX: 'auto',
+            padding: '10px 2px', marginBottom: '4px', background: 'rgba(255,255,255,0.02)',
+            borderTop: '1px solid rgba(255,255,255,0.07)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+            {STAGE_TABS.map((t, i) => (
+              <Fragment key={t.id}>
+                <div
+                  onClick={() => setTab(t.id)}
+                  style={{
+                    flex: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
+                    padding: '6px 10px', borderRadius: '10px', cursor: 'pointer', minWidth: '62px',
+                    background: tab === t.id ? 'rgba(255,255,255,0.06)' : 'transparent',
+                  }}
+                >
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: stageColor[t.id] }} />
+                  <span style={{ fontSize: '9.5px', fontWeight: '700', color: 'rgba(255,255,255,0.55)',
+                    textTransform: 'uppercase', letterSpacing: '0.3px' }}>{t.label}</span>
+                  <span style={{ fontSize: '12.5px', fontWeight: '800', fontFamily: 'monospace', color: stageColor[t.id] }}>
+                    {stageValue[t.id]}
+                  </span>
+                </div>
+                {i < STAGE_TABS.length - 1 && (
+                  <span style={{ color: '#444', fontSize: '12px', flex: 'none', paddingBottom: '12px' }}>→</span>
+                )}
+              </Fragment>
+            ))}
+          </div>
 
       {/* ════════════════════════════════════════════════════════════════
           TAB: LOADS
@@ -691,23 +925,23 @@ export default function GeneratorSizing({ addHistory }) {
                   <div style={S.grid2}>
                     <Inp
                       label="Rated power (kW)"
-                      type="number" min="0" step="0.5"
+                      type="text" inputMode="decimal"
                       value={l.kw}
-                      onChange={e => update(l.id, 'kw', e.target.value)}
+                      onChange={e => update(l.id, 'kw', toDecimal(e.target.value))}
                     />
                     <Inp
                       label="Power factor"
-                      type="number" min="0.1" max="1.0" step="0.01"
+                      type="text" inputMode="decimal"
                       value={l.pf}
-                      onChange={e => update(l.id, 'pf', e.target.value)}
+                      onChange={e => update(l.id, 'pf', toDecimal(e.target.value))}
                     />
                   </div>
                   <Inp
                     label="Demand factor (%)"
                     sub="100% = fully loaded at all times · 80% = typical running motor · 60% = diversified"
-                    type="number" min="1" max="100"
+                    type="text" inputMode="decimal"
                     value={l.df}
-                    onChange={e => update(l.id, 'df', e.target.value)}
+                    onChange={e => update(l.id, 'df', toDecimal(e.target.value))}
                   />
                 </div>
               ) : (
@@ -791,24 +1025,24 @@ export default function GeneratorSizing({ addHistory }) {
               <Inp
                 label="Altitude (m AMSL)"
                 sub="Uses your configured site altitude by default — override for a different site"
-                type="number" value={altitude} onChange={e => setAltitude(e.target.value)}
+                type="text" inputMode="decimal" value={altitude} onChange={e => setAltitude(toDecimal(e.target.value))}
               />
               <Inp
                 label="Ambient temp (°C)"
                 sub="De-rate kicks in above 40°C"
-                type="number" value={ambTemp} onChange={e => setAmbTemp(e.target.value)}
+                type="text" inputMode="decimal" value={ambTemp} onChange={e => setAmbTemp(toDecimal(e.target.value))}
               />
             </div>
             <div style={S.grid2}>
               <Inp
                 label="Safety margin (%)"
                 sub="20–30% recommended"
-                type="number" value={margin} onChange={e => setMargin(e.target.value)}
+                type="text" inputMode="decimal" value={margin} onChange={e => setMargin(toDecimal(e.target.value))}
               />
               <Inp
                 label="Generator rated PF"
                 sub="Most diesel sets stamped 0.8"
-                type="number" step="0.05" value={genPF} onChange={e => setGenPF(e.target.value)}
+                type="text" inputMode="decimal" value={genPF} onChange={e => setGenPF(toDecimal(e.target.value))}
               />
             </div>
           </div>
@@ -870,12 +1104,12 @@ export default function GeneratorSizing({ addHistory }) {
               <Inp
                 label="Primary voltage (V)"
                 sub="e.g. 11000 · 6600 · 3300 · 22000"
-                type="number" value={vPri} onChange={e => setVPri(e.target.value)}
+                type="text" inputMode="decimal" value={vPri} onChange={e => setVPri(toDecimal(e.target.value))}
               />
               <Inp
                 label="Secondary voltage (V)"
                 sub="e.g. 400 · 230 · 690"
-                type="number" value={vSec} onChange={e => setVSec(e.target.value)}
+                type="text" inputMode="decimal" value={vSec} onChange={e => setVSec(toDecimal(e.target.value))}
               />
             </div>
 
@@ -910,7 +1144,7 @@ export default function GeneratorSizing({ addHistory }) {
             <Inp
               label="Transformer %Z (impedance)"
               sub="4–5%: small distribution · 5–7%: medium · 7–10%: large power transformers"
-              type="number" step="0.5" value={pctZ} onChange={e => setPctZ(e.target.value)}
+              type="text" inputMode="decimal" value={pctZ} onChange={e => setPctZ(toDecimal(e.target.value))}
             />
           </div>
 
@@ -959,12 +1193,12 @@ export default function GeneratorSizing({ addHistory }) {
               <Inp
                 label="Generator Xd'' (%)"
                 sub='Subtransient reactance. Typical: 10–20%'
-                type="number" step="1" value={xdPct} onChange={e => setXdPct(e.target.value)}
+                type="text" inputMode="decimal" value={xdPct} onChange={e => setXdPct(toDecimal(e.target.value))}
               />
               <Inp
                 label="Transformer %Z"
                 sub="Synced with Transformer tab"
-                type="number" step="0.5" value={pctZ} onChange={e => setPctZ(e.target.value)}
+                type="text" inputMode="decimal" value={pctZ} onChange={e => setPctZ(toDecimal(e.target.value))}
               />
             </div>
             <div style={{
@@ -1010,6 +1244,9 @@ export default function GeneratorSizing({ addHistory }) {
               📄 Export PDF
             </button>
           </div>
+        </div>
+      )}
+
         </div>
       )}
 

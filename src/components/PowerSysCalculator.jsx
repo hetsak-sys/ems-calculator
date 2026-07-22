@@ -1,15 +1,29 @@
 import GeneratorSizingPro from './GeneratorSizing'
 import React, { useState } from 'react'
-import { calculateGeneratorDerating } from '../lib/generatorDerating.js'
 import { useSite } from './SiteContext'
 
+// ── Tab merge note (this session) ──────────────────────────────────────────
+// Previously two separate tabs: 'generator' (a basic single-number calc,
+// defined locally below as GeneratorSizing()) and 'gensize'/'Gen Sizing'
+// (GeneratorSizingPro, imported from ./GeneratorSizing — a full load-schedule
+// → generator → transformer → fault-level chain). Both were confirmed as
+// genuinely different workflows, not duplicates, but sharing near-identical
+// names ("Generator" vs "Gen Sizing") caused real confusion about what fed
+// what and which one to use. Resolved by merging into one 'generator' tab
+// whose component internally offers a labeled choice — "Known Load Sizing"
+// vs "Load Schedule Sizing" — so the distinction is explicit on-screen
+// rather than implied by two similarly-named tabs. See GeneratorSizing.jsx
+// for the merged implementation. The local GeneratorSizing() function below
+// is now dead code and has been removed per [DES-6] (design for deletion) —
+// its logic was migrated into GeneratorSizing.jsx's "Known Load Sizing" pane,
+// now reusing the shared GEN_SIZES standard-sizes list instead of a second
+// hardcoded copy (previously duplicated per [DEC-3] — now consolidated).
 const TABS = [
   { id: 'transformer', label: 'Transformer' },
   { id: 'pf',          label: 'PF Correct'  },
   { id: 'generator',   label: 'Generator'   },
   { id: 'busbar',      label: 'Busbar'      },
   { id: 'starting',    label: 'Starting'    },
-  { id: 'gensize', label: 'Gen Sizing', icon: '🔌' }
 ]
 
 const Field = ({ label, unit, value, onChange, hint }) => (
@@ -153,96 +167,6 @@ function PFCorrection() {
           <ResultRow label="Current Before"          value={res.Ibefore} unit="A" />
           <ResultRow label="Current After"           value={res.Iafter}  unit="A" />
           <ResultRow label="Current Reduction"       value={res.saving}  unit="%" />
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Generator Sizing ─────────────────────────────────────────────────────────
-function GeneratorSizing() {
-  const { site } = useSite()
-  const [kw, setKw]       = useState('200')
-  const [pf, setPf]       = useState('0.8')
-  const [eff, setEff]     = useState('90')
-  const [altitude, setAlt] = useState(String(site.altitude || '1000'))
-  const [temp, setTemp]   = useState(String(site.ambient || '30'))
-  const [largestMotorKw, setLmKw] = useState('37')
-  const [startMethod, setStart]   = useState('dol')
-  const [res, setRes]     = useState(null)
-
-  const startFactor = { dol: 6, star_delta: 2, vfd: 1.1 }
-
-  const calc = () => {
-    const P = parseFloat(kw), p = parseFloat(pf)
-    const e = parseFloat(eff) / 100, alt = parseFloat(altitude)
-    const T = parseFloat(temp), Pm = parseFloat(largestMotorKw)
-    if ([P, p, e, alt, T, Pm].some(isNaN)) return
-
-    // Altitude/temperature derating — migrated onto the shared ISO 8528-1
-    // reference function (src/lib/generatorDerating.js), replacing this
-    // tab's own formula. The previous local formula derated from 25°C
-    // (rather than the ~40°C "no derate needed" convention most gensets
-    // use) and applied 1%/°C, which computed a ~25% loss at 50°C — roughly
-    // 4x more severe than commonly published figures (~5-7% at 50°C).
-    // This was producing a materially different, more pessimistic answer
-    // than the "Gen Sizing" (Pro) tab for the same site inputs. Now both
-    // tabs give the same answer for the same inputs, by construction.
-    const { netFactor: derate } = calculateGeneratorDerating({ altitudeM: alt, ambientTempC: T })
-
-    const kVA_load  = (P / p) / e
-    // Motor starting kVA
-    const Istart_factor = startFactor[startMethod]
-    const kVA_start = Pm * Istart_factor / p
-
-    const kVA_required = Math.max(kVA_load, kVA_start)
-    const kVA_derated  = kVA_required / derate
-
-    // Standard sizes
-    const sizes = [20, 30, 40, 50, 60, 75, 100, 125, 150, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1500, 2000]
-    const recommended = sizes.find(s => s >= kVA_derated) || '>2000'
-
-    setRes({
-      kVA_load:  kVA_load.toFixed(0),
-      kVA_start: kVA_start.toFixed(0),
-      derate:    (derate * 100).toFixed(1),
-      kVA_req:   kVA_derated.toFixed(0),
-      gen:       recommended,
-    })
-  }
-
-  return (
-    <div>
-      <Field label="Total Connected Load" unit="kW" value={kw} onChange={setKw} />
-      <Field label="Overall Power Factor" value={pf} onChange={setPf} />
-      <Field label="Load Efficiency" unit="%" value={eff} onChange={setEff} />
-      <Field label="Site Altitude" unit="m" value={altitude} onChange={setAlt} hint="Affects air cooling and combustion" />
-      <Field label="Ambient Temperature" unit="°C" value={temp} onChange={setTemp} />
-      <Field label="Largest Motor" unit="kW" value={largestMotorKw} onChange={setLmKw} />
-      <div className="mb-3">
-        <label className="block text-xs font-bold mb-2" style={{ color: '#9ca3af' }}>Motor Start Method</label>
-        <div className="flex gap-2">
-          {[['dol','DOL'],['star_delta','Y/Δ'],['vfd','VFD']].map(([k,l]) => (
-            <button key={k} onClick={() => setStart(k)}
-              className="flex-1 py-2 rounded-xl text-xs font-bold"
-              style={{
-                backgroundColor: startMethod === k ? '#1a0f00' : '#111',
-                border: `1px solid ${startMethod === k ? '#f59e0b' : '#2a2a2a'}`,
-                color: startMethod === k ? '#f59e0b' : '#9ca3af',
-              }}>
-              {l}
-            </button>
-          ))}
-        </div>
-      </div>
-      <CalcBtn onCalc={calc} />
-      {res && (
-        <div className="rounded-xl p-3" style={{ backgroundColor: '#0a0a0a', border: '1px solid #1a1a1a' }}>
-          <ResultRow label="Load kVA"              value={res.kVA_load}  unit="kVA" />
-          <ResultRow label="Motor Starting kVA"    value={res.kVA_start} unit="kVA" />
-          <ResultRow label="Derating Factor"       value={res.derate}    unit="%" />
-          <ResultRow label="Required (derated)"    value={res.kVA_req}   unit="kVA" />
-          <ResultRow label="Recommended Generator" value={res.gen}       unit="kVA" highlight />
         </div>
       )}
     </div>
@@ -423,10 +347,9 @@ export default function PowerSysCalculator({ addHistory }) {
       <div className="flex-1 overflow-y-auto px-4 pt-4">
   {tab === 'transformer' && <TransformerCalc />}
   {tab === 'pf'          && <PFCorrection />}
-  {tab === 'generator'   && <GeneratorSizing />}
+  {tab === 'generator'   && <GeneratorSizingPro addHistory={addHistory} />}
   {tab === 'busbar'      && <BusbarRating />}
   {tab === 'starting'    && <MotorStarting />}
-  {tab === 'gensize'     && <GeneratorSizingPro addHistory={addHistory} />}
 </div> </div>
   )
 }
