@@ -15,6 +15,25 @@ import { Share } from '@capacitor/share'
 
 function pad2(n) { return String(n).padStart(2, '0') }
 
+// jsPDF's built-in 'helvetica' font is WinAnsi/Latin-1 only — it has no
+// glyphs for Greek letters or arrows, and silently substitutes whatever
+// byte happens to collide (Ω -> '©', φ -> '¦' or 'Æ' depending on case,
+// → -> garbage that also throws off text-width calculations, which is
+// how the combined-report title got clipped rather than just garbled).
+// Targeted substitution rather than embedding a Unicode font: keeps the
+// jsPDF bundle-size tradeoff as-is (already an accepted call, see
+// conventions.md §3) instead of adding a second embedded font on top of it.
+// If full Unicode symbol fidelity is wanted later, that's the upgrade path.
+function sanitizeForPdf(str) {
+  if (str == null) return str
+  return String(str)
+    .replace(/Ω/g, 'ohm')
+    .replace(/Φ/g, 'PH')
+    .replace(/φ/g, 'ph')
+    .replace(/→/g, '->')
+    .replace(/←/g, '<-')
+}
+
 /**
  * Build a sensible default filename from the result data: calculator name,
  * site (if given), and a timestamp — editable by the user before export.
@@ -48,7 +67,9 @@ export function buildResultPdf(data) {
     if (y + need > pageHeight - 50) {
       doc.addPage()
       y = 50
+      return true
     }
+    return false
   }
 
   // ── Header ──────────────────────────────────────────────────────────
@@ -61,14 +82,21 @@ export function buildResultPdf(data) {
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(12)
   doc.setTextColor(90, 90, 90)
-  doc.text(data.calculator || 'Calculation Result', margin, y)
-  y += 16
+  // Wrapped, not a single doc.text() call — a long combined-report title
+  // (or any future long calculator name) must never silently run off the
+  // page edge the way it did before this fix.
+  const titleLines = doc.splitTextToSize(sanitizeForPdf(data.calculator || 'Calculation Result'), pageWidth - margin * 2)
+  titleLines.forEach(line => {
+    doc.text(line, margin, y)
+    y += 15
+  })
+  y += 1
 
   const now = new Date()
   doc.setFontSize(9)
   const dateStr = now.toLocaleDateString('en-ZA')
   const timeStr = now.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })
-  doc.text(`Site: ${data.site || '\u2014'}    Date: ${dateStr} ${timeStr}`, margin, y)
+  doc.text(`Site: ${sanitizeForPdf(data.site) || '\u2014'}    Date: ${dateStr} ${timeStr}`, margin, y)
   y += 16
 
   doc.setDrawColor(200, 200, 200)
@@ -80,7 +108,7 @@ export function buildResultPdf(data) {
     doc.setFontSize(10)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(30, 80, 140)
-    doc.text(`Standard: ${data.standard}`, margin, y)
+    doc.text(`Standard: ${sanitizeForPdf(data.standard)}`, margin, y)
     y += 18
   }
 
@@ -88,20 +116,29 @@ export function buildResultPdf(data) {
   const drawTable = (title, rows, accentHeader) => {
     if (!rows || rows.length === 0) return
     checkPageBreak(14)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(10)
-    doc.setTextColor(accentHeader ? 150 : 90, accentHeader ? 100 : 90, 20)
-    doc.text(String(title).toUpperCase(), margin, y)
-    y += 14
+    const drawTitle = (label) => {
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(10)
+      doc.setTextColor(accentHeader ? 150 : 90, accentHeader ? 100 : 90, 20)
+      doc.text(sanitizeForPdf(String(label)).toUpperCase(), margin, y)
+      y += 14
+    }
+    drawTitle(title)
 
     rows.forEach(r => {
-      checkPageBreak(14)
+      // If this row forces a page break mid-table, repeat the section
+      // title (marked "cont.") so a page read on its own still has a
+      // header instead of orphaned numbers — this is what happened with
+      // the Fault Level section in the combined report.
+      const broke = checkPageBreak(14)
+      if (broke) drawTitle(`${title} (cont.)`)
+
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(9)
       doc.setTextColor(r.sub ? 130 : 90, r.sub ? 130 : 90, r.sub ? 130 : 90)
-      doc.text(String(r.label ?? ''), margin + (r.sub ? 10 : 0), y)
+      doc.text(sanitizeForPdf(String(r.label ?? '')), margin + (r.sub ? 10 : 0), y)
 
-      const valueText = `${r.value ?? ''}${r.unit ? ' ' + r.unit : ''}`
+      const valueText = sanitizeForPdf(`${r.value ?? ''}${r.unit ? ' ' + r.unit : ''}`)
       if (r.warn) doc.setTextColor(180, 30, 30)
       else if (r.accent) doc.setTextColor(150, 100, 20)
       else doc.setTextColor(20, 20, 20)
@@ -126,7 +163,7 @@ export function buildResultPdf(data) {
     y += 13
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(90, 90, 90)
-    const noteLines = doc.splitTextToSize(data.notes, pageWidth - margin * 2)
+    const noteLines = doc.splitTextToSize(sanitizeForPdf(data.notes), pageWidth - margin * 2)
     noteLines.forEach(line => {
       checkPageBreak(12)
       doc.text(line, margin, y)
