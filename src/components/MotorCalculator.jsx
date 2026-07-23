@@ -79,6 +79,7 @@ function FlaCalc({ addHistory, onFlaCalculated }) {
 
   const calculate = () => {
     setError('')
+    setResult(null)
     const V = pf(voltage), PF = pf(pfVal), EFF = pf(eff) / 100
     const powerW = inputType === 'kw' ? pf(kw) * 1000 : pf(hp) * 745.7
     if (!powerW || !V || !PF || !EFF) { setError('Fill in all fields'); return }
@@ -173,6 +174,7 @@ function NewElec327M() {
 
   const calculate = () => {
     setError('')
+    setResult(null)
     const FLA = pf(fla), CT = pf(ctP)
     if (!FLA || !CT) { setError('Enter FLA and CT primary'); return }
     if (FLA > CT) { setError('FLA cannot exceed CT primary rating'); return }
@@ -227,6 +229,7 @@ function EpcMs1() {
 
   const calculate = () => {
     setError('')
+    setResult(null)
     const V = pf(voltage)
     if (!V) { setError('Enter system voltage'); return }
     const Vln = V / SQRT3
@@ -295,6 +298,7 @@ function ContactorCalc({ addHistory }) {
 
   const calculate = () => {
     setError('')
+    setResult(null)
     const KW = pf(kw), V = pf(voltage)
     if (!KW) { setError('Enter motor power'); return }
     const scaledKw = KW * (400 / (V || 400))
@@ -329,6 +333,7 @@ function OverloadCalc({ addHistory }) {
 
   const calculate = () => {
     setError('')
+    setResult(null)
     const FLA = pf(fla)
     if (!FLA) { setError('Enter FLA'); return }
     const setting = (FLA * 1.05).toFixed(2)
@@ -377,6 +382,7 @@ function BreakerCalc({ addHistory, flaSnapshot }) {
 
   const calculate = () => {
     setError('')
+    setResult(null)
     const FLA = pf(fla)
     if (!FLA) { setError('Enter FLA'); return }
     const minRating = FLA * 1.25

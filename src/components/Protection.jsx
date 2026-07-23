@@ -89,6 +89,7 @@ function NerSizing({ addHistory }) {
 
   const calculate = () => {
     setError('')
+    setResult(null)
     const V = VOLTAGES[voltIdx]
     const If = pf(faultCurrent)
     if (!If) { setError('Enter desired earth fault current limit'); return }
@@ -221,6 +222,7 @@ function NcrtMonitoring() {
 
   const calculate = () => {
     setError('')
+    setResult(null)
     const R = pf(nerR), CT = pf(ctRatio), pickup = pf(relayPickup)
     const V = VOLTAGES[voltIdx]
     if (!R) { setError('Enter NER resistance'); return }
@@ -316,6 +318,7 @@ function IdmtCoordination({ addHistory }) {
 
   const calculate = () => {
     setError('')
+    setResult(null)
     const curve = IDMT_CURVES[curveIdx]
     const Is = pf(pickup), If = pf(fault), TMS = pf(tms)
     if (!Is || !If || !TMS) { setError('Enter pickup current, fault current, and TMS'); return }
@@ -408,6 +411,7 @@ function CtBurden({ addHistory }) {
 
   const calculate = () => {
     setError('')
+    setResult(null)
     const L = pf(length), A = pf(csa), relayVA = pf(relayBurden), ratedVA = pf(ctRatedBurden)
     if (!L || !A || !relayVA || !ratedVA) { setError('Fill in all fields'); return }
     const Rcable = (RHO_CU * 2 * L) / A // round trip
@@ -494,6 +498,7 @@ function InsulationResistance({ addHistory }) {
 
   const calculate = () => {
     setError('')
+    setResult(null)
     const R30 = pf(r30s), R1 = pf(r1min), R10 = pf(r10min)
     if (!R30 || !R1) { setError('Enter at least the 30s and 1 minute readings'); return }
     const dar = R1 / R30
@@ -571,6 +576,7 @@ function ArcFlash({ addHistory }) {
 
   const calculate = () => {
     setError('')
+    setResult(null)
     const Ibf = pf(bolted), G = pf(gap), D = pf(distance), t = pf(duration)
     if (!Ibf || !D || !t) { setError('Enter bolted fault current, working distance, and arc duration'); return }
 
@@ -691,6 +697,7 @@ function TransformerDifferential({ addHistory }) {
 
   const calculate = () => {
     setError('')
+    setResult(null)
     const KVA = pf(kva), V1 = pf(v1), V2 = pf(v2), CT1 = pf(ct1), CT2 = pf(ct2)
     if (!KVA || !V1 || !V2 || !CT1 || !CT2) { setError('Fill in all fields'); return }
 

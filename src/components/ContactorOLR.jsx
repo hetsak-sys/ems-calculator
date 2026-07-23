@@ -106,6 +106,7 @@ export default function ContactorOLR({ addHistory, flaSnapshot }) {
 
   const calculate = () => {
     setError('')
+    setResult(null)
     const KW = pf(kw), V = pf(voltage), PF = pf(pfVal), EFF = pf(eff) / 100
     if (!KW || !V || !PF || !EFF) { setError('Enter motor kW, voltage, PF, and efficiency'); return }
 
