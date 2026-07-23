@@ -601,7 +601,7 @@ export default function GeneratorSizing({ addHistory }) {
    *   MVAsc = √3 × Vs × Isc(3φ) / 1,000,000
    *
    * ⚠ This is a simplified model (no R, no grid infeed, no cable impedance).
-   *   Use ETAP / DigSILENT for final protection coordination.
+   *   Use dedicated power systems simulation software for final protection coordination.
    */
   const impedRes = useMemo(() => {
     const vs     = pf(vSec, 400)
@@ -658,111 +658,150 @@ export default function GeneratorSizing({ addHistory }) {
     })
   }
 
-  // ─── PDF export handlers ────────────────────────────────────────────────
+  // ─── Report data builders ───────────────────────────────────────────────
   // Each mirrors the calculation actually shown on its tab — same source
-  // values as the on-screen RowVal rows, not re-derived.
+  // values as the on-screen RowVal rows, not re-derived. These return plain
+  // data objects (ResultCard/buildResultPdf shape) rather than calling
+  // showCard directly, so the same per-stage content can be reused standalone
+  // or folded into the combined report below without duplicating any of the
+  // actual row-building logic.
 
-  const exportGenerator = () => {
-    showCard({
-      calculator: 'Power Systems — Generator Sizing',
-      site: site.name,
-      standard: 'ISO 8528-1 (de-rating) · SANS 10142 (demand factors)',
-      inputs: [
-        { label: 'Connected loads',    value: `${loads.length}` },
-        { label: 'Altitude',           value: `${altitude} m AMSL` },
-        { label: 'Ambient temp',       value: `${ambTemp} °C` },
-        { label: 'Safety margin',      value: `${margin} %` },
-        { label: 'Generator rated PF', value: genPF },
-      ],
-      sections: [
-        {
-          title: 'Load summary',
-          rows: [
-            { label: 'System load (vector sum)', value: `${totals.totKVA.toFixed(2)} kVA` },
-            { label: 'Largest motor start kVA',   value: `${totals.maxStartKVA.toFixed(0)} kVA` },
-            { label: 'System PF',                  value: `${totals.sysPF.toFixed(3)} lag`, warn: totals.sysPF < 0.8 },
-          ],
-        },
-        {
-          title: 'Sizing calculation',
-          rows: [
-            { label: 'Governing value',            value: `${genRes.governing.toFixed(2)} kVA` },
-            { label: `+ ${margin}% margin`,         value: `${genRes.withMargin.toFixed(2)} kVA` },
-            { label: 'Altitude de-rate factor',     value: `${(genRes.altFactor * 100).toFixed(1)} %` },
-            { label: 'Temperature de-rate factor',  value: `${(genRes.tempFactor * 100).toFixed(1)} %` },
-            { label: 'Combined de-rate',            value: `${(genRes.netFactor * 100).toFixed(1)} %` },
-            { label: 'Required nameplate kVA',      value: `${genRes.required.toFixed(1)} kVA`, warn: true },
-            { label: 'Recommended standard size',   value: `${genRes.stdSize} kVA`, accent: true },
-            { label: 'Shaft output @ rated PF',      value: `${(genRes.stdSize * pf(genPF, 0.8)).toFixed(0)} kW` },
-          ],
-        },
-      ],
-      notes: totals.sysPF < 0.8
-        ? `System PF ${totals.sysPF.toFixed(2)} is below 0.8 — consider capacitor correction to reduce kVAR burden and generator sizing penalty.`
-        : undefined,
-    })
-  }
-
-  const exportTransformer = () => {
-    showCard({
-      calculator: 'Power Systems — Transformer Sizing',
-      site: site.name,
-      standard: 'IEC 60076',
-      inputs: [
-        { label: 'Primary voltage',   value: `${vPri} V` },
-        { label: 'Secondary voltage', value: `${vSec} V` },
-        { label: 'Vector group',      value: conn },
-        { label: 'Transformer %Z',   value: `${pctZ} %` },
-        { label: 'Input (generator std size)', value: `${trafoRes.kva.toFixed(1)} kVA` },
-      ],
-      sections: [{
-        title: 'Calculated values',
+  const buildGeneratorData = () => ({
+    calculator: 'Power Systems — Generator Sizing',
+    site: site.name,
+    standard: 'ISO 8528-1 (de-rating) · SANS 10142 (demand factors)',
+    inputs: [
+      { label: 'Connected loads',    value: `${loads.length}` },
+      { label: 'Altitude',           value: `${altitude} m AMSL` },
+      { label: 'Ambient temp',       value: `${ambTemp} °C` },
+      { label: 'Safety margin',      value: `${margin} %` },
+      { label: 'Generator rated PF', value: genPF },
+    ],
+    sections: [
+      {
+        title: 'Load summary',
         rows: [
-          { label: 'Turns ratio n = Vp / Vs',          value: `${trafoRes.ratio.toFixed(3)} : 1` },
-          { label: 'Primary current Ip (3φ)',           value: `${trafoRes.ip.toFixed(2)} A` },
-          { label: 'Secondary current Is (3φ)',         value: `${trafoRes.is_.toFixed(2)} A` },
-          { label: 'Base impedance (secondary)',        value: `${trafoRes.zBase.toFixed(4)} Ω` },
-          { label: '%Z ohmic equivalent (Vs base)',     value: `${trafoRes.zOhm.toFixed(4)} Ω` },
-          { label: 'Standard transformer size',         value: `${trafoRes.stdKVA} kVA`, accent: true },
+          { label: 'System load (vector sum)', value: `${totals.totKVA.toFixed(2)} kVA` },
+          { label: 'Largest motor start kVA',   value: `${totals.maxStartKVA.toFixed(0)} kVA` },
+          { label: 'System PF',                  value: `${totals.sysPF.toFixed(3)} lag`, warn: totals.sysPF < 0.8 },
         ],
-      }],
-    })
+      },
+      {
+        title: 'Sizing calculation',
+        rows: [
+          { label: 'Governing value',            value: `${genRes.governing.toFixed(2)} kVA` },
+          { label: `+ ${margin}% margin`,         value: `${genRes.withMargin.toFixed(2)} kVA` },
+          { label: 'Altitude de-rate factor',     value: `${(genRes.altFactor * 100).toFixed(1)} %` },
+          { label: 'Temperature de-rate factor',  value: `${(genRes.tempFactor * 100).toFixed(1)} %` },
+          { label: 'Combined de-rate',            value: `${(genRes.netFactor * 100).toFixed(1)} %` },
+          { label: 'Required nameplate kVA',      value: `${genRes.required.toFixed(1)} kVA`, warn: true },
+          { label: 'Recommended standard size',   value: `${genRes.stdSize} kVA`, accent: true },
+          { label: 'Shaft output @ rated PF',      value: `${(genRes.stdSize * pf(genPF, 0.8)).toFixed(0)} kW` },
+        ],
+      },
+    ],
+    notes: totals.sysPF < 0.8
+      ? `System PF ${totals.sysPF.toFixed(2)} is below 0.8 — consider capacitor correction to reduce kVAR burden and generator sizing penalty.`
+      : undefined,
+  })
+
+  const buildTransformerData = () => ({
+    calculator: 'Power Systems — Transformer Sizing',
+    site: site.name,
+    standard: 'IEC 60076',
+    inputs: [
+      { label: 'Primary voltage',   value: `${vPri} V` },
+      { label: 'Secondary voltage', value: `${vSec} V` },
+      { label: 'Vector group',      value: conn },
+      { label: 'Transformer %Z',   value: `${pctZ} %` },
+      { label: 'Input (generator std size)', value: `${trafoRes.kva.toFixed(1)} kVA` },
+    ],
+    sections: [{
+      title: 'Calculated values',
+      rows: [
+        { label: 'Turns ratio n = Vp / Vs',          value: `${trafoRes.ratio.toFixed(3)} : 1` },
+        { label: 'Primary current Ip (3φ)',           value: `${trafoRes.ip.toFixed(2)} A` },
+        { label: 'Secondary current Is (3φ)',         value: `${trafoRes.is_.toFixed(2)} A` },
+        { label: 'Base impedance (secondary)',        value: `${trafoRes.zBase.toFixed(4)} Ω` },
+        { label: '%Z ohmic equivalent (Vs base)',     value: `${trafoRes.zOhm.toFixed(4)} Ω` },
+        { label: 'Standard transformer size',         value: `${trafoRes.stdKVA} kVA`, accent: true },
+      ],
+    }],
+  })
+
+  const buildImpedanceData = () => ({
+    calculator: 'Power Systems — Fault Level',
+    site: site.name,
+    standard: 'IEC 60909 (simplified series model)',
+    inputs: [
+      { label: "Generator Xd'' ",   value: `${xdPct} %` },
+      { label: 'Transformer %Z',    value: `${pctZ} %` },
+      { label: 'Secondary voltage', value: `${pf(vSec, 400)} V` },
+    ],
+    sections: [
+      {
+        title: 'Per-unit system base (secondary)',
+        rows: [
+          { label: 'Base kVA',           value: `${impedRes.baseVA.toFixed(0)} VA` },
+          { label: 'Base impedance Zbase', value: `${impedRes.zBase.toFixed(4)} Ω` },
+          { label: 'Base current Ibase',  value: `${impedRes.iBase.toFixed(2)} A` },
+        ],
+      },
+      {
+        title: '3φ fault current — generator + transformer',
+        rows: [
+          { label: "Gen Xd'' (p.u.)",   value: impedRes.xdPu.toFixed(4) },
+          { label: 'Trafo Z (p.u.)',     value: impedRes.zTraPu.toFixed(4) },
+          { label: 'Total Z (p.u.)',     value: `${impedRes.zTot.toFixed(4)} p.u.` },
+          { label: 'Isc 3φ — secondary bus', value: `${impedRes.isc3.toFixed(0)} A`, warn: true },
+          { label: 'Fault level',         value: `${impedRes.kAsc.toFixed(3)} kA`, warn: true },
+          { label: 'Short-circuit MVA',   value: `${impedRes.mvasc.toFixed(3)} MVA` },
+        ],
+      },
+    ],
+    notes: 'Simplified model — series impedance only. No R component, no grid infeed, no cable impedance, no 1.05 voltage factor (IEC 60909 Clause 8). Use for initial breaker/fuse kA rating only; final protection coordination requires dedicated power systems simulation software or manual IEC 60909 calculation.',
+  })
+
+  /**
+   * COMBINED REPORT — Gen Sizing → Transformer → Fault Level
+   *
+   * Per the parked decision (2026-07-22 handoff): one PDF spanning all
+   * three stages, retrievable from any of them via the flow-strip, replacing
+   * the three separate per-stage exports rather than sitting alongside them.
+   *
+   * Reuses the existing ResultCard/buildResultPdf shape as-is — sections
+   * from all three stages are concatenated with stage-prefixed titles so
+   * each block is traceable back to its source calculation, and each
+   * stage's own inputs are folded in as a leading section rather than
+   * dropped, so the report is self-contained without needing all three
+   * screens open at once. No new PDF-rendering code needed.
+   */
+  const buildCombinedReportData = () => {
+    const gen = buildGeneratorData()
+    const trafo = buildTransformerData()
+    const imped = buildImpedanceData()
+
+    const prefixed = (stageLabel, data) => [
+      { title: `${stageLabel} — Inputs`, rows: data.inputs.map(r => ({ ...r })) },
+      ...data.sections.map(s => ({ ...s, title: `${stageLabel} — ${s.title}` })),
+    ]
+
+    const notes = [gen.notes, imped.notes].filter(Boolean).join('\n\n')
+
+    return {
+      calculator: 'Power Systems — Full Report (Generator → Transformer → Fault Level)',
+      site: site.name,
+      standard: 'ISO 8528-1 · SANS 10142 · IEC 60076 · IEC 60909 (simplified)',
+      sections: [
+        ...prefixed('Generator', gen),
+        ...prefixed('Transformer', trafo),
+        ...prefixed('Fault Level', imped),
+      ],
+      notes: notes || undefined,
+    }
   }
 
-  const exportImpedance = () => {
-    showCard({
-      calculator: 'Power Systems — Fault Level',
-      site: site.name,
-      standard: 'IEC 60909 (simplified series model)',
-      inputs: [
-        { label: "Generator Xd'' ",   value: `${xdPct} %` },
-        { label: 'Transformer %Z',    value: `${pctZ} %` },
-        { label: 'Secondary voltage', value: `${pf(vSec, 400)} V` },
-      ],
-      sections: [
-        {
-          title: 'Per-unit system base (secondary)',
-          rows: [
-            { label: 'Base kVA',           value: `${impedRes.baseVA.toFixed(0)} VA` },
-            { label: 'Base impedance Zbase', value: `${impedRes.zBase.toFixed(4)} Ω` },
-            { label: 'Base current Ibase',  value: `${impedRes.iBase.toFixed(2)} A` },
-          ],
-        },
-        {
-          title: '3φ fault current — generator + transformer',
-          rows: [
-            { label: "Gen Xd'' (p.u.)",   value: impedRes.xdPu.toFixed(4) },
-            { label: 'Trafo Z (p.u.)',     value: impedRes.zTraPu.toFixed(4) },
-            { label: 'Total Z (p.u.)',     value: `${impedRes.zTot.toFixed(4)} p.u.` },
-            { label: 'Isc 3φ — secondary bus', value: `${impedRes.isc3.toFixed(0)} A`, warn: true },
-            { label: 'Fault level',         value: `${impedRes.kAsc.toFixed(3)} kA`, warn: true },
-            { label: 'Short-circuit MVA',   value: `${impedRes.mvasc.toFixed(3)} MVA` },
-          ],
-        },
-      ],
-      notes: 'Simplified model — series impedance only. No R component, no grid infeed, no cable impedance, no 1.05 voltage factor (IEC 60909 Clause 8). Use for initial breaker/fuse kA rating only; final protection coordination requires ETAP, DigSILENT PowerFactory, or manual IEC 60909 calculation.',
-    })
-  }
+  const exportCombinedReport = () => showCard(buildCombinedReportData())
 
   // ─── Tab definitions ────────────────────────────────────────────────────
 
@@ -1080,14 +1119,14 @@ export default function GeneratorSizing({ addHistory }) {
             </button>
 
             <button
-              onClick={exportGenerator}
+              onClick={exportCombinedReport}
               style={{
                 marginTop: '8px', width: '100%', padding: '7px',
                 borderRadius: '8px', border: '0.5px solid rgba(255,255,255,0.15)',
                 background: 'transparent', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: '12px',
               }}
             >
-              📄 Export PDF
+              📄 Generate Full Report (Gen + Transformer + Fault Level)
             </button>
           </div>
         </div>
@@ -1169,14 +1208,14 @@ export default function GeneratorSizing({ addHistory }) {
             </div>
 
             <button
-              onClick={exportTransformer}
+              onClick={exportCombinedReport}
               style={{
                 marginTop: '10px', width: '100%', padding: '7px',
                 borderRadius: '8px', border: '0.5px solid rgba(255,255,255,0.15)',
                 background: 'transparent', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: '12px',
               }}
             >
-              📄 Export PDF
+              📄 Generate Full Report (Gen + Transformer + Fault Level)
             </button>
           </div>
         </div>
@@ -1230,18 +1269,18 @@ export default function GeneratorSizing({ addHistory }) {
             <RowVal label="Short-circuit MVA"           value={`${impedRes.mvasc.toFixed(3)} MVA`} />
 
             <div style={S.warn}>
-              ⚠  SIMPLIFIED MODEL — series impedance only. No R component, no grid infeed, no cable impedance, no 1.05 voltage factor (IEC 60909 Clause 8). Use this for initial breaker/fuse kA rating only. Final protection coordination requires ETAP, DigSILENT PowerFactory, or manual IEC 60909 calculation.
+              ⚠  SIMPLIFIED MODEL — series impedance only. No R component, no grid infeed, no cable impedance, no 1.05 voltage factor (IEC 60909 Clause 8). Use this for initial breaker/fuse kA rating only. Final protection coordination requires dedicated power systems simulation software or manual IEC 60909 calculation.
             </div>
 
             <button
-              onClick={exportImpedance}
+              onClick={exportCombinedReport}
               style={{
                 marginTop: '10px', width: '100%', padding: '7px',
                 borderRadius: '8px', border: '0.5px solid rgba(255,255,255,0.15)',
                 background: 'transparent', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: '12px',
               }}
             >
-              📄 Export PDF
+              📄 Generate Full Report (Gen + Transformer + Fault Level)
             </button>
           </div>
         </div>
