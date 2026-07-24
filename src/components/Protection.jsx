@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { ResultCard, useResultCard } from './shared'
 import ProtectionCoordination from './ProtectionCoordination'
+import { hrSefPickup, solidEarthSefPickup } from './earthFaultProtectionEngine'
+import { selectRelayFunctions, recommendRelaySelection } from './relaySelectionEngine'
 
 const SQRT3 = Math.sqrt(3)
 const pf = (v) => parseFloat(String(v).replace(',', '.')) || 0
@@ -48,6 +50,24 @@ function ResultBox({ title, rows }) {
 
 function ErrBox({ msg }) {
   return msg ? <div className="bg-red-900/30 border border-red-700 text-red-400 rounded-xl px-4 py-3 text-sm mb-4">{msg}</div> : null
+}
+
+function WarnBox({ warnings }) {
+  if (!warnings || !warnings.length) return null
+  return (
+    <div className="bg-[#1a1000] border border-amber-800 text-amber-400 rounded-xl px-4 py-2.5 text-xs mb-4 space-y-1.5">
+      {warnings.map((w, i) => <div key={i}>⚠ {w}</div>)}
+    </div>
+  )
+}
+
+function InfoBox({ title, children }) {
+  return (
+    <div className="bg-[#0f1520] border border-[#1e2a3a] rounded-xl px-4 py-3 text-xs text-gray-500 mb-4">
+      <div className="text-blue-400 font-bold mb-2">{title}</div>
+      {children}
+    </div>
+  )
 }
 
 function GenCardBtn({ onClick }) {
@@ -805,10 +825,347 @@ function ProtectionGrading() {
   )
 }
 
+// ── Earth Fault Protection (expanded) ────────────────────────────────────────
+// Two structurally distinct flows per earthFaultProtectionEngine.js: HR
+// (resistance-earthed, % of NER-limited fault current) and solidly-earthed
+// (absolute secondary pickup + delay). Kept as separate components so a value
+// from one flow's shape can never leak into the other's calculation.
+function HrSefFlow({ addHistory }) {
+  const [voltIdx, setVoltIdx] = useState(2) // default 6.6kV, matches NER Sizing default
+  const [nerR, setNerR] = useState('')
+  const [ctRatio, setCtRatio] = useState('')
+  const [pickupPercent, setPickupPercent] = useState('')
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState('')
+  const { cardData, showCard, hideCard } = useResultCard()
+
+  const calculate = () => {
+    setError('')
+    setResult(null)
+    const V = VOLTAGES[voltIdx]
+    const R = pf(nerR)
+    const ct = pf(ctRatio)
+    const pct = pf(pickupPercent)
+    if (!R) { setError('Enter NER resistance'); return }
+    if (!ct) { setError('Enter CT ratio (rated primary current)'); return }
+    if (!pct) { setError('Enter pickup percent'); return }
+    try {
+      const r = hrSefPickup({ systemVoltageLL: V.vll, nerResistanceOhm: R, ctRatioPrimary: ct, pickupPercent: pct })
+      setResult({ ...r, voltLabel: V.label })
+      addHistory({ tab: 'Earth Fault (HR)', expr: `${V.label} R=${R}Ω pickup=${pct}%`, result: `${r.pickupPrimary.toFixed(2)}A primary` })
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-4">
+        <label className="text-gray-400 text-xs mb-2 block">System Voltage</label>
+        <div className="flex flex-wrap gap-2">
+          {VOLTAGES.map((v, i) => (
+            <button key={i} onClick={() => setVoltIdx(i)}
+              className={`px-3 py-2 rounded-xl text-xs font-medium ${voltIdx===i?'bg-amber-500 text-black':'bg-[#1c1c1c] text-gray-400'}`}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <NumInput label="NER Resistance" value={nerR} onChange={setNerR} unit="Ω" placeholder="e.g. 30" />
+      <NumInput label="CT Ratio (Rated Primary)" value={ctRatio} onChange={setCtRatio} unit="A" note="e.g. 100 for a 100/1A CT" placeholder="e.g. 100" />
+      <NumInput label="Pickup" value={pickupPercent} onChange={setPickupPercent} unit="%" note="typically 10–20% of NER-limited fault current — industry practice, not an IEC/MHSA figure" placeholder="e.g. 15" />
+
+      <button onClick={calculate} className="w-full bg-amber-500 text-black font-bold py-4 rounded-xl text-lg mb-4">CALCULATE HR/SEF PICKUP</button>
+      <ErrBox msg={error} />
+
+      {result && <>
+        <ResultBox title="HR / SEF PICKUP" rows={[
+          { label: 'System', value: result.voltLabel, unit: '' },
+          { label: 'Max NER-Limited Fault Current', value: result.maxFaultCurrent.toFixed(2), unit: 'A' },
+          { label: '➤ Pickup (Primary)', value: result.pickupPrimary.toFixed(2), unit: 'A', accent: true },
+          { label: '➤ Pickup (Secondary)', value: result.pickupSecondary.toFixed(3), unit: 'A', accent: true },
+        ]} />
+        <WarnBox warnings={result.warnings} />
+        <InfoBox title="Local Compliance">{result.localComplianceNote}</InfoBox>
+        <InfoBox title="Standards Referenced">
+          {result.standardsRefs.map((s, i) => <div key={i}>• {s}</div>)}
+        </InfoBox>
+
+        <GenCardBtn onClick={() => showCard({
+          calculator: 'Earth Fault Protection — HR/SEF',
+          standard: result.standardsRefs.join(' / '),
+          inputs: [
+            { label: 'System', value: result.voltLabel },
+            { label: 'NER Resistance', value: `${nerR} Ω` },
+            { label: 'CT Ratio (Primary)', value: `${ctRatio} A` },
+            { label: 'Pickup', value: `${pickupPercent} %` },
+          ],
+          sections: [{
+            title: 'RESULTS',
+            rows: [
+              { label: 'Max NER-Limited Fault Current', value: `${result.maxFaultCurrent.toFixed(2)} A` },
+              { label: 'Pickup (Primary)', value: `${result.pickupPrimary.toFixed(2)} A`, accent: true },
+              { label: 'Pickup (Secondary)', value: `${result.pickupSecondary.toFixed(3)} A`, accent: true },
+            ],
+          }],
+          notes: `${result.localComplianceNote} Pickup range (10–20% of NER-limited fault current) is industry practice, not a cited IEC/MHSA numeric clause.${result.warnings.length ? ' ' + result.warnings.join(' ') : ''}`,
+        })} />
+      </>}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
+    </div>
+  )
+}
+
+function SolidSefFlow({ addHistory }) {
+  const [pickupSecondaryA, setPickupSecondaryA] = useState('')
+  const [ctPrimary, setCtPrimary] = useState('')
+  const [ctSecondary, setCtSecondary] = useState('1')
+  const [delaySeconds, setDelaySeconds] = useState('')
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState('')
+  const { cardData, showCard, hideCard } = useResultCard()
+
+  const calculate = () => {
+    setError('')
+    setResult(null)
+    const pickupA = pf(pickupSecondaryA)
+    const ctP = pf(ctPrimary)
+    const ctS = pf(ctSecondary) || 1
+    if (delaySeconds === '') { setError('Enter time delay'); return }
+    const delay = pf(delaySeconds)
+    if (!pickupA) { setError('Enter pickup secondary current'); return }
+    if (!ctP) { setError('Enter CT ratio (rated primary current)'); return }
+    try {
+      const r = solidEarthSefPickup({ pickupSecondaryA: pickupA, ctRatioPrimary: ctP, ctRatioSecondary: ctS, delaySeconds: delay })
+      setResult(r)
+      addHistory({ tab: 'Earth Fault (Solid)', expr: `pickup=${pickupA}A sec, delay=${delay}s`, result: `${r.pickupPrimary.toFixed(1)}A primary` })
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  return (
+    <div>
+      <NumInput label="Pickup (Secondary)" value={pickupSecondaryA} onChange={setPickupSecondaryA} unit="A" note="commonly 5–10A secondary — utility distribution practice, not an IEC numeric clause" placeholder="e.g. 6" />
+      <NumInput label="CT Ratio (Rated Primary)" value={ctPrimary} onChange={setCtPrimary} unit="A" note="e.g. 200 for a 200/1A CT" placeholder="e.g. 200" />
+      <NumInput label="CT Secondary Rating" value={ctSecondary} onChange={setCtSecondary} unit="A" note="1 or 5 — CT secondary current rating" placeholder="1" />
+      <NumInput label="Time Delay" value={delaySeconds} onChange={setDelaySeconds} unit="s" note="~1s typical, to ride through transient/high-impedance faults" placeholder="e.g. 1" />
+
+      <button onClick={calculate} className="w-full bg-amber-500 text-black font-bold py-4 rounded-xl text-lg mb-4">CALCULATE SOLID-EARTH SEF PICKUP</button>
+      <ErrBox msg={error} />
+
+      {result && <>
+        <ResultBox title="SOLID-EARTH SEF PICKUP" rows={[
+          { label: 'Pickup (Secondary)', value: result.pickupSecondaryA, unit: 'A' },
+          { label: '➤ Pickup (Primary)', value: result.pickupPrimary.toFixed(1), unit: 'A', accent: true },
+        ]} />
+        <WarnBox warnings={result.warnings} />
+        <InfoBox title="Local Compliance">{result.localComplianceNote}</InfoBox>
+        <InfoBox title="Standards Referenced">
+          {result.standardsRefs.map((s, i) => <div key={i}>• {s}</div>)}
+        </InfoBox>
+
+        <GenCardBtn onClick={() => showCard({
+          calculator: 'Earth Fault Protection — Solid-Earth SEF',
+          standard: result.standardsRefs.join(' / '),
+          inputs: [
+            { label: 'Pickup (Secondary)', value: `${pickupSecondaryA} A` },
+            { label: 'CT Ratio (Primary)', value: `${ctPrimary} A` },
+            { label: 'CT Secondary Rating', value: `${ctSecondary} A` },
+            { label: 'Time Delay', value: `${delaySeconds} s` },
+          ],
+          sections: [{
+            title: 'RESULTS',
+            rows: [
+              { label: 'Pickup (Secondary)', value: `${result.pickupSecondaryA} A` },
+              { label: 'Pickup (Primary)', value: `${result.pickupPrimary.toFixed(1)} A`, accent: true },
+            ],
+          }],
+          notes: `${result.localComplianceNote} Pickup/delay ranges are utility distribution practice, not a cited IEC numeric clause.${result.warnings.length ? ' ' + result.warnings.join(' ') : ''}`,
+        })} />
+      </>}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
+    </div>
+  )
+}
+
+function EarthFaultProtection({ addHistory }) {
+  const [flow, setFlow] = useState('hr') // 'hr' | 'solid'
+  return (
+    <div className="px-4 py-3">
+      <div className="bg-[#0a1a2e] border border-[#1a3a5a] rounded-xl px-4 py-3 mb-4">
+        <div className="text-blue-400 text-xs font-bold mb-1">Earth Fault Protection — SEF Sizing</div>
+        <div className="text-gray-500 text-xs">Two structurally distinct flows depending on earthing method: HR uses % of NER-limited fault current; solidly-earthed feeders use an absolute secondary pickup. Pickup ranges shown are industry/utility practice, not cited IEC/MHSA numeric clauses — see the notes on each result.</div>
+      </div>
+
+      <div className="flex gap-2 mb-4">
+        <button onClick={() => setFlow('hr')}
+          className={`flex-1 py-2.5 rounded-xl text-xs font-bold ${flow==='hr'?'bg-amber-500 text-black':'bg-[#1c1c1c] text-gray-400'}`}>
+          HR / Resistance-Earthed
+        </button>
+        <button onClick={() => setFlow('solid')}
+          className={`flex-1 py-2.5 rounded-xl text-xs font-bold ${flow==='solid'?'bg-amber-500 text-black':'bg-[#1c1c1c] text-gray-400'}`}>
+          Solidly-Earthed Feeder
+        </button>
+      </div>
+
+      {flow === 'hr' ? <HrSefFlow addHistory={addHistory} /> : <SolidSefFlow addHistory={addHistory} />}
+    </div>
+  )
+}
+
+// ── Relay Selection Wizard ────────────────────────────────────────────────────
+// Scope per relaySelectionEngine.js / project knowledge doc §5.3: feeder,
+// transformer, motor, busbar applications only. Generator (11kV/MV neutral,
+// REF, paralleling/synchronizing) is deliberately out of scope — selecting it
+// shows the engine's explicit out-of-scope message rather than a guessed
+// recommendation.
+const RELAY_APPLICATIONS = [
+  { id: 'feeder', label: 'Feeder' },
+  { id: 'transformer', label: 'Transformer' },
+  { id: 'motor', label: 'Motor' },
+  { id: 'busbar', label: 'Busbar' },
+  { id: 'generator', label: 'Generator (11kV)' },
+]
+
+function RelaySelection({ addHistory }) {
+  const [appIdx, setAppIdx] = useState(0)
+  const [earthing, setEarthing] = useState('hr') // 'hr' | 'solid'
+  const [maxFault, setMaxFault] = useState('')
+  const [ctRated, setCtRated] = useState('')
+  const [classPrefix, setClassPrefix] = useState('5P')
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState('')
+  const { cardData, showCard, hideCard } = useResultCard()
+
+  const app = RELAY_APPLICATIONS[appIdx]
+  const isGenerator = app.id === 'generator'
+
+  const calculate = () => {
+    setError('')
+    setResult(null)
+    const mf = pf(maxFault)
+    const ct = pf(ctRated)
+    if (!mf) { setError('Enter max fault current (primary)'); return }
+    if (!ct) { setError('Enter CT rated primary current'); return }
+    try {
+      const r = recommendRelaySelection({ application: app.id, earthingMethod: earthing, maxFaultCurrentPrimary: mf, ctRatedPrimary: ct, protectionClassPrefix: classPrefix })
+      setResult(r)
+      addHistory({ tab: 'Relay Selection', expr: `${app.label}/${earthing==='hr'?'HR':'Solid'}`, result: r.ctAccuracyClass || 'non-standard ALF' })
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  return (
+    <div className="px-4 py-3">
+      <div className="bg-[#0a1a2e] border border-[#1a3a5a] rounded-xl px-4 py-3 mb-4">
+        <div className="text-blue-400 text-xs font-bold mb-1">Relay Selection Wizard</div>
+        <div className="text-gray-500 text-xs">Recommends relay function set (by application + earthing method) and CT protection accuracy class (ALF). Scope: feeder/transformer/motor/busbar. Does not cover PX (low-impedance/balanced) CT class or 11kV generator-neutral/paralleling protection.</div>
+      </div>
+
+      <div className="mb-4">
+        <label className="text-gray-400 text-xs mb-2 block">Application</label>
+        <div className="flex flex-wrap gap-2">
+          {RELAY_APPLICATIONS.map((a, i) => (
+            <button key={a.id} onClick={() => { setAppIdx(i); setResult(null); setError('') }}
+              className={`px-3 py-2 rounded-xl text-xs font-medium ${appIdx===i?'bg-amber-500 text-black':'bg-[#1c1c1c] text-gray-400'}`}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {isGenerator ? (
+        <InfoBox title="Out of Scope">{selectRelayFunctions('generator').message}</InfoBox>
+      ) : (
+        <>
+          <div className="mb-4">
+            <label className="text-gray-400 text-xs mb-2 block">Earthing Method</label>
+            <div className="flex gap-2">
+              <button onClick={() => setEarthing('hr')}
+                className={`flex-1 py-2 rounded-xl text-xs font-bold ${earthing==='hr'?'bg-blue-600 text-white':'bg-[#1c1c1c] text-gray-400'}`}>
+                HR (Resistance-Earthed)
+              </button>
+              <button onClick={() => setEarthing('solid')}
+                className={`flex-1 py-2 rounded-xl text-xs font-bold ${earthing==='solid'?'bg-blue-600 text-white':'bg-[#1c1c1c] text-gray-400'}`}>
+                Solidly-Earthed
+              </button>
+            </div>
+          </div>
+
+          <NumInput label="Max Fault Current (Primary)" value={maxFault} onChange={setMaxFault} unit="A" note="through-fault current used to size CT accuracy class (ALF)" placeholder="e.g. 2500" />
+          <NumInput label="CT Rated Primary Current" value={ctRated} onChange={setCtRated} unit="A" note="CT nameplate primary rating" placeholder="e.g. 200" />
+
+          <div className="mb-4">
+            <label className="text-gray-400 text-xs mb-2 block">Protection Class</label>
+            <div className="flex gap-2">
+              <button onClick={() => setClassPrefix('5P')}
+                className={`flex-1 py-2 rounded-xl text-xs font-bold ${classPrefix==='5P'?'bg-amber-500 text-black':'bg-[#1c1c1c] text-gray-400'}`}>5P</button>
+              <button onClick={() => setClassPrefix('10P')}
+                className={`flex-1 py-2 rounded-xl text-xs font-bold ${classPrefix==='10P'?'bg-amber-500 text-black':'bg-[#1c1c1c] text-gray-400'}`}>10P</button>
+            </div>
+          </div>
+
+          <button onClick={calculate} className="w-full bg-amber-500 text-black font-bold py-4 rounded-xl text-lg mb-4">GET RECOMMENDATION</button>
+          <ErrBox msg={error} />
+
+          {result && !result.outOfScope && <>
+            <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-4">
+              <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]">
+                <span className="text-amber-400 text-xs font-bold">RECOMMENDED RELAY FUNCTIONS</span>
+              </div>
+              <div className="px-4 py-3">
+                {result.relayFunctions.map((f, i) => <div key={i} className="text-white text-sm mb-1">• {f}</div>)}
+                <div className="text-gray-500 text-xs mt-2">{result.relayNote}</div>
+              </div>
+            </div>
+
+            <ResultBox title="CT ACCURACY CLASS" rows={[
+              { label: 'Required ALF', value: result.requiredAlf.toFixed(1), unit: '' },
+              { label: '➤ Recommended Class', value: result.ctAccuracyClass || 'Non-standard — consult manufacturer', unit: '', accent: !!result.ctAccuracyClass, warn: !result.ctAccuracyClass },
+            ]} />
+            <WarnBox warnings={result.warnings} />
+            {result.standardsRefs?.length > 0 && (
+              <InfoBox title="Standards Referenced">
+                {result.standardsRefs.map((s, i) => <div key={i}>• {s}</div>)}
+              </InfoBox>
+            )}
+
+            <GenCardBtn onClick={() => showCard({
+              calculator: 'Relay Selection',
+              standard: result.standardsRefs.join(' / '),
+              inputs: [
+                { label: 'Application', value: app.label },
+                { label: 'Earthing Method', value: earthing === 'hr' ? 'HR (Resistance-Earthed)' : 'Solidly-Earthed' },
+                { label: 'Max Fault Current (Primary)', value: `${maxFault} A` },
+                { label: 'CT Rated Primary', value: `${ctRated} A` },
+              ],
+              sections: [{
+                title: 'RECOMMENDATION',
+                rows: [
+                  { label: 'Relay Functions', value: result.relayFunctions.join(', ') },
+                  { label: 'CT Accuracy Class', value: result.ctAccuracyClass || 'Non-standard', accent: true },
+                  { label: 'Required ALF', value: result.requiredAlf.toFixed(1) },
+                ],
+              }],
+              notes: `${result.relayNote}${result.warnings?.length ? ' ' + result.warnings.join(' ') : ''}`,
+            })} />
+          </>}
+        </>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
+    </div>
+  )
+}
+
 // ── MAIN ──────────────────────────────────────────────────────────────────────
 const SUB_TABS = [
-  { id: 'ner',      label: 'NER Size',  icon: '⏚' },
-  { id: 'ncrt',     label: 'NCRT',      icon: '◎' },
+  { id: 'ner',        label: 'NER Size',    icon: '⏚' },
+  { id: 'ncrt',       label: 'NCRT',        icon: '◎' },
+  { id: 'earthfault', label: 'Earth Fault', icon: '⏚' },
+  { id: 'relaysel',   label: 'Relay Select', icon: '🧭' },
   { id: 'idmt',     label: 'IDMT',      icon: '⏱' },
   { id: 'ctburden', label: 'CT Burden', icon: '⊙' },
   { id: 'insul',    label: 'PI/DAR',    icon: '𝛀' },
@@ -835,6 +1192,8 @@ export default function Protection({ addHistory }) {
       <div className="flex-1 overflow-y-auto">
         {sub === 'ner'      && <NerSizing addHistory={addHistory} />}
         {sub === 'ncrt'     && <NcrtMonitoring />}
+        {sub === 'earthfault' && <EarthFaultProtection addHistory={addHistory} />}
+        {sub === 'relaysel' && <RelaySelection addHistory={addHistory} />}
         {sub === 'idmt'     && <IdmtCoordination addHistory={addHistory} />}
         {sub === 'ctburden' && <CtBurden addHistory={addHistory} />}
         {sub === 'insul'    && <InsulationResistance addHistory={addHistory} />}
