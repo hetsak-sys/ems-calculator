@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, SubTabBar, UnitNumInput, VOLTAGE_UNITS, useResultCard } from './shared'
+import { pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, SubTabBar, UnitNumInput, VOLTAGE_UNITS } from './shared'
 import { useSite } from './SiteContext'
 import { useWorkspace } from './WorkspaceContext'
 import {
@@ -14,7 +14,6 @@ import {
 function CableSizing({ addHistory }) {
   const { site } = useSite()
   const { flaSnapshot } = useWorkspace()
-  const { cardData, showCard, hideCard } = useResultCard()
   const [phase,setPhase]=useState(flaSnapshot?.phase||site.phase||'3ph'),[current,setCurrent]=useState(flaSnapshot?.fla||''),[length,setLength]=useState('')
   const [voltage,setVoltage]=useState(site.defaultLV||'400'),[insul,setInsul]=useState(site.insulation||'PVC'),[material,setMat]=useState(site.material||'Cu')
   const [ambient,setAmbient]=useState(site.ambient||'30'),[groups,setGroups]=useState('1'),[install,setInstall]=useState('Clipped direct')
