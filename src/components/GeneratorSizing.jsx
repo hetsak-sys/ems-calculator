@@ -73,20 +73,16 @@
  */
 
 import { useState, useMemo, Fragment } from 'react'
-import { calculateGeneratorDerating, GEN_SIZES } from '../lib/generatorDerating.js'
+import {
+  TRAFO_SIZES, START_MULT, nextStd, pf,
+  knownLoadSizing, loadScheduleTotals, generatorSizingFromTotals,
+  transformerSizing, faultLevelFromImpedance,
+} from './generatorSizingEngine'
 import { useWorkspace } from './WorkspaceContext'
 import { ResultCard, useResultCard } from './shared'
 import { useSite } from './SiteContext'
 
 // ─── Constants ─────────────────────────────────────────────────────────────
-
-const SQRT3 = Math.sqrt(3)
-
-/** Standard distribution transformer kVA (IEC 60076) */
-const TRAFO_SIZES = [
-  5, 10, 15, 25, 50, 75, 100, 150, 200, 250,
-  315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150,
-]
 
 /**
  * Vector group options relevant to SA/Lesotho distribution practice.
@@ -135,32 +131,8 @@ const LOAD_TYPES = ['Motor', 'Resistive', 'Fluorescent/LED', 'Capacitive/VFD', '
 
 const START_METHODS = ['DOL', 'Star-Delta', 'Soft-Start', 'VFD', 'N/A']
 
-/**
- * Starting current multipliers relative to full-load kVA.
- * These are peak inrush multipliers used to size generator
- * transient response (not steady-state).
- *
- * DOL       : 6–7× (locked rotor current). Use 6.5× typical.
- * Star-Delta: 2–2.5× (1/3 voltage start reduces torque and current).
- * Soft-Start: 2.5–3.5× (depends on ramp time setting).
- * VFD       : ≤1× (inverter controls inrush; no transient).
- * N/A       : 0 (non-motor load).
- */
-const START_MULT = {
-  DOL: 6.5,
-  'Star-Delta': 2.3,
-  'Soft-Start': 3.0,
-  VFD: 1.0,
-  'N/A': 0,
-}
-
 // ─── Helpers ───────────────────────────────────────────────────────────────
-
-/** Round up to next standard size in a sorted array */
-const nextStd = (arr, val) => arr.find(s => s >= val) || arr[arr.length - 1]
-
-/** Safe parse float with fallback */
-const pf = (v, fallback = 0) => parseFloat(v) || fallback
+// nextStd, pf, START_MULT now imported from generatorSizingEngine.js
 
 /**
  * Comma-to-period normalization for Android decimal keyboards.
@@ -304,28 +276,16 @@ function KnownLoadSizing({ addHistory }) {
   const KNOWN_START_METHODS = ['DOL', 'Star-Delta', 'VFD']
 
   const calc = () => {
-    const P = pf(kw), p = pf(kwPf, 0.8)
-    const e = pf(eff, 90) / 100, alt = pf(altitude)
-    const T = pf(temp, 25), Pm = pf(largestMotorKw)
-    if ([P, p, e, alt, T, Pm].some(v => isNaN(v))) return
-
-    const { netFactor: derate } = calculateGeneratorDerating({ altitudeM: alt, ambientTempC: T })
-
-    const kVA_load  = (P / p) / e
-    const kVA_start = Pm * (START_MULT[startMethod] || 0) / p
-
-    const kVA_required = Math.max(kVA_load, kVA_start)
-    const kVA_derated  = kVA_required / derate
-    const recommended  = nextStd(GEN_SIZES, kVA_derated)
-
+    const r = knownLoadSizing({ kw, kwPf, eff, altitude, temp, largestMotorKw, startMethod })
+    if (!r) return
     setRes({
-      kVA_load:  kVA_load.toFixed(0),
-      kVA_start: kVA_start.toFixed(0),
-      derate:    (derate * 100).toFixed(1),
-      kVA_req:   kVA_derated.toFixed(0),
-      gen:       recommended,
-      altitudeM: alt,
-      ambientTempC: T,
+      kVA_load:  r.kVA_load.toFixed(0),
+      kVA_start: r.kVA_start.toFixed(0),
+      derate:    (r.derate * 100).toFixed(1),
+      kVA_req:   r.kVA_req.toFixed(0),
+      gen:       r.gen,
+      altitudeM: r.altitudeM,
+      ambientTempC: r.ambientTempC,
     })
   }
 
@@ -488,31 +448,7 @@ export default function GeneratorSizing({ addHistory }) {
    * Motor starting kVA = FLA kVA × starting multiplier
    * Generator must handle the LARGEST single motor start (not sum of all).
    */
-  const totals = useMemo(() => {
-    let sumKW = 0, sumKVAR = 0, maxStartKVA = 0
-
-    const rows = loads.map(l => {
-      const kw  = pf(l.kw)
-      const lpf = Math.max(0.01, pf(l.pf, 0.85))
-      const df  = pf(l.df, 100) / 100
-
-      const dKW   = kw * df
-      const dKVA  = dKW / lpf
-      const dKVAR = dKVA * Math.sqrt(Math.max(0, 1 - lpf * lpf))
-      const sKVA  = l.type === 'Motor' ? dKVA * (START_MULT[l.start] || 0) : 0
-
-      sumKW   += dKW
-      sumKVAR += dKVAR
-      if (sKVA > maxStartKVA) maxStartKVA = sKVA
-
-      return { ...l, dKW, dKVA, dKVAR, sKVA }
-    })
-
-    const totKVA = Math.sqrt(sumKW * sumKW + sumKVAR * sumKVAR)
-    const sysPF  = totKVA > 0 ? sumKW / totKVA : 1
-
-    return { rows, sumKW, sumKVAR, totKVA, sysPF, maxStartKVA }
-  }, [loads])
+  const totals = useMemo(() => loadScheduleTotals(loads), [loads])
 
   /**
    * GENERATOR SIZING  (ISO 8528-1)
@@ -528,29 +464,10 @@ export default function GeneratorSizing({ addHistory }) {
    *   3. required     = withMargin / de-rate factor   (nameplate must cover this)
    *   4. stdSize      = next standard size above 'required'
    */
-  const genRes = useMemo(() => {
-    const alt = pf(altitude)
-    const tmp = pf(ambTemp, 25)
-    const mar = pf(margin, 25) / 100
-    const gpf = pf(genPF, 0.8)
-
-    // Migrated to shared lib function — was inline here, also duplicated
-    // in RenewableEnergyCalculator.jsx's Hybrid tab, now a single source.
-    // Verified behavior-identical before migrating; see
-    // generatorDeratingMigration.verify.mjs.
-    const { altFactor, tempFactor, netFactor } = calculateGeneratorDerating({
-      altitudeM: alt,
-      ambientTempC: tmp,
-    })
-
-    const governing  = Math.max(totals.totKVA, totals.maxStartKVA)
-    const withMargin = governing * (1 + mar)
-    const required   = withMargin / netFactor
-    const stdSize    = nextStd(GEN_SIZES, required)
-
-    // Push to history on calculation
-    return { altFactor, tempFactor, netFactor, governing, withMargin, required, stdSize, gpf, altitudeM: alt, ambientTempC: tmp }
-  }, [totals, altitude, ambTemp, margin, genPF])
+  const genRes = useMemo(
+    () => generatorSizingFromTotals({ totals, altitude, ambTemp, margin, genPF }),
+    [totals, altitude, ambTemp, margin, genPF]
+  )
 
   /**
    * TRANSFORMER SIZING
@@ -565,21 +482,10 @@ export default function GeneratorSizing({ addHistory }) {
    *   Base Z (sec)   = Vs² / (kVA × 1000)   [in ohms]
    *   Z_ohms         = (%Z / 100) × BaseZ
    */
-  const trafoRes = useMemo(() => {
-    const vp  = pf(vPri, 11000)
-    const vs  = pf(vSec, 400)
-    const kva = genRes.stdSize
-    const z   = pf(pctZ, 5)
-
-    const ratio  = vp / vs
-    const ip     = (kva * 1000) / (SQRT3 * vp)
-    const is_    = (kva * 1000) / (SQRT3 * vs)
-    const stdKVA = nextStd(TRAFO_SIZES, kva)
-    const zBase  = (vs * vs)   / (stdKVA * 1000)
-    const zOhm   = (z / 100)   * zBase
-
-    return { vp, vs, kva, ratio, ip, is_, z, zBase, zOhm, stdKVA }
-  }, [genRes, vPri, vSec, pctZ])
+  const trafoRes = useMemo(
+    () => transformerSizing({ vPri, vSec, genStdSize: genRes.stdSize, pctZ }),
+    [genRes, vPri, vSec, pctZ]
+  )
 
   /**
    * IMPEDANCE & FAULT LEVEL  (simplified series model, IEC 60909)
@@ -603,22 +509,10 @@ export default function GeneratorSizing({ addHistory }) {
    * ⚠ This is a simplified model (no R, no grid infeed, no cable impedance).
    *   Use dedicated power systems simulation software for final protection coordination.
    */
-  const impedRes = useMemo(() => {
-    const vs     = pf(vSec, 400)
-    const baseVA = trafoRes.stdKVA * 1000
-    const zBase  = (vs * vs) / baseVA
-    const iBase  = baseVA / (SQRT3 * vs)
-
-    const xdPu   = pf(xdPct, 15) / 100
-    const zTraPu = pf(pctZ,  5)  / 100
-    const zTot   = xdPu + zTraPu
-
-    const isc3   = iBase / zTot
-    const kAsc   = isc3  / 1000
-    const mvasc  = (SQRT3 * vs * isc3) / 1e6
-
-    return { baseVA, zBase, iBase, xdPu, zTraPu, zTot, isc3, kAsc, mvasc }
-  }, [trafoRes, vSec, pctZ, xdPct])
+  const impedRes = useMemo(
+    () => faultLevelFromImpedance({ vSec, trafoStdKVA: trafoRes.stdKVA, pctZ, xdPct }),
+    [trafoRes, vSec, pctZ, xdPct]
+  )
 
   // ─── Load CRUD ──────────────────────────────────────────────────────────
 

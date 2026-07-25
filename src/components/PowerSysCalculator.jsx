@@ -1,6 +1,7 @@
 import GeneratorSizingPro from './GeneratorSizing'
 import React, { useState } from 'react'
 import { useSite } from './SiteContext'
+import { transformerParameters, pfCorrection, busbarRating, motorStartingComparison } from './powerSysEngine'
 
 // ── Tab merge note (this session) ──────────────────────────────────────────
 // Previously two separate tabs: 'generator' (a basic single-number calc,
@@ -70,29 +71,16 @@ function TransformerCalc() {
   const [res, setRes]   = useState(null)
 
   const calc = () => {
-    const S = parseFloat(kva) * 1000
-    const Vp = parseFloat(vpri), Vs = parseFloat(vsec)
-    const Z = parseFloat(zpc) / 100
-    const p = parseFloat(pf), e = parseFloat(eff) / 100
-    if ([S, Vp, Vs, Z, p, e].some(isNaN)) return
-
-    const Ipri = S / (Math.sqrt(3) * Vp)
-    const Isec = S / (Math.sqrt(3) * Vs)
-    const ratio = Vp / Vs
-    // Fault current at secondary: If = Irated / Z%
-    const Isc_sec = Isec / Z
-    const Isc_3ph = Isc_sec        // bolted 3-phase
-    const Isc_1ph = Isc_3ph * 0.866 // approx 1-phase
-    const Pinput = (S * p) / e
-    const Ploss  = Pinput - S * p
-
+    setRes(null)
+    const r = transformerParameters({ kva, vpri, vsec, zpc, pf, eff })
+    if (!r) return
     setRes({
-      ratio: ratio.toFixed(2),
-      Ipri:  Ipri.toFixed(1),
-      Isec:  Isec.toFixed(1),
-      Isc3:  (Isc_3ph / 1000).toFixed(2),
-      Isc1:  (Isc_1ph / 1000).toFixed(2),
-      Ploss: (Ploss / 1000).toFixed(2),
+      ratio: r.ratio.toFixed(2),
+      Ipri:  r.Ipri.toFixed(1),
+      Isec:  r.Isec.toFixed(1),
+      Isc3:  r.Isc3.toFixed(2),
+      Isc1:  r.Isc1.toFixed(2),
+      Ploss: r.Ploss.toFixed(2),
     })
   }
 
@@ -129,26 +117,16 @@ function PFCorrection() {
   const [res, setRes]   = useState(null)
 
   const calc = () => {
-    const P = parseFloat(kw), p1 = parseFloat(pf1), p2 = parseFloat(pf2)
-    const V = parseFloat(vv)
-    if ([P, p1, p2, V].some(isNaN) || p1 >= 1 || p2 > 1) return
-
-    const Qc = P * (Math.tan(Math.acos(p1)) - Math.tan(Math.acos(p2)))
-    const I_before = (P * 1000) / (Math.sqrt(3) * V * p1)
-    const I_after  = (P * 1000) / (Math.sqrt(3) * V * p2)
-    const Ic       = Qc * 1000 / (Math.sqrt(3) * V)
-
-    // Standard capacitor bank steps
-    const steps = [5, 10, 12.5, 15, 20, 25, 30, 40, 50, 60, 75, 100, 150, 200, 250, 300]
-    const bank  = steps.find(s => s >= Qc) || '>300'
-
+    setRes(null)
+    const r = pfCorrection({ kw, pf1, pf2, vv })
+    if (!r) return
     setRes({
-      Qc:     Qc.toFixed(1),
-      bank,
-      Ic:     Ic.toFixed(1),
-      Ibefore: I_before.toFixed(1),
-      Iafter:  I_after.toFixed(1),
-      saving: ((I_before - I_after) / I_before * 100).toFixed(1),
+      Qc:     r.Qc.toFixed(1),
+      bank:   r.bank,
+      Ic:     r.Ic.toFixed(1),
+      Ibefore: r.Ibefore.toFixed(1),
+      Iafter:  r.Iafter.toFixed(1),
+      saving: r.saving.toFixed(1),
     })
   }
 
@@ -184,30 +162,14 @@ function BusbarRating() {
   const [res, setRes]   = useState(null)
 
   const calc = () => {
-    const W = parseFloat(w), T = parseFloat(thick)
-    const n = parseInt(bars), ta = parseFloat(temp)
-    if ([W, T, n, ta].some(isNaN)) return
-
-    // Empirical formula: I ≈ k × A^0.5 × P^0.5 (simplified)
-    // Better: I = J × A, where J is current density
-    // Copper: ~1.5–2.5 A/mm², Aluminium: ~1.0–1.6 A/mm²
-    const A   = W * T  // cross-section mm²
-    const J   = mat === 'cu' ? 2.0 : 1.3  // A/mm² (conservative)
-    // Temperature correction (reduces rating above 35°C)
-    const tempCorr = Math.sqrt((90 - ta) / (90 - 35)) // assume 90°C max conductor temp
-
-    const I_single = J * A * tempCorr
-    const I_total  = I_single * n
-    const Isc_1s   = mat === 'cu'
-      ? A * n * 143        // k=143 for Cu PVC
-      : A * n * 95         // k=95 for Al
-    const R_per_m  = (mat === 'cu' ? 0.01724 : 0.0282) / (A * n) * 1000  // mΩ/m
-
+    setRes(null)
+    const r = busbarRating({ mat, w, thick, bars, temp })
+    if (!r) return
     setRes({
-      area:   (A * n).toFixed(0),
-      I:      I_total.toFixed(0),
-      Isc:    (Isc_1s / 1000).toFixed(1),
-      R:      R_per_m.toFixed(3),
+      area: r.area.toFixed(0),
+      I:    r.I.toFixed(0),
+      Isc:  r.Isc.toFixed(1),
+      R:    r.R.toFixed(3),
     })
   }
 
@@ -257,29 +219,15 @@ function MotorStarting() {
   const [res, setRes]   = useState(null)
 
   const calc = () => {
-    const P = parseFloat(kw) * 1000, V = parseFloat(vv)
-    const e = parseFloat(eff) / 100, p = parseFloat(pf)
-    if ([P, V, e, p].some(isNaN)) return
-
-    const Ifull = P / (Math.sqrt(3) * V * p * e)
-    const factors = {
-      dol:       { start: 6.5, torque: 1.5 },
-      star_delta: { start: 2.2, torque: 0.5 },
-      autotrans:  { start: 3.0, torque: 0.64 },
-      vfd:        { start: 1.2, torque: 1.0 },
-      softstarter:{ start: 2.5, torque: 0.8 },
-    }
-    const f = factors[method]
-    const Istart = Ifull * f.start
-    const kVA_start = (Math.sqrt(3) * V * Istart) / 1000
-    const voltDip_approx = (kVA_start * 0.05) * 100  // rough 5% Zs estimate
-
+    setRes(null)
+    const r = motorStartingComparison({ kw, vv, eff, pf, method })
+    if (!r) return
     setRes({
-      Ifull: Ifull.toFixed(1),
-      Istart: Istart.toFixed(1),
-      kVA: kVA_start.toFixed(1),
-      dip: voltDip_approx.toFixed(1),
-      torque: f.torque,
+      Ifull: r.Ifull.toFixed(1),
+      Istart: r.Istart.toFixed(1),
+      kVA: r.kVA.toFixed(1),
+      dip: r.dip.toFixed(1),
+      torque: r.torque,
     })
   }
 

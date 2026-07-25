@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
-import { batteryBankSizingFromEnergy } from '../lib/batterySizing.js'
 import { ResultCard, useResultCard } from './shared'
 import { useSite } from './SiteContext'
+import { harmonicsAnalysis, upsBatterySizing, lightingLumenMethod } from './pqEngine'
 
 const TABS = [
   { id: 'harmonics', label: 'Harmonics' },
@@ -66,30 +66,15 @@ function HarmonicsCalc({ showCard }) {
   const [res, setRes] = useState(null)
 
   const calc = () => {
-    const i1 = parseFloat(I1), i3 = parseFloat(I3)
-    const i5 = parseFloat(I5), i7 = parseFloat(I7)
-    const i11 = parseFloat(I11), i13 = parseFloat(I13)
-    if ([i1,i3,i5,i7,i11,i13].some(isNaN)) return
-
-    // THD = √(I3²+I5²+I7²+...) / I1 × 100
-    const harmonicSum = Math.sqrt(i3**2 + i5**2 + i7**2 + i11**2 + i13**2)
-    const THD_I = (harmonicSum / i1) * 100
-    const Irms  = Math.sqrt(i1**2 + harmonicSum**2)
-
-    // K-factor (for transformer derating): K = Σ(Ih²×h²) / Σ(Ih²)
-    const num = i1**2*1 + i3**2*9 + i5**2*25 + i7**2*49 + i11**2*121 + i13**2*169
-    const den = i1**2 + i3**2 + i5**2 + i7**2 + i11**2 + i13**2
-    const Kfactor = num / den
-
-    // Transformer derating (simplified): Prated_derated = Prated / √K
-    const derate = (1 / Math.sqrt(Kfactor)) * 100
-
+    setRes(null)
+    const r = harmonicsAnalysis({ I1, I3, I5, I7, I11, I13 })
+    if (!r) return
     setRes({
-      THD:     THD_I.toFixed(1),
-      Irms:    Irms.toFixed(1),
-      K:       Kfactor.toFixed(2),
-      derate:  derate.toFixed(1),
-      passIEC: THD_I < 8,    // IEC 61000-3-2 Class A limit ~8%
+      THD:     r.THD.toFixed(1),
+      Irms:    r.Irms.toFixed(1),
+      K:       r.K.toFixed(2),
+      derate:  r.derate.toFixed(1),
+      passIEC: r.passIEC,
     })
   }
 
@@ -170,47 +155,15 @@ function BatterySizing({ showCard }) {
   const [res, setRes]          = useState(null)
 
   const calc = () => {
-    const loadKw = parseFloat(load_kw)
-    const P = loadKw * 1000
-    const p = parseFloat(pf), t = parseFloat(runtime) / 60  // hours
-    const V = parseFloat(vdc)
-    const d = parseFloat(dod) / 100, e = parseFloat(eta) / 100
-    if ([loadKw, P, p, t, V, d, e].some(isNaN)) return
-
-    // BUG FIX: kVA must be computed from loadKw (kW), not P (W) — the previous
-    // `P / p` used P already in watts, producing a value in VA displayed as
-    // "kVA" (1000x too large). Verified against hand-calculation before fixing;
-    // see upsMigration.verify.mjs.
-    const kVA = loadKw / p
-
-    // Energy drawn at the DC/battery side, accounting for inverter efficiency.
-    // Unchanged from the original formula — this is NOT run through the
-    // shared core's efficiency divisor, since it's already applied here.
-    const Wh_load = (P / e) * t
-
-    // Battery bank capacity sizing — migrated onto the shared core also used
-    // by the Renewable Energy module's off-grid battery sizing (src/lib/batterySizing.js),
-    // per the recorded [DES-1] shared-core decision. dodFraction accounts for
-    // usable-capacity derating; roundTripEfficiency is 1 here because Wh_load
-    // already has inverter efficiency baked in above (avoids double-applying it).
-    const { requiredCapacityAh } = batteryBankSizingFromEnergy({
-      requiredUsableEnergyWh: Wh_load,
-      dodFraction: d,
-      systemVoltageV: V,
-      roundTripEfficiency: 1,
-    })
-
-    // Standard battery sizes (Ah at 48V)
-    const cells = Math.ceil(V / 2)       // 2V cells
-    const strings_hint = V === 48 ? '4 × 12V or 24 × 2V cells' :
-                         V === 24 ? '2 × 12V or 12 × 2V cells' : `${cells} × 2V cells`
-
+    setRes(null)
+    const r = upsBatterySizing({ loadKw: load_kw, pf, runtimeMin: runtime, vdc, dodPct: dod, etaPct: eta })
+    if (!r) return
     setRes({
-      kVA:      kVA.toFixed(1),
-      Wh:       (Wh_load / 1000).toFixed(2),
-      Ah:       requiredCapacityAh.toFixed(0),
-      cells:    strings_hint,
-      inv_A:    (kVA * 1000 / V).toFixed(0),
+      kVA:      r.kVA.toFixed(1),
+      Wh:       r.Wh.toFixed(2),
+      Ah:       r.Ah.toFixed(0),
+      cells:    r.cells,
+      inv_A:    r.inv_A.toFixed(0),
     })
   }
 
@@ -284,24 +237,15 @@ function LightingCalc({ showCard }) {
   ]
 
   const calc = () => {
-    const A = parseFloat(area), E = parseFloat(lux)
-    const cu = parseFloat(CU), mf = parseFloat(MF)
-    const Φ = parseFloat(lumens), W = parseFloat(watts)
-    if ([A, E, cu, mf, Φ, W].some(isNaN)) return
-
-    // Lumen method: N = (E × A) / (Φ × CU × MF)
-    const N = (E * A) / (Φ * cu * mf)
-    const N_ceil = Math.ceil(N)
-    const totalW = N_ceil * W
-    const W_per_m2 = totalW / A
-    const actual_lux = (N_ceil * Φ * cu * mf) / A
-
+    setRes(null)
+    const r = lightingLumenMethod({ area, lux, CU, MF, lumens, watts })
+    if (!r) return
     setRes({
-      N:       N.toFixed(1),
-      N_ceil,
-      W:       totalW.toFixed(0),
-      Wm2:     W_per_m2.toFixed(1),
-      lux_act: actual_lux.toFixed(0),
+      N:       r.N.toFixed(1),
+      N_ceil:  r.N_ceil,
+      W:       r.W.toFixed(0),
+      Wm2:     r.Wm2.toFixed(1),
+      lux_act: r.lux_act.toFixed(0),
     })
   }
 

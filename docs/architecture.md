@@ -90,14 +90,14 @@ device performance baseline exists (see `debt.md`'s bundle-size entry).
 | Earth Fault Protection | `earthFaultProtectionEngine.js` (in `Protection.jsx`) | — | ✅ part of 32-test suite |
 | Relay Selection | `relaySelectionEngine.js` (in `Protection.jsx`) | — | ✅ part of 32-test suite |
 | Motor | `MotorCalculator.jsx` (UI) + `motorEngine.js` (calc, 2026-07-25) | 576 | ✅ 39 tests |
-| Contactor/OLR | `ContactorOLR.jsx` | 450 | ❌ logic embedded in component |
-| Cable | `CableCalculator.jsx` | 939 | ❌ logic embedded in component |
-| Earthing | `EarthingCalculator.jsx` | 303 | ❌ logic embedded in component |
-| Power Systems (transformer/fault/busbar/motor-starting) | `PowerSysCalculator.jsx` | 355 | ❌ logic embedded in component |
-| Generator Sizing | `GeneratorSizing.jsx` | 1295 | ❌ logic embedded in component |
-| Power Quality | `PQCalculator.jsx` | — | ❌ logic embedded in component |
-| Renewable Energy | `RenewableEnergyCalculator.jsx` | 863 | ❌ logic embedded in component |
-| Quick Math | `QuickMath.jsx` (uses `calcEngine.js`) | 838 | ❌ UI logic untested; `calcEngine.js` parser itself untested |
+| Contactor/OLR | `ContactorOLR.jsx` (UI) + `contactorOlrEngine.js` (calc, 2026-07-25) | 450 | ✅ 15 tests |
+| Cable | `CableCalculator.jsx` (UI) + `cableEngine.js` (calc, 2026-07-25) | 939 | ✅ 37 tests |
+| Earthing | `EarthingCalculator.jsx` (UI) + `earthingEngine.js` (calc, 2026-07-25) | 303 | ✅ 17 tests |
+| Power Systems (transformer/fault/busbar/motor-starting) | `PowerSysCalculator.jsx` (UI) + `powerSysEngine.js` (calc, 2026-07-25) | 355 | ✅ 16 tests |
+| Generator Sizing | `GeneratorSizing.jsx` (UI) + `generatorSizingEngine.js` (calc, 2026-07-25) | 1295 | ✅ 18 tests |
+| Power Quality | `PQCalculator.jsx` (UI) + `pqEngine.js` (calc, 2026-07-25) | 412 | ✅ 15 tests |
+| Renewable Energy | `RenewableEnergyCalculator.jsx` (already UI-only) + `src/lib/{generatorDerating,gridTieCompliance,hybridSizing}.js` (2026-07-25) | 863 | ✅ 35 tests (dependency libs; component itself was already engine-first) |
+| Quick Math | `QuickMath.jsx` (UI) + `src/lib/calcEngine.js` (parser/evaluator, 2026-07-25) | 838 | ✅ 49 tests |
 
 This table is the concrete map behind `debt.md`'s "no automated test suite for most modules" entry —
 kept here rather than duplicated in the debt register, since it's architectural fact, not a debt

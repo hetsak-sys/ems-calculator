@@ -1,4 +1,9 @@
 import React, { useState } from 'react'
+import {
+  dwightElectrodeResistance, ieee80TouchStepVoltage,
+  adiabaticConductorSizing, EARTHING_MATERIALS,
+  faultLoopImpedance,
+} from './earthingEngine'
 
 const TABS = [
   { id: 'electrode',  label: 'Electrode R'   },
@@ -53,25 +58,14 @@ function ElectrodeRes() {
   const [res, setRes]   = useState(null)
 
   const calc = () => {
-    const r = parseFloat(rho), l = parseFloat(L), dia = parseFloat(d)
-    const nr = parseInt(n), sp = parseFloat(s)
-    if ([r, l, dia].some(isNaN) || l <= 0 || dia <= 0) return
-
-    // Dwight's formula: R = (ρ/2πL)(ln(4L/d) - 1)
-    const R_single = (r / (2 * Math.PI * l)) * (Math.log(4 * l / dia) - 1)
-
-    // Multiple rods in parallel with spacing correction
-    let R_parallel = R_single
-    if (nr > 1) {
-      // Approximate: R_n ≈ R1/n × (1 + ρ/(2πR1·s·n))
-      R_parallel = R_single / nr
-    }
-
+    setRes(null) // COD-14: clear before validating, so an invalid resubmit never leaves a stale result on screen
+    const r = dwightElectrodeResistance({ rho, L, d, n, s })
+    if (!r) return
     setRes({
-      single:   R_single.toFixed(3),
-      parallel: R_parallel.toFixed(3),
-      ratio:    (R_single / R_parallel).toFixed(2),
-      pass:     R_parallel < 1.0,
+      single:   r.single.toFixed(3),
+      parallel: r.parallel.toFixed(3),
+      ratio:    r.ratio.toFixed(2),
+      pass:     r.pass,
     })
   }
 
@@ -108,22 +102,13 @@ function TouchStep() {
   const [res, setRes]     = useState(null)
 
   const calc = () => {
-    const rs = parseFloat(rho_s), h = parseFloat(hs), t = parseFloat(ts)
-    if ([rs, h, t].some(isNaN)) return
-
-    // IEEE 80 simplified — body resistance 1000 Ω, 50 kg person
-    // Cs = surface layer derating factor
-    const Cs = 1 - (0.09 * (1 - 100 / rs)) / (2 * h + 0.09)
-
-    // Tolerable touch voltage (IEEE 80 Eq 32, 50 kg)
-    const E_touch_50 = (1000 + 1.5 * Cs * rs) * (0.116 / Math.sqrt(t))
-    // Tolerable step voltage
-    const E_step_50 = (1000 + 6 * Cs * rs) * (0.116 / Math.sqrt(t))
-
+    setRes(null)
+    const r = ieee80TouchStepVoltage({ rhoS: rho_s, hs, ts })
+    if (!r) return
     setRes({
-      Cs:      Cs.toFixed(3),
-      touch:   E_touch_50.toFixed(1),
-      step:    E_step_50.toFixed(1),
+      Cs:    r.Cs.toFixed(3),
+      touch: r.touch.toFixed(1),
+      step:  r.step.toFixed(1),
     })
   }
 
@@ -156,24 +141,15 @@ function ConductorSizing() {
   const [tf, setTf]     = useState('1')       // fault duration s
   const [mat, setMat]   = useState('cu')      // material
 
-  const MAT = {
-    cu:  { k: 143, name: 'Copper (PVC insulated)' },
-    cu2: { k: 176, name: 'Copper (bare, welded)'  },
-    al:  { k:  95, name: 'Aluminium'              },
-    st:  { k:  78, name: 'Steel'                  },
-  }
+  const MAT = EARTHING_MATERIALS
 
   const [res, setRes] = useState(null)
 
   const calc = () => {
-    const i = parseFloat(If), t = parseFloat(tf)
-    if (isNaN(i) || isNaN(t)) return
-    const { k, name } = MAT[mat]
-    // IEC 60364-5-54: S = (I × √t) / k
-    const S = (i * Math.sqrt(t)) / k
-    const Smin = [1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95, 120, 150, 185, 240, 300].find(s => s >= S) || '>300'
-
-    setRes({ S: S.toFixed(1), Smin, name })
+    setRes(null)
+    const r = adiabaticConductorSizing({ If, tf, material: mat })
+    if (!r) return
+    setRes({ S: r.S.toFixed(1), Smin: r.Smin, name: r.name })
   }
 
   return (
@@ -224,21 +200,15 @@ function FaultLoop() {
   const [res, setRes] = useState(null)
 
   const calc = () => {
-    const v = parseFloat(Vs), zs = parseFloat(Zs)
-    const rc = parseFloat(Rc), re = parseFloat(Re), io = parseFloat(Iop)
-    if ([v, zs, rc, re, io].some(isNaN)) return
-
-    const Zloop = zs + rc + re          // total loop impedance
-    const Isc   = v / (Math.sqrt(3) * Zloop)  // 3-phase fault current (approx)
-    const If_1ph = v / (2 * (rc + re) + zs)   // L-E fault current
-    const pass  = If_1ph >= io * 5     // 5× for magnetic trip (Type B/C)
-
+    setRes(null)
+    const r = faultLoopImpedance({ Vs, Zs, Rc, Re, Iop })
+    if (!r) return
     setRes({
-      Zloop: Zloop.toFixed(3),
-      Isc:   Isc.toFixed(0),
-      If1:   If_1ph.toFixed(0),
-      pass,
-      ratio: (If_1ph / io).toFixed(1),
+      Zloop: r.Zloop.toFixed(3),
+      Isc:   r.Isc.toFixed(0),
+      If1:   r.If1.toFixed(0),
+      pass:  r.pass,
+      ratio: r.ratio.toFixed(1),
     })
   }
 
