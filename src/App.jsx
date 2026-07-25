@@ -1,19 +1,24 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, Suspense, lazy } from 'react'
 import { getTheme } from './theme'
 import Dashboard from './components/Dashboard'
-import QuickMath from './components/QuickMath'
-import MotorCalculator from './components/MotorCalculator'
-import CableCalculator from './components/CableCalculator'
-import Protection from './components/Protection'
-import EarthingCalculator from './components/EarthingCalculator'
-import FormulaReference from './components/FormulaReference'
-import ConvertCalculator from './components/ConvertCalculator'
 import HistoryView from './components/HistoryView'
 import Settings from './components/Settings'
-import PowerSysCalculator from './components/PowerSysCalculator'
-import PQCalculator from './components/PQCalculator'
-import RenewableEnergyCalculator from './components/RenewableEnergyCalculator'
 import LicenseGate from './components/LicenseGate'
+
+// Lazy-loaded: these are the heavy, tab-switched calculator modules (only one
+// rendered at a time via the renderScreen() switch below), so splitting them
+// out of the main bundle directly reduces initial/cold-start load size.
+// See docs/debt.md — "Main JS bundle chunk" entry — for why this was done.
+const QuickMath = lazy(() => import('./components/QuickMath'))
+const MotorCalculator = lazy(() => import('./components/MotorCalculator'))
+const CableCalculator = lazy(() => import('./components/CableCalculator'))
+const Protection = lazy(() => import('./components/Protection'))
+const EarthingCalculator = lazy(() => import('./components/EarthingCalculator'))
+const FormulaReference = lazy(() => import('./components/FormulaReference'))
+const ConvertCalculator = lazy(() => import('./components/ConvertCalculator'))
+const PowerSysCalculator = lazy(() => import('./components/PowerSysCalculator'))
+const PQCalculator = lazy(() => import('./components/PQCalculator'))
+const RenewableEnergyCalculator = lazy(() => import('./components/RenewableEnergyCalculator'))
 import { SiteProvider, useSite } from './components/SiteContext'
 import { WorkspaceProvider } from './components/WorkspaceContext'
 import { ResultCard, getPendingResult, clearPendingResult } from './components/shared'
@@ -187,7 +192,18 @@ export default function App() {
         className="flex-1 overflow-y-auto"
         style={{ paddingBottom: 'calc(60px + env(safe-area-inset-bottom))' }}
       >
-        {renderScreen()}
+        <Suspense
+          fallback={
+            <div
+              className="flex items-center justify-center h-full text-sm"
+              style={{ color: T.textMuted }}
+            >
+              Loading…
+            </div>
+          }
+        >
+          {renderScreen()}
+        </Suspense>
       </main>
 
       {/* ── PENDING RESULT RECOVERY BANNER ──────────────────────

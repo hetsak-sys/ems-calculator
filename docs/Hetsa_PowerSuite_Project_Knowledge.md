@@ -7,7 +7,9 @@
 
 ## 0. Bootstrap note [PRO-9]
 
-At the start of a session on this project, the working context is: (1) HAIOS Appendix A kernel, (2) this document, (3) whatever module/feature is the actual task. There is no separate `architecture.md` / `debt.md` / ADR index yet — this document currently absorbs those roles in condensed form (see §8 for the debt register in miniature). Splitting them out properly is itself a listed debt item (§8).
+At the start of a session on this project, the working context is: (1) HAIOS Appendix A kernel, (2) this document, (3) `docs/architecture.md`, `docs/debt.md`, and `docs/roadmap.md` (split out 2026-07-25 per Appendix B — see below), (4) whatever module/feature is the actual task. There is still no ADR index — no architecture decision so far has been big enough to warrant one; the first genuinely new-domain decision (§5.3 or a §5.2 candidate) should probably get one.
+
+**Update (2026-07-25):** the "no split `architecture.md`/`debt.md`/ADR index" debt item is now partially repaid. `docs/architecture.md` (the five HAIOS views, populated from existing documented facts, plus a module map), `docs/debt.md` (the full debt register), and `docs/roadmap.md` (the full §5 domain-expansion content) now exist as standalone files. This document's own §5 and §8 are now short pointers to them, not duplicated content — per [DOC-3], don't let this document and the split files drift; update whichever one is authoritative for a given fact, not both.
 
 **Update (2026-07-22):** this document itself was, until this session, only attached to the Claude Project — not tracked in the `hetsak-sys/ems-calculator` repository at all, in direct tension with [PRO-11] ("chat history is never the system of record"). It now lives at `docs/Hetsa_PowerSuite_Project_Knowledge.md` in the repo. Future sessions should bootstrap from the repo copy, not assume a Project-attached file is authoritative.
 
@@ -109,78 +111,12 @@ Every deviation from a HAIOS default below is deliberate and recorded, not accid
 
 ## 5. Domain Expansion Roadmap [LTP-2]
 
-This is the "why" and horizon for where PowerSuite goes next. Per [LTP-3], every candidate below gets checked against the product's purpose before being checked technically — and per [LTP-4], the instinct is to deepen the existing calculation core before widening into adjacent jobs (installation testing, e.g., is a genuinely different job — a checklist/record tool, not a calculator — and gets flagged as such below).
+**Moved to `/docs/roadmap.md`** (2026-07-25), per HAIOS Appendix B — this section previously held the
+full roadmap inline; it's now the standalone roadmap doc per [DOC-2]. Summary: §5.5 (Earth Fault
+Protection + Relay Selection) shipped and verified 2026-07-24; next candidates are the 11kV/MV generation
+domain or the remaining §5.2 table entries, each requiring the §5.1 three-question checklist run fresh
+before any code is written. See `roadmap.md` for full detail.
 
-### 5.1 The standing scoping checklist — run this before starting *any* item below
-
-Per [ARC-1] (technology/scope decisions are architecture decisions, not casual ones) and [DEC-1] (two-question filter), every new domain area gets these three questions answered explicitly before code is written:
-
-1. **Priority** — does this serve the mine/contractor/college institutional pitch soonest, or is it a "later" item?
-2. **Depth** — full design tool (derating, shading, string configuration, sag-tension curves...) or field-quick calculator (rule-of-thumb sizing + standard reference)?
-3. **New module vs. extension** — does it get its own tab, or fold into an existing module's charter ([DES-1]/[DES-2] — can the module's one-sentence charter still be written honestly if this folds in)?
-
-Other than §5.5 (now shipped, see below), none of the remaining candidates have been answered against this checklist yet — that's the next conversation, one domain at a time, not a batch decision.
-
-### 5.2 Candidate domains
-
-| Domain | Scope | Standards | Overlap vs. new |
-|---|---|---|---|
-| **Building/installation design** | Household/office/workshop/warehouse load assessment, DB/distribution board sizing, circuit design, area & floodlighting (lux levels, pole spacing) | SANS 10142-1, SANS 10114-1, SANS 10098, IEC 60364 | New — interior lumen method exists (Power Quality), but load assessment and area lighting layout don't |
-| **Renewable energy design** | PV array sizing, inverter/battery sizing, hybrid off-grid/grid-tie design, generator hybridization | IEC 62548, IEC 61727, NRS 097, IEC 62109 | **Shipped** — see §4 |
-| **MV/LV reticulation — overhead** | Conductor sizing, sag-tension, pole spacing, clearances, transformer placement | SANS 10280, IEC 61936-1, NRS 048 | New — distinct from single-run cable sizing already in Cable module |
-| **MV/LV reticulation — underground** | Cable sizing for direct-buried/duct runs, derating, jointing, route fault levels | IEC 60502, SANS 1339, IEC 60909 | Extension of Cable module logic |
-| **Installation testing** | IR, Ze/Zs, RCD trip time/current, polarity, continuity — SANS 10142 test schedule with pass/fail | SANS 10142-1 Annex, IEC 60364-6 | New job type — a commissioning/record tool, not a calculator; likely its own module by charter test ([DES-2]) |
-| **Feeder protection, grading & coordination** | IDMT curve selection, discrimination margins, time-current grading | IEC 60255, IEEE 242, MHSA | **Substantially shipped** as Protection Coordination TCC Study — see §4 |
-| **Earth fault protection (expanded)** | NER sizing (exists), earth fault relay settings, sensitive earth fault (SEF) for HR and solidly-earthed systems | IEC 60255, MHSA | **Shipped and verified on-device (2026-07-24)** — see §4/§5.5 |
-| **Relay selection** | Overcurrent/earth fault/differential relay type by application, CT ratio/class matching | IEC 60255, IEC 61869 | **Shipped and verified on-device (2026-07-24)** — see §4/§5.5 |
-| **11 kV generator power generation** | See §5.3 — flagged separately, deliberately not folded into the table above | — | New territory, adjacent to but distinct from existing generator sizing |
-
-### 5.3 Power generation via 11 kV generators — called out separately
-
-Existing Power Systems generator sizing (ISO 8528-1) targets LV gensets — typical field/standby power. **11 kV generation is medium-voltage territory** and pulls in a materially different rule set, not just a bigger number:
-
-- **Machine standards:** IEC 60034 (rotating electrical machines) governs the generator itself, not ISO 8528-1 alone, once you're at MV.
-- **Neutral earthing method** at the generator — NER placement/sizing at the generator neutral is a different problem from NER at a downstream transformer (already in Protection); resistance-earthed vs. solidly-earthed generator neutrals have different fault behaviors.
-- **Generator protection:** differential protection, restricted earth fault (REF), loss-of-excitation, reverse power, over/under-frequency — a distinct protection philosophy from feeder protection. (Relay Selection's `relaySelectionEngine.js` deliberately treats this as out-of-scope — see §5.5 — rather than guessing a recommendation.)
-- **Paralleling/synchronizing:** voltage/frequency/phase matching before closing onto a busbar or grid — a genuinely new calculation domain (synchroscope logic, synchronizing check relays).
-- **Step-up/interconnection:** whether the generator feeds an 11 kV distribution network directly or steps up/down, and — if paralleling to the grid — NRS 048/097 embedded-generation compliance.
-- **AVR/voltage regulation** behavior under load, relevant to motor-starting-comparison logic that already exists for LV.
-
-This is a "new module vs. extension" question in its own right (§5.1): it could live as an MV-generation sub-tab inside Power Systems (closest existing charter), or as its own module if the scope grows to include paralleling/synchronizing tools, which are a different enough workflow to strain Power Systems' one-sentence charter. **Recommend scoping this as its own conversation** rather than deciding here.
-
-### 5.4 Explicit not-doing (for now) [LTP-2]
-
-Nothing above is being ruled out permanently — but until at least one domain has gone through §5.1's checklist and shipped, no others should be started in parallel. Sprawl into unrelated jobs before deepening any one of them is exactly the failure mode [LTP-4] warns about.
-
-### 5.5 Deepening within Protection: Earth Fault Protection + Relay Selection — SHIPPED (2026-07-24)
-
-With Protection's original eight sub-tabs verified (§7), the two nearest "deepen before widening" candidates were **Earth Fault Protection (expanded)** and **Relay Selection**, both extensions of the existing Protection charter rather than new modules. Hertz confirmed this scoping on 2026-07-23 against §5.1:
-
-1. **Priority:** soonest — SEF settings and relay-type selection are core mine-electrical-department daily work, directly relevant to the MHSA-grounded institutional pitch.
-2. **Depth:** field-quick calculator — rule-of-thumb sizing plus standard reference tables (CT ratio/class matching, relay-type-by-application), not a full protection-study/configuration package.
-3. **New module vs. extension:** extension — both fold into Protection's existing charter without straining it.
-
-**Delivered, engine-first per HAIOS approach conventions:**
-
-- **`earthFaultProtectionEngine.js`** (committed 2026-07-23, part of the 32-test suite alongside `relaySelectionEngine.js`): two structurally distinct flows.
-  - **Flow A — HR/resistance-earthed:** pickup as % of the NER-limited maximum fault current (`Vln / R`, reusing the same formula as NER Sizing/NCRT). Default range 10–20% — industry/mining practice (MINING.com NGR guidance, i-gard application notes), explicitly **not** an IEC/MHSA numeric clause, and labeled as such in the UI. Warns if pickup exceeds 100% (relay would never operate) or falls below ~1% of CT rated primary (CT summation/measurement-error risk).
-  - **Flow B — solidly-earthed feeder:** pickup as an absolute secondary current (no NER to reference a percentage against) plus a time delay. Default range 5–10A secondary, ~1s delay — utility distribution practice, again explicitly not an IEC numeric clause. Warns if delay is under 1s (nuisance-trip risk) or pickup falls outside the 5–10A convention.
-  - The two flows are deliberately kept as separate functions/components (see §3) so a %-based value can never be silently applied where an absolute-amps value belongs, or vice versa.
-
-- **`relaySelectionEngine.js`** (same commit): application + earthing-method → relay function recommendation (feeder/transformer/motor/busbar, each with an HR and solid-earth variant, citing IEEE 242 Figs 196/209 for transformer REF guidance), plus CT protection accuracy class (5P/10P) sizing from required ALF (`max fault current ÷ CT rated primary`, rounded up to the standard 5/10/15/20/30 series per IEC 61869-2). Deliberately flags PX (low-impedance/balanced) class selection as **not covered** — that needs a knee-point EMF calculation this wizard doesn't perform. Generator applications return an explicit out-of-scope result (see §5.3) rather than a guessed recommendation, per [AI-10]/[AI-12].
-
-- **UI (this session, 2026-07-24):** both engines wired into `Protection.jsx` as two new sub-tabs — **Earth Fault** (segmented control between the two flows) and **Relay Select** (application picker → earthing method → fault current/CT inputs → recommendation). Both surface the engine's warnings, compliance notes, and standards references, and export through the existing `ResultCard`/PDF path.
-
-**Verified on-device (2026-07-24), against hand-calculated expected values:**
-- HR flow: 11kV system, 30Ω NER, 15% pickup → 211.70A max fault current, 31.75A primary pickup, 0.318A secondary (÷100 CT ratio) — matches formula exactly, no spurious warnings.
-- Solid-earth flow: 6A secondary × 200 CT ratio → 1200A primary — matches, no spurious warnings (6A and 1s delay both sit inside the documented conventions).
-- Relay Selection: 2500A max fault / 200A CT rated primary → required ALF 12.5 → correctly rounds up to 5P15, for all four applications (Feeder, Transformer, Motor, Busbar), each returning the correct function set and note (Transformer correctly adds 87G/REF with the IEEE 242 citation; Busbar correctly stays earthing-agnostic at the differential-scheme level).
-- Generator application: renders the out-of-scope message cleanly — no crash, no blank state, earthing/CT inputs correctly hidden.
-- Kill-and-reopen mid-input on both tabs: resets to empty on relaunch, no crash — correct behavior, since neither tab persists draft input (only the result-card recovery banner persists across a kill).
-
-§5.5 is now complete end-to-end. No further work is queued here — see the §0 handoff note for what's next.
-
----
 
 ## 6. Licensing System — Current State
 
@@ -216,29 +152,12 @@ With Protection's original eight sub-tabs verified (§7), the two nearest "deepe
 
 ---
 
-## 8. Debt Register (condensed) [DBT-2]
+## 8. Debt Register [DBT-2]
 
-A full `/docs/debt.md` doesn't exist yet as a separate file — logged here until it's worth splitting out.
-
-| Debt | Why taken | Repayment trigger | Severity |
-|---|---|---|---|
-| No automated test suite for most modules | Solo-dev velocity; manual verification so far. `protectionCoordinationEngine.js` (40 tests) and `earthFaultProtectionEngine.js`/`relaySelectionEngine.js` (32 tests) are the exceptions | Before any second developer joins, or before any calculation module is materially reworked | **Risky** — calculation logic is safety-relevant ([TST-2] priority 1 territory); this is the debt item closest to crossing into [DBT-4] forbidden-debt if left too long for the remaining uncovered modules. Confirmed 2026-07-23: still just tracked, no active work wanted right now |
-| No CI test/lint gate on `main` (a `deploy.yml` workflow exists but only builds+deploys to GitHub Pages, doesn't run tests) | No team-coordination problem yet; deploy workflow predates the test suite | Before public distribution, or before a second developer joins — add an `npm test` step to `deploy.yml` as the cheap first fix | Cosmetic-to-risky. Confirmed 2026-07-24: still just tracked; description corrected from "no CI pipeline exists" (see §2) |
-| No split `architecture.md`/`debt.md`/ADR index | This document currently absorbs those roles | Before the domain expansion (§5) begins in earnest — new architecture decisions (11 kV generation, reticulation) deserve real ADRs, not a table row | Risky, rising |
-| ~~Six Protection sub-tabs shipped but never run on-device~~ | — | **Repaid (2026-07-22)** — all six verified on-device against hand-calculated expected values | Closed |
-| ~~Stale calculation result not cleared on validation failure~~ | Pre-existing since each module was first built; found via on-device Insulation PI/DAR testing | **Repaid (2026-07-22)** — `setResult(null)` added immediately after `setError('')` at the top of all 14 affected `calculate()` functions, before any validation runs. Re-verified on-device | Closed |
-| ~~Round-to-standard-then-reference ordering pattern unchecked elsewhere~~ | The zBase bug (fixed 2026-07-22) was a specific instance of a general pattern risk: any calc that rounds to a standard size and then references that standard size needs the rounding step first | **Repaid (2026-07-24)** — grepped every `nextStd(`-style call site across the codebase (`GeneratorSizing.jsx` ×3, `RenewableEnergyCalculator.jsx` ×1) plus broader `.find()`-based standard-size lookups in `CableCalculator.jsx`; traced each downstream usage. All correctly reference the rounded/standard value, not the pre-rounded input — the `zBase`/`stdKVA` fix holds and no sibling instance was found | Closed |
-| ~~PDF export: Ω/φ/Φ/arrow characters render as garbage glyphs sitewide~~ | jsPDF's built-in Helvetica font is WinAnsi/Latin-1 only | **Repaid (2026-07-22)** — `sanitizeForPdf()` added to shared rendering path; header title wrapped via `splitTextToSize`; verified via rendered-and-extracted test PDFs | Closed |
-| ~~PDF export: section title doesn't repeat across a page break~~ | Same root-cause investigation as the glyph fix | **Repaid (2026-07-22)** — `drawTable()` repeats the section title marked "(cont.)" on page breaks; verified with a forced 70-row test table | Closed |
-| ~~[COD-14] HAIOS amendment drafted but not yet written into the handbook~~ | Amendment was scoped verbally in-session; committing it needed a deliberate v2.2 changelog entry per [PRO-7]/[PRO-8], not a casual edit | **Repaid (2026-07-23)** — handbook amended to v2.2: version header bumped, [COD-14] rule added to §10 (State hygiene), changelog entry added. Verified on the actual file via `Select-String` matching all three edits. This project's Project-knowledge attachment updated to match | Closed |
-| ~~`npm audit` flagged 6 vulnerabilities (1 critical), never reviewed~~ | Surfaced in build output per [MOB-7] post-build check, previously never reviewed | **Partially repaid (2026-07-23)** — `brace-expansion` and `dompurify` resolved via `npm audit fix` (non-breaking); `esbuild`/`vite` and `tar`/`@capacitor/cli` remain, deliberately deferred — see next two entries | Downgraded from risky to tracked-and-deferred |
-| **`esbuild ≤0.24.2` moderate vuln, fix requires `vite@8.1.5` (breaking, two majors ahead of validated 5.4.21)** | Vulnerability (GHSA-67mh-4wv8-2f99) only allows a malicious website to read responses from a *running local dev server* — not reachable in the built/shipped APK. Not worth a Vite major-version migration on its own | Bundle with any deliberate future Vite upgrade (e.g. if a needed feature/plugin requires it); revisit if a higher-severity esbuild/vite advisory appears | Low — dev-machine-only exposure while `npm run dev` is actively running. Confirmed 2026-07-23: still just tracked |
-| **`tar ≤7.5.18` critical vuln (path traversal / arbitrary file write), fix requires `@capacitor/cli@8.4.2` (breaking, ahead of pinned Capacitor 6 stack)** | Multiple advisories (GHSA-34x7-hfp2-rc4v and others) around hardlink/symlink path traversal during tar extraction. Only exercised when `@capacitor/cli` extracts an archive (installing/updating platforms or plugins) on the dev machine — never reaches the shipped runtime/APK. A blind `--force` bump risks breaking `cap sync`/`cap copy` against the Capacitor 6-pinned project per [MOB-7] | Bundle with a deliberate, planned Capacitor version upgrade (own ADR-level decision per [ARC-1]), not a standalone `--force` run. Re-assess urgency if `@capacitor/cli` is ever run against an untrusted/third-party plugin archive, which raises real exploitability | Real but currently low-likelihood — critical CVSS severity, but the vulnerable code path isn't exercised in this project's actual workflow today. Confirmed 2026-07-23: still just tracked |
-| **Main JS bundle chunk is 844.86 kB (261.39 kB gzip)** — Vite's own build-output size warning, first noticed 2026-07-23 during the post-audit-fix build check | Never previously looked at; app has grown across many modules without code-splitting being revisited | Worth investigating before/alongside any further module additions (§5) — check impact on cold-start time against the [PERF-1] ≤3s budget on the actual reference device, not just build-log size. Candidate fix: dynamic `import()` per module tab, or `manualChunks` for heavy libs (jsPDF, html2canvas) | Cosmetic-to-risky — no confirmed on-device performance problem yet, but the [PERF-1] budget is stated per HAIOS and this hasn't been measured against it. Confirmed 2026-07-23: still just tracked. The bundle grew again with the Earth Fault/Relay Selection sub-tabs (2026-07-24) but no new warning threshold was crossed |
-| ~~Repo-copy of this knowledge doc was stale relative to in-session decisions~~ — the doc committed in `772322a` didn't reflect the six-sub-tab verification, stale-result fix, combined report, or PDF-encoding closures; those existed only in chat until this update | Doc updates were drafted in conversation but the corresponding `git add`/`commit` for the doc file itself was never executed alongside the code commits | **Repaid (2026-07-23)** — confirmed via `git log`/`git push` output that commit `e74481e` landed on `origin/main` | Closed |
-| **HAIOS master-copy vs. per-project Claude Project attachments can drift** — the handbook lives as a single master file (`D:\Projects\Master Project Knowledge for all Projects\HETSA_AI_Operating_System_v2.md`) shared across projects, but each project's Claude Project attaches its own copy of it. Amending the master (as done this session, v2.1→v2.2) doesn't automatically propagate to other projects' attachments | Structural consequence of the master-copy-plus-per-project-attachment setup; no automatic sync mechanism exists between them | Whenever the master handbook is amended, manually re-sync every other project's Claude Project attachment in the same session — don't let it wait. **This project's own attachment is synced; other projects are not yet confirmed synced** | Risky if left unchecked across many projects — a project silently running on a stale handbook version could miss a binding rule ([COD-14] itself is a good example of the kind of rule this risk applies to) |
-
----
+**Moved to `/docs/debt.md`** (2026-07-25), per HAIOS Appendix B — this section previously held the full
+condensed register inline; it's now the standalone debt register doc. Current top item remains "no
+automated test suite for most modules" (Risky severity) — see `debt.md` for the full register and
+`architecture.md`'s Module Map for exactly which files are covered vs. not.
 
 ## 9. Key Learnings & Principles
 

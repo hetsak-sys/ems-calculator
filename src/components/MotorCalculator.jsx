@@ -3,9 +3,12 @@ import { SubTabBar, SelectInput, CalcButton, ResultCard, useResultCard, UnitNumI
 import { useSite } from './SiteContext'
 import { useWorkspace } from './WorkspaceContext'
 import ContactorOLR from './ContactorOLR'
+import {
+  pf, motorFla, newElec327MSettings, epcMs1Settings, MS1_SETTINGS,
+  mccbBreakerSizing, motorReaccelerationVoltageDip, ieEfficiencyComparison,
+} from './motorEngine'
 
 const SQRT3 = Math.sqrt(3)
-const pf = (v) => parseFloat(String(v).replace(',', '.')) || 0
 
 function NumInput({ label, value, onChange, unit, placeholder = '0' }) {
   return (
@@ -80,18 +83,12 @@ function FlaCalc({ addHistory, onFlaCalculated }) {
   const calculate = () => {
     setError('')
     setResult(null)
-    const V = pf(voltage), PF = pf(pfVal), EFF = pf(eff) / 100
-    const powerW = inputType === 'kw' ? pf(kw) * 1000 : pf(hp) * 745.7
-    if (!powerW || !V || !PF || !EFF) { setError('Fill in all fields'); return }
-    const inputPower = powerW / EFF
-    const fla = phase === '3ph' ? inputPower / (SQRT3 * V * PF) : inputPower / (V * PF)
-    const kva = (phase === '3ph' ? SQRT3 * V * fla : V * fla) / 1000
-    const kvar = kva * Math.sqrt(1 - PF * PF)
-    const ctRatio = Math.ceil(fla * 1.25 / 5) * 5
-    const res = { fla: fla.toFixed(2), kva: kva.toFixed(3), kvar: kvar.toFixed(3), inputkW: (inputPower/1000).toFixed(3), startCurrent: (fla*6).toFixed(1), ctRatio }
+    const r = motorFla({ phase, inputType, kw, hp, voltage, pfVal, eff })
+    if (!r) { setError('Fill in all fields'); return }
+    const res = { fla: r.fla.toFixed(2), kva: r.kva.toFixed(3), kvar: r.kvar.toFixed(3), inputkW: r.inputkW.toFixed(3), startCurrent: r.startCurrent.toFixed(1), ctRatio: r.ctRatio }
     setResult(res)
-    addHistory({ tab: 'Motor-FLA', expr: `${phase} ${inputType==='kw'?kw+'kW':hp+'HP'} @${V}V`, result: `${res.fla}A` })
-    const snapshot = { kw: inputType==='kw'?kw:String(pf(hp)*0.7457), voltage: String(V), phase, pfVal: String(PF), eff: String(EFF*100), fla: res.fla }
+    addHistory({ tab: 'Motor-FLA', expr: `${phase} ${inputType==='kw'?kw+'kW':hp+'HP'} @${pf(voltage)}V`, result: `${res.fla}A` })
+    const snapshot = { kw: inputType==='kw'?kw:String(pf(hp)*0.7457), voltage: String(pf(voltage)), phase, pfVal: String(pf(pfVal)), eff: String(pf(eff)), fla: res.fla }
     if (onFlaCalculated) onFlaCalculated(snapshot)
     setFlaSnapshot(snapshot)
   }
@@ -175,16 +172,9 @@ function NewElec327M() {
   const calculate = () => {
     setError('')
     setResult(null)
-    const FLA = pf(fla), CT = pf(ctP)
-    if (!FLA || !CT) { setError('Enter FLA and CT primary'); return }
-    if (FLA > CT) { setError('FLA cannot exceed CT primary rating'); return }
-    const loadRatio = (FLA / CT) * 100
-    const maxLoadSetting = Math.min(loadRatio * 1.10, 100)
-    const ST = pf(startTime)
-    let mult, dial
-    if (ST <= 20) { mult = '×1'; dial = ST }
-    else { mult = '×4'; dial = (ST / 4).toFixed(1) }
-    setResult({ loadRatio: loadRatio.toFixed(1), maxLoadSetting: maxLoadSetting.toFixed(1), maxStarts: Math.min(Math.max(pf(starts),1),20), dial, mult, ct: `${CT}/5` })
+    const r = newElec327MSettings({ fla, ctP, starts, startTime })
+    if (r.error) { setError(r.error); return }
+    setResult({ loadRatio: r.loadRatio.toFixed(1), maxLoadSetting: r.maxLoadSetting.toFixed(1), maxStarts: r.maxStarts, dial: r.dial, mult: r.mult, ct: r.ct })
   }
 
   return (
@@ -225,22 +215,18 @@ function EpcMs1() {
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
 
-  const MS1_SETTINGS = [30, 50, 100, 150, 200, 250, 300, 400, 500]
-
   const calculate = () => {
     setError('')
     setResult(null)
-    const V = pf(voltage)
-    if (!V) { setError('Enter system voltage'); return }
-    const Vln = V / SQRT3
-    const RE = pf(earthRes)
-    const L = pf(cableLen)
-    const minFault = RE > 0 ? (Vln / RE * 1000).toFixed(0) : null
-    const C = L > 0 ? 0.4e-6 * (L / 1000) : 0
-    const capLeakage = L > 0 ? (V * 2 * Math.PI * 50 * C * 1000).toFixed(1) : null
-    const settingMa = pf(sensitivity)
-    const recommended = MS1_SETTINGS.find(s => s >= settingMa) || 500
-    setResult({ Vln: Vln.toFixed(1), minFault, capLeakage, settingMa: recommended, instantaneous: Math.min(recommended * 4, 500) })
+    const r = epcMs1Settings({ voltage, earthRes, cableLen, sensitivity })
+    if (r.error) { setError(r.error); return }
+    setResult({
+      Vln: r.Vln.toFixed(1),
+      minFault: r.minFault !== null ? r.minFault.toFixed(0) : null,
+      capLeakage: r.capLeakage !== null ? r.capLeakage.toFixed(1) : null,
+      settingMa: r.settingMa,
+      instantaneous: r.instantaneous,
+    })
   }
 
   return (
@@ -371,7 +357,6 @@ function OverloadCalc({ addHistory }) {
 }
 
 // ── Breaker ────────────────────────────────────────────────────────────────
-const MCCB_TRIPS = [6,10,16,20,25,32,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600]
 
 function BreakerCalc({ addHistory, flaSnapshot }) {
   const snap = flaSnapshot || {}
@@ -383,13 +368,10 @@ function BreakerCalc({ addHistory, flaSnapshot }) {
   const calculate = () => {
     setError('')
     setResult(null)
-    const FLA = pf(fla)
-    if (!FLA) { setError('Enter FLA'); return }
-    const minRating = FLA * 1.25
-    const tripRating = MCCB_TRIPS.find(t => t >= minRating) || 1600
-    const SF = pf(startFactor) || 6
-    setResult({ tripRating, minRating: minRating.toFixed(1), magMin: (FLA*SF*1.2).toFixed(0), magMax: (FLA*SF*1.5).toFixed(0) })
-    addHistory({ tab: 'Breaker', expr: `FLA=${FLA}A`, result: `${tripRating}A` })
+    const r = mccbBreakerSizing({ fla, startFactor })
+    if (r.error) { setError(r.error); return }
+    setResult({ tripRating: r.tripRating, minRating: r.minRating.toFixed(1), magMin: r.magMin.toFixed(0), magMax: r.magMax.toFixed(0) })
+    addHistory({ tab: 'Breaker', expr: `FLA=${pf(fla)}A`, result: `${r.tripRating}A` })
   }
 
   return (
@@ -457,25 +439,10 @@ function Reacceleration({ addHistory }) {
 
   const calculate=()=>{
     setError('')
-    const KW=pf(motorKW),V=pf(voltage),KVA=pf(xfmrKVA),PF=pf(pfVal),EFF=pf(eff)/100
-    if(!KW||!V||!KVA){setError('Enter motor kW, voltage, and transformer kVA');return}
-    const inputPower=KW/EFF
-    const fla=inputPower*1000/(SQRT3*V*PF)
-    const startI=fla*6  // DOL starting current
-    const startKVA=(SQRT3*V*startI)/1000
-    // Transformer impedance (typical 5–6% for distribution transformers)
-    const Zt=0.055  // 5.5% typical
-    const Zs=V*V/(KVA*1000)  // source impedance
-    const Zxfmr=Zt*V*V/(KVA*1000)
-    // Voltage dip = (starting kVA) / (transformer kVA) × Zt × 100%
-    const voltageDip=(startKVA/KVA)*Zt*100
-    const voltageAtStart=V*(1-voltageDip/100)
-    // Available torque reduces as V²
-    const torqueReduction=(voltageAtStart/V)**2*100
-    // Check if motor will start (needs >60% torque for typical loads)
-    const willStart=torqueReduction>=60
-    setResult({fla:fla.toFixed(1),startI:startI.toFixed(1),startKVA:startKVA.toFixed(1),voltageDip:voltageDip.toFixed(1),voltageAtStart:voltageAtStart.toFixed(1),torqueReduction:torqueReduction.toFixed(1),willStart})
-    addHistory({tab:'Reaccel',expr:`${KW}kW @ ${KVA}kVA xfmr`,result:`Dip=${voltageDip.toFixed(1)}%`})
+    const r = motorReaccelerationVoltageDip({ motorKW, voltage, xfmrKVA, pfVal, eff })
+    if (r.error) { setError(r.error); return }
+    setResult({fla:r.fla.toFixed(1),startI:r.startI.toFixed(1),startKVA:r.startKVA.toFixed(1),voltageDip:r.voltageDip.toFixed(1),voltageAtStart:r.voltageAtStart.toFixed(1),torqueReduction:r.torqueReduction.toFixed(1),willStart:r.willStart})
+    addHistory({tab:'Reaccel',expr:`${pf(motorKW)}kW @ ${pf(xfmrKVA)}kVA xfmr`,result:`Dip=${r.voltageDip.toFixed(1)}%`})
   }
 
   return(
@@ -515,36 +482,13 @@ function IeComparison({ addHistory }) {
   const [kw,setKw]=useState(''),[hoursPerYear,setHours]=useState('4000'),[tariff,setTariff]=useState('2.50')
   const [currency,setCurrency]=useState('ZAR'),[result,setResult]=useState(null),[error,setError]=useState('')
 
-  // IE efficiency levels (IEC 60034-30-1) — approximate for 3ph 50Hz at rated load
-  const IE_EFF = {
-    'IE1': {0.75:72.1,1.1:75.0,1.5:77.2,2.2:79.7,3:81.5,4:83.1,5.5:84.7,7.5:86.0,11:87.6,15:88.7,18.5:89.3,22:89.9,30:90.7,37:91.2,45:91.7,55:92.1,75:92.8,90:93.1,110:93.5,132:93.8,160:94.0,200:94.2},
-    'IE2': {0.75:77.4,1.1:79.6,1.5:81.3,2.2:83.2,3:84.6,4:85.8,5.5:87.0,7.5:88.1,11:89.4,15:90.3,18.5:90.9,22:91.3,30:92.0,37:92.5,45:92.9,55:93.2,75:93.8,90:94.1,110:94.4,132:94.7,160:94.9,200:95.1},
-    'IE3': {0.75:80.7,1.1:82.7,1.5:84.2,2.2:85.9,3:87.1,4:88.1,5.5:89.2,7.5:90.1,11:91.2,15:91.9,18.5:92.4,22:92.7,30:93.3,37:93.7,45:94.0,55:94.3,75:94.7,90:95.0,110:95.2,132:95.4,160:95.6,200:95.8},
-    'IE4': {0.75:82.5,1.1:84.5,1.5:85.9,2.2:87.4,3:88.5,4:89.4,5.5:90.3,7.5:91.0,11:92.0,15:92.7,18.5:93.1,22:93.4,30:94.0,37:94.4,45:94.7,55:95.0,75:95.4,90:95.6,110:95.8,132:96.0,160:96.2,200:96.4},
-  }
-
-  const findEff=(level,kw)=>{
-    const sizes=Object.keys(IE_EFF[level]).map(Number).sort((a,b)=>a-b)
-    const closest=sizes.reduce((prev,curr)=>Math.abs(curr-kw)<Math.abs(prev-kw)?curr:prev)
-    return IE_EFF[level][closest]
-  }
-
   const calculate=()=>{
     setError('')
-    const KW=pf(kw),H=pf(hoursPerYear),T=pf(tariff)
-    if(!KW||!H||!T){setError('Enter motor kW, operating hours, and tariff');return}
-    const levels=['IE1','IE2','IE3','IE4']
-    const results=levels.map(level=>{
-      const eff=findEff(level,KW)/100
-      const inputKW=KW/eff
-      const annualKWh=inputKW*H
-      const annualCost=annualKWh*T
-      return{level,eff:(eff*100).toFixed(1),inputKW:inputKW.toFixed(2),annualKWh:annualKWh.toFixed(0),annualCost:annualCost.toFixed(2)}
-    })
-    const ie1Cost=pf(results[0].annualCost)
-    const savings=results.map(r=>({...r,saving:(ie1Cost-pf(r.annualCost)).toFixed(2)}))
-    setResult(savings)
-    addHistory({tab:'IE Compare',expr:`${KW}kW ${H}h/yr`,result:`IE3 saves ${savings[2].saving} ${currency}/yr`})
+    const r = ieEfficiencyComparison({ kw, hoursPerYear, tariff })
+    if (r.error) { setError(r.error); return }
+    const results = r.map(x => ({ level: x.level, eff: x.eff.toFixed(1), inputKW: x.inputKW.toFixed(2), annualKWh: x.annualKWh.toFixed(0), annualCost: x.annualCost.toFixed(2), saving: x.saving.toFixed(2) }))
+    setResult(results)
+    addHistory({tab:'IE Compare',expr:`${pf(kw)}kW ${pf(hoursPerYear)}h/yr`,result:`IE3 saves ${results[2].saving} ${currency}/yr`})
   }
 
   return(
