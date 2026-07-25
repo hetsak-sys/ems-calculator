@@ -74,7 +74,7 @@
 
 import { useState, useMemo, Fragment } from 'react'
 import {
-  TRAFO_SIZES, START_MULT, nextStd, pf,
+  START_MULT, pf,
   knownLoadSizing, loadScheduleTotals, generatorSizingFromTotals,
   transformerSizing, faultLevelFromImpedance,
 } from './generatorSizingEngine'

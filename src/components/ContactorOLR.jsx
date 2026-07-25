@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { SQRT3, pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, ResultCard, useResultCard, UnitNumInput, POWER_UNITS, VOLTAGE_UNITS } from './shared'
+import { pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, ResultCard, useResultCard, UnitNumInput, POWER_UNITS, VOLTAGE_UNITS } from './shared'
 import { useSite } from './SiteContext'
 import { COIL_CODES, contactorOlrSelection } from './contactorOlrEngine'
 

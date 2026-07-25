@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { SQRT3, pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, SubTabBar, UnitNumInput, VOLTAGE_UNITS, ResultCard, useResultCard } from './shared'
+import { pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, SubTabBar, UnitNumInput, VOLTAGE_UNITS, useResultCard } from './shared'
 import { useSite } from './SiteContext'
 import { useWorkspace } from './WorkspaceContext'
 import {
-  CABLE_DATA, XLPE_FACTOR, AL_FACTOR, AMBIENT, GROUP, INSTALL,
+  CABLE_DATA, AMBIENT, GROUP, INSTALL,
   cableSizing, cableVoltageDropDetailed, cableShortCircuitCurrent,
-  TRAILING, trailingCableSizing,
+  trailingCableSizing,
   CONDUIT_SIZES, CABLE_OD, conduitFill,
   GLAND_SIZES, CABLE_OD_TABLE, glandSelection,
   scheduleAutoSize, vfdCableSizing,
