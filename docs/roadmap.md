@@ -86,22 +86,24 @@ Three §5.2 candidates run through the §5.1 checklist together in one scoping p
 
 **Build order (per [LTP-4], deepen before widening):**
 1. ~~MV/LV Reticulation — Underground (extends a shipped module, smallest lift)~~ — **shipped and on-device verified, 2026-07-26 — see §5.6.2**
-2. Building/Installation Design (new module) — **next up**
+2. Building/Installation Design (new module) — **in progress: Load Assessment built and on-device verified 2026-07-26, 3 sub-tabs remain**
 3. MV/LV Reticulation — Overhead (new module, most open-ended depth question)
 
-#### 5.6.1 Building/Installation Design
+#### 5.6.1 Building/Installation Design — IN PROGRESS (Load Assessment built, 2026-07-26)
 
 | Question | Answer |
 |---|---|
 | **Priority** | High — load assessment, DB sizing, and circuit design (SANS 10142) are core daily work for contractors and exactly what training colleges teach. Directly serves the contractor/college leg of the institutional pitch. |
 | **Depth** | Field-quick calculator, matching the established PowerSuite pattern (rule-of-thumb sizing + standard reference tables), not a full design suite. |
-| **New module vs. extension** | **New module** — "Installation Design." |
+| **New module vs. extension** | **New module** — "Installation Design." Built as a new dashboard tile/screen (`InstallationDesign.jsx` + `installationDesignEngine.js`), lazy-loaded per the existing per-module code-splitting pattern. |
 
-**Proposed scope (sub-tabs), for confirmation before build starts:**
-- **Load Assessment** — diversity factors per SANS 10142 Annex, connected load → maximum demand.
-- **DB Sizing** — circuit count / breaker sizing / DB way-count reference from assessed load.
-- **Circuit Design** — final-circuit sizing; cross-references `cableEngine.js` rather than duplicating its logic (per [ARC-1]/[DEC-2], reuse the existing engine, don't fork it).
-- **Area Lighting** — exterior/floodlighting lux levels and pole spacing (SANS 10114-1), extending the lux-based method already used in Power Quality's interior Lighting sub-tab, but kept here rather than in PQ since outdoor photometric layout (pole spacing, mounting height) is a distinct enough job to strain PQ's charter if folded in there.
+**Sub-tabs (4 planned, 1 built so far):**
+1. **Load Assessment** — **built, tested, and on-device verified (2026-07-26)** — all scenarios in `docs/on_device_checklist_installation_design.md` matched exactly, including the dashboard tile, warning checks, and PDF export. **Not yet confirmed committed/pushed to `origin/main`.**
+2. **DB Sizing** — circuit count / breaker sizing / DB way-count reference from assessed load. Not started.
+3. **Circuit Design** — final-circuit sizing; cross-references `cableEngine.js` rather than duplicating its logic (per [ARC-1]/[DEC-2], reuse the existing engine, don't fork it). Not started.
+4. **Area Lighting** — exterior/floodlighting lux levels and pole spacing (SANS 10114-1), extending the lux-based method already used in Power Quality's interior Lighting sub-tab, but kept here rather than in PQ since outdoor photometric layout (pole spacing, mounting height) is a distinct enough job to strain PQ's charter if folded in there. Not started.
+
+**Significant finding during Load Assessment's build (2026-07-26) — changes the original scope note above:** the original "diversity factors per SANS 10142 Annex" framing assumed a lookup-table shape, matching how Underground Reticulation was built. Verified directly against source text (both SANS 10142-1 edition 1.8 and edition 2.0 PDFs) that this doesn't exist: SANS 10142-1's own load-estimation clause (5.2.1/5.3.1) states its residential-load annex (Annex D/C, renamed between editions) "gives an example... but the method is not to be regarded as an exact method." Traced further to IEC 60364-1 (the standard SANS 10142-1 is harmonized from) — Clause 311 "Maximum demand and diversity" itself says "Guidance on the calculation of diversity is under consideration." Neither the international parent standard nor the national standard mandates a diversity table; both explicitly leave it to "a registered person or an electrical consultant." **Load Assessment was built accordingly as a tally + user-supplied-demand-factor calculator, not a table lookup** — see the sourcing note at the top of `installationDesignEngine.js` for full detail, and `docs/on_device_checklist_installation_design.md` for the verification scenario.
 
 **Charter (one sentence, per [DES-1]/[DES-2]):** *Installation Design is responsible for building/installation-level load and circuit sizing, from connected load through to final-circuit and area-lighting design; it knows nothing of single-run cable engineering beyond calling `cableEngine.js`, and nothing of MV/LV distribution networks.*
 
