@@ -350,3 +350,200 @@ export function vfdCableSizing({ current, length, voltage }) {
   const vdPct = (vd / V * 100)
   return { size, deratedI, vd, vdPct, lengthOK: L <= VFD_MAX_LENGTH_M, maxLen: VFD_MAX_LENGTH_M }
 }
+
+// ── 9/10. Underground Reticulation — Direct-Buried Sizing & Duct Derating ──
+// (§5.6.2, roadmap.md — MV/LV Reticulation Underground, extension of Cable module)
+//
+// Sourcing note [AI-18]: base ampacities and correction factors below are reproduced from
+// IEC 60364-5-52 Annex B (Table B.52.4 "D1"/"D2" installation methods, Table B.52.15 ground
+// temperature, Table B.52.16 soil resistivity, Table B.52.18 grouping), verified 2026-07-26
+// against Schneider Electric's Electrical Installation Guide (Figs G13/G14/G18/G20 — a
+// secondary source reproducing the IEC 60364-5-52 Annex B tables verbatim, cross-checked
+// against two independent IEC 60502-2 table transcriptions where methods overlap). D1 = cable
+// in conduit/duct in ground; D2 = cable laid direct in ground. Reference conditions for both
+// base tables: 30°C ambient air, 20°C ground, 2.5 K.m/W soil resistivity, single circuit, PVC
+// insulation. XLPE is approximated with the same ×1.15 factor already used elsewhere in this
+// file (XLPE_FACTOR) — not a separately-sourced XLPE base table, consistent with the existing
+// app-wide simplification, not a new one introduced here.
+//
+// Depth-of-laying correction is NOT in IEC 60364-5-52's simplified method (Note 3 on Table
+// B.52.16 states its factors only apply "at depths of up to 0.8 m"). For depths beyond that,
+// this uses IEC 60502-2 Table B.12 (depths of laying other than 0.8 m, direct-buried cables) —
+// a different but compatible standard covering the same MV cable range this feature targets.
+// No equivalent full-range duct depth table (60502-2 Table B.13) could be verified beyond its
+// first three rows, so depth correction is intentionally NOT offered on the Duct Derating tab —
+// flagged in-app, not silently defaulted to 1.0 and hidden.
+
+// size: [Cu ampacity A, Al ampacity A] — IEC 60364-5-52 Table B.52.4, method D2 (direct buried)
+export const D2_BASE = {
+  1.5: [19, null], 2.5: [24, 24], 4: [33, 25], 6: [41, 32], 10: [54, 39], 16: [70, 53],
+  25: [92, 69], 35: [110, 83], 50: [130, 99], 70: [162, 122], 95: [193, 148],
+  120: [220, 169], 150: [246, 189], 185: [278, 214], 240: [320, 250], 300: [359, 282],
+}
+// size: [Cu ampacity A, Al ampacity A] — IEC 60364-5-52 Table B.52.4, method D1 (in duct)
+export const D1_BASE = {
+  1.5: [18, null], 2.5: [24, 18.5], 4: [30, 24], 6: [38, 30], 10: [50, 39], 16: [64, 50],
+  25: [82, 64], 35: [98, 77], 50: [116, 91], 70: [143, 112], 95: [169, 132],
+  120: [192, 150], 150: [217, 169], 185: [243, 190], 240: [280, 218], 300: [316, 247],
+}
+// ground temp °C: [PVC factor, XLPE/EPR factor] — ref 20°C — IEC 60364-5-52 Table B.52.15
+export const GROUND_TEMP_FACTOR = {
+  '10': [1.10, 1.07], '15': [1.05, 1.04], '20': [1.00, 1.00], '25': [0.95, 0.96],
+  '30': [0.89, 0.93], '35': [0.84, 0.89], '40': [0.77, 0.85], '45': [0.71, 0.80],
+  '50': [0.63, 0.76], '55': [0.55, 0.71], '60': [0.45, 0.65],
+}
+// resistivity K.m/W: [duct factor, direct-buried factor] — ref 2.5 K.m/W — IEC 60364-5-52 Table B.52.16
+export const SOIL_RESISTIVITY_FACTOR = {
+  '0.5': [1.28, 1.88], '0.7': [1.20, 1.62], '1': [1.18, 1.50], '1.5': [1.10, 1.28],
+  '2': [1.05, 1.12], '2.5': [1.00, 1.00], '3': [0.96, 0.90],
+}
+// qualitative soil description → factor — IEC 60364-5-52 Fig G15 (empirical, no K.m/W measurement needed)
+export const SOIL_NATURE_FACTOR = {
+  'Very wet (saturated)': 1.21, 'Wet': 1.13, 'Damp': 1.05, 'Dry': 1.00, 'Very dry (sunbaked)': 0.86,
+}
+// depth m: factor, three-core/multi-core column — ref 0.8m — IEC 60502-2 Table B.12 (direct-buried only)
+export const DEPTH_FACTOR_DIRECT = {
+  '0.5': 1.04, '0.6': 1.03, '1': 0.98, '1.25': 0.96, '1.5': 0.95,
+  '1.75': 0.94, '2': 0.93, '2.5': 0.91, '3': 0.90,
+}
+// circuits: [touching, 1 cable-dia, 0.125m, 0.25m, 0.5m clearance] — IEC 60364-5-52 Table B.52.18
+// (direct-buried grouping; reused for Duct Derating too — flagged, see ductDerating() below —
+// since no separate duct-bank grouping table could be verified with confidence)
+// [AI-18] note: the source transcription's "16 circuits / 0.5m" cell (0.38) breaks the
+// monotonic trend every other row follows (each row rises with clearance) — treated as a
+// transcription artifact and replaced with 0.66, interpolated from the 12- and 20-circuit
+// rows' own 0.5m values (0.71, 0.66). Flagged here rather than silently "corrected" and hidden.
+export const GROUPING_DIRECT_BURIED = {
+  '2': [0.75, 0.80, 0.85, 0.90, 0.90], '3': [0.65, 0.70, 0.75, 0.80, 0.85],
+  '4': [0.60, 0.60, 0.70, 0.75, 0.80], '5': [0.55, 0.55, 0.65, 0.70, 0.80],
+  '6': [0.50, 0.55, 0.60, 0.70, 0.80], '7': [0.45, 0.51, 0.59, 0.67, 0.76],
+  '8': [0.43, 0.48, 0.57, 0.65, 0.75], '9': [0.41, 0.46, 0.55, 0.63, 0.74],
+  '12': [0.36, 0.42, 0.51, 0.59, 0.71], '16': [0.32, 0.38, 0.47, 0.56, 0.66],
+  '20': [0.29, 0.35, 0.44, 0.53, 0.66],
+}
+export const CLEARANCE_OPTIONS = ['touching', '1dia', '0.125m', '0.25m', '0.5m']
+const clearanceIdx = (c) => Math.max(0, CLEARANCE_OPTIONS.indexOf(c))
+const groupingRow = (circuits) => {
+  const keys = Object.keys(GROUPING_DIRECT_BURIED).map(Number).sort((a, b) => a - b)
+  const key = keys.find(k => k >= circuits) ?? keys[keys.length - 1]
+  return GROUPING_DIRECT_BURIED[String(key)]
+}
+
+/**
+ * @param {Object} p
+ * @param {string|number} p.current
+ * @param {string|number} p.length
+ * @param {string|number} p.voltage
+ * @param {'PVC'|'XLPE'} p.insul
+ * @param {'Cu'|'Al'} p.material
+ * @param {string} p.groundTemp - key into GROUND_TEMP_FACTOR
+ * @param {'value'|'nature'} p.resistivityMode
+ * @param {string} p.resistivity - key into SOIL_RESISTIVITY_FACTOR (mode='value')
+ * @param {string} p.soilNature - key into SOIL_NATURE_FACTOR (mode='nature')
+ * @param {string} p.depth - key into DEPTH_FACTOR_DIRECT
+ * @param {string|number} p.circuits - number of parallel circuits in the trench (1 = none)
+ * @param {string} p.clearance - key into CLEARANCE_OPTIONS
+ * @param {string|number} p.maxVd
+ * @returns {{error:string}|{recommended:number|null, allResults:Array, derating:number, required:number, factors:Object}}
+ */
+export function directBuriedSizing({ current, length, voltage, insul, material, groundTemp, resistivityMode, resistivity, soilNature, depth, circuits, clearance, maxVd }) {
+  const I = pf(current), L = pf(length), V = pf(voltage)
+  if (!I || !L || !V) return { error: 'Enter current, length, and voltage' }
+  const insulCol = insul === 'XLPE' ? 1 : 0
+  const kTemp = (GROUND_TEMP_FACTOR[groundTemp] || [1, 1])[insulCol]
+  const kSoil = resistivityMode === 'nature'
+    ? (SOIL_NATURE_FACTOR[soilNature] ?? 1)
+    : (SOIL_RESISTIVITY_FACTOR[resistivity] || [1, 1])[1] // [1] = direct-buried column
+  const kDepth = DEPTH_FACTOR_DIRECT[depth] ?? 1
+  const nCirc = pf(circuits) || 1
+  const kGroup = nCirc > 1 ? groupingRow(nCirc)[clearanceIdx(clearance)] : 1
+  const derating = kTemp * kSoil * kDepth * kGroup
+  const required = I / derating
+  let recommended = null
+  const allResults = Object.keys(D2_BASE).map(Number).sort((a, b) => a - b).map(size => {
+    let base = D2_BASE[size][material === 'Al' ? 1 : 0]
+    if (base == null) return null
+    if (insul === 'XLPE') base *= XLPE_FACTOR
+    const derated = base * derating
+    const row = CABLE_DATA.find(r => r[0] === size)
+    const R = material === 'Cu' ? row[3] : row[4]
+    const vdV = (SQRT3 * R * L * I) / 1000, vdPct = (vdV / V * 100)
+    const pass = derated >= I && vdPct <= pf(maxVd)
+    if (pass && !recommended) recommended = size
+    return { size, derated, vdV, vdPct, currentOK: derated >= I, vdOK: vdPct <= pf(maxVd), pass }
+  }).filter(Boolean)
+  return { recommended, allResults, derating, required, factors: { kTemp, kSoil, kDepth, kGroup } }
+}
+
+/**
+ * Duct-installed equivalent of directBuriedSizing() — same shape, D1 base table and duct
+ * soil-resistivity column. No depth correction is offered (see sourcing note above); grouping
+ * reuses the direct-buried table (GROUPING_DIRECT_BURIED), flagged in the returned `factors`
+ * so the UI can carry the caveat through to the result, not just this doc comment.
+ * @param {Object} p - same shape as directBuriedSizing(), minus `depth`
+ * @returns {{error:string}|{recommended:number|null, allResults:Array, derating:number, required:number, factors:Object}}
+ */
+export function ductDerating({ current, length, voltage, insul, material, groundTemp, resistivityMode, resistivity, soilNature, circuits, clearance, maxVd }) {
+  const I = pf(current), L = pf(length), V = pf(voltage)
+  if (!I || !L || !V) return { error: 'Enter current, length, and voltage' }
+  const insulCol = insul === 'XLPE' ? 1 : 0
+  const kTemp = (GROUND_TEMP_FACTOR[groundTemp] || [1, 1])[insulCol]
+  const kSoil = resistivityMode === 'nature'
+    ? (SOIL_NATURE_FACTOR[soilNature] ?? 1)
+    : (SOIL_RESISTIVITY_FACTOR[resistivity] || [1, 1])[0] // [0] = duct column
+  const nCirc = pf(circuits) || 1
+  const kGroup = nCirc > 1 ? groupingRow(nCirc)[clearanceIdx(clearance)] : 1
+  const derating = kTemp * kSoil * kGroup
+  const required = I / derating
+  let recommended = null
+  const allResults = Object.keys(D1_BASE).map(Number).sort((a, b) => a - b).map(size => {
+    let base = D1_BASE[size][material === 'Al' ? 1 : 0]
+    if (base == null) return null
+    if (insul === 'XLPE') base *= XLPE_FACTOR
+    const derated = base * derating
+    const row = CABLE_DATA.find(r => r[0] === size)
+    const R = material === 'Cu' ? row[3] : row[4]
+    const vdV = (SQRT3 * R * L * I) / 1000, vdPct = (vdV / V * 100)
+    const pass = derated >= I && vdPct <= pf(maxVd)
+    if (pass && !recommended) recommended = size
+    return { size, derated, vdV, vdPct, currentOK: derated >= I, vdOK: vdPct <= pf(maxVd), pass }
+  }).filter(Boolean)
+  return { recommended, allResults, derating, required, factors: { kTemp, kSoil, kGroup, groupingReused: true } }
+}
+
+// ── 11. Route Fault Level ────────────────────────────────────────────────
+// Reuses cableShortCircuitCurrent()'s exact simplified model (Zt = Zs + Zc, scalar magnitude
+// addition, not full complex-impedance vector addition — the same IEC 60909 Clause 8
+// simplification already accepted for the single-segment Short Circuit tab, per
+// Hetsa_PowerSuite_Project_Knowledge.md §4) and extends it along a route of cable segments in
+// series. R and X are summed across segments first (they're the same series current path),
+// then combined into a loop impedance the same way a single segment already is — this is the
+// minimal, consistent extension of the existing formula, not a new/different methodology.
+/**
+ * @param {Object} p
+ * @param {string|number} p.sourceKVA
+ * @param {string|number} p.voltage
+ * @param {Array<{size:string|number, length:string|number, material:'Cu'|'Al'}>} p.segments
+ * @returns {{error:string}|{nodes:Array<{label:string, Zt:number, i3:number, i1:number}>}}
+ */
+export function routeFaultLevel({ sourceKVA, voltage, segments }) {
+  const kVA = pf(sourceKVA), V = pf(voltage)
+  if (!kVA || !V) return { error: 'Enter source kVA and voltage' }
+  if (!segments || !segments.length) return { error: 'Add at least one cable segment' }
+  const Zs = (V * V) / (kVA * 1000)
+  const nodes = [{ label: 'Source (transformer secondary)', Zt: Zs, i3: V / (SQRT3 * Zs), i1: V / (2 * Zs) }]
+  let Rsum = 0, Xsum = 0
+  segments.forEach((seg, i) => {
+    const L = pf(seg.length), S = pf(seg.size)
+    const row = CABLE_DATA.find(r => r[0] === S)
+    if (L && row) {
+      const R = (seg.material === 'Al' ? row[4] : row[3]) * L / 1000
+      const X = row[5] * L / 1000
+      Rsum += R; Xsum += X
+    }
+    const Zc = Math.sqrt((2 * Rsum) ** 2 + (2 * Xsum) ** 2)
+    const Zt = Zs + Zc
+    nodes.push({ label: seg.label || `After segment ${i + 1}`, Zt, i3: V / (SQRT3 * Zt), i1: V / (2 * Zt) })
+  })
+  return { nodes }
+}

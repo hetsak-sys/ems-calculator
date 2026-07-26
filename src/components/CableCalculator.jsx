@@ -9,6 +9,8 @@ import {
   CONDUIT_SIZES, CABLE_OD, conduitFill,
   GLAND_SIZES, CABLE_OD_TABLE, glandSelection,
   scheduleAutoSize, vfdCableSizing,
+  GROUND_TEMP_FACTOR, SOIL_RESISTIVITY_FACTOR, SOIL_NATURE_FACTOR, DEPTH_FACTOR_DIRECT, CLEARANCE_OPTIONS,
+  directBuriedSizing, ductDerating, routeFaultLevel,
 } from './cableEngine'
 
 function CableSizing({ addHistory }) {
@@ -361,11 +363,233 @@ function GlandSize() {
   )
 }
 
-const TABS=[{id:'sizing',label:'Sizing',icon:'≋'},{id:'vd',label:'Volt Drop',icon:'⬇'},{id:'isc',label:'Fault I',icon:'⚡'},{id:'trailing',label:'Trailing',icon:'〰'},{id:'conduit',label:'Conduit',icon:'○'},{id:'gland',label:'Gland',icon:'⊗'},{id:'schedule',label:'Schedule',icon:'📋'},{id:'vfd',label:'VFD',icon:'∿'}]
+// ── Underground Reticulation: Direct-Buried Sizing (§5.6.2, roadmap.md) ──────
+// Shared results-table renderer used by both DirectBuried and DuctDerating below —
+// they share the exact same result shape (recommended/allResults/derating/required/factors).
+function BuriedResultsTable({ results }) {
+  return(
+    <>
+      <div className="bg-[#0f1a0f] border border-[#1a3a1a] rounded-xl px-4 py-3 mb-4">
+        <div className="text-gray-400 text-xs mb-1">Overall derating: ×{results.derating} | Required: {results.required}A</div>
+        {results.recommended?<div className="text-2xl font-bold text-green-400">✓ Recommended: {results.recommended} mm²</div>:<div className="text-red-400 font-bold">No standard size meets criteria</div>}
+      </div>
+      <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-4">
+        <div className="grid grid-cols-5 text-[10px] text-gray-500 font-bold px-4 py-2 bg-[#1a1a0a] border-b border-[#2a2a2a]"><span>SIZE</span><span>DERATED</span><span>VD(V)</span><span>VD%</span><span>STATUS</span></div>
+        {results.allResults.map(r=>(
+          <div key={r.size} className={`grid grid-cols-5 px-4 py-2 border-b border-[#1a1a1a] last:border-0 text-xs ${r.size===results.recommended?'bg-[#002a00]':''}`}>
+            <span className={`font-bold ${r.size===results.recommended?'text-green-400':'text-white'}`}>{r.size}mm²</span>
+            <span className={r.currentOK?'text-green-400':'text-red-400'}>{r.derated}A</span>
+            <span className="text-gray-300">{r.vdV}V</span>
+            <span className={r.vdOK?'text-green-400':'text-red-400'}>{r.vdPct}%</span>
+            <span className="text-gray-400">{r.pass?'✓ OK':(!r.currentOK?'✗ I':'⚠ VD')}</span>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+function ResistivityInputs({ resistivityMode, setResistivityMode, resistivity, setResistivity, soilNature, setSoilNature }) {
+  return(
+    <div className="mb-3">
+      <label className="text-gray-400 text-xs mb-2 block">Soil Thermal Resistivity</label>
+      <div className="flex gap-2 mb-2">
+        {[['value','Known K.m/W'],['nature','Describe soil']].map(([id,l]) => (
+          <button key={id} onClick={() => setResistivityMode(id)}
+            className={`flex-1 py-2 rounded-xl text-xs font-semibold ${resistivityMode===id?'bg-amber-500 text-black':'bg-[#1c1c1c] text-gray-400'}`}>{l}</button>
+        ))}
+      </div>
+      {resistivityMode==='value'
+        ? <SelectInput label="" value={resistivity} onChange={setResistivity} options={Object.keys(SOIL_RESISTIVITY_FACTOR).map(k=>[k,`${k} K.m/W`])}/>
+        : <SelectInput label="" value={soilNature} onChange={setSoilNature} options={Object.keys(SOIL_NATURE_FACTOR).map(k=>[k,`${k} (×${SOIL_NATURE_FACTOR[k]})`])}/>}
+    </div>
+  )
+}
+
+function DirectBuriedSizing({ addHistory }) {
+  const { flaSnapshot } = useWorkspace()
+  const [current,setCurrent]=useState(flaSnapshot?.fla||''),[length,setLength]=useState('')
+  const [voltage,setVoltage]=useState('400'),[insul,setInsul]=useState('PVC'),[material,setMat]=useState('Cu')
+  const [groundTemp,setGroundTemp]=useState('20'),[resistivityMode,setResistivityMode]=useState('value')
+  const [resistivity,setResistivity]=useState('2.5'),[soilNature,setSoilNature]=useState('Damp')
+  const [depth,setDepth]=useState('0.6'),[circuits,setCircuits]=useState('1'),[clearance,setClearance]=useState('touching')
+  const [maxVd,setMaxVd]=useState('3'),[results,setResults]=useState(null),[error,setError]=useState('')
+
+  const calculate=()=>{
+    setError('')
+    setResults(null)
+    const r = directBuriedSizing({ current, length, voltage, insul, material, groundTemp, resistivityMode, resistivity, soilNature, depth, circuits, clearance, maxVd })
+    if (r.error) { setError(r.error); return }
+    const allResults = r.allResults.map(x => ({ size: x.size, derated: x.derated.toFixed(1), vdV: x.vdV.toFixed(2), vdPct: x.vdPct.toFixed(2), currentOK: x.currentOK, vdOK: x.vdOK, pass: x.pass }))
+    if(!r.recommended)setError('No standard size meets criteria - consider parallel cables or a shallower/less-grouped route')
+    setResults({recommended: r.recommended, allResults, derating:(r.derating).toFixed(3), required:r.required.toFixed(1)})
+    if(r.recommended)addHistory({tab:'Direct-Buried',expr:`${pf(current)}A ${pf(length)}m buried`,result:`${r.recommended}mm²`})
+  }
+
+  return(
+    <div className="px-4 py-3">
+      <InfoBox title="Direct-Buried Cable Sizing" color="amber" lines={[
+        'IEC 60364-5-52 Annex B (method D2) base ampacities + soil/depth/grouping correction factors',
+        'Depth correction sourced from IEC 60502-2 Table B.12 - a different but compatible standard',
+        'Planning-level: for critical/parallel multi-circuit installations, confirm with a full IEC 60287 thermal study',
+      ]}/>
+      {flaSnapshot && (
+        <div className="bg-[#001a00] border border-[#1a3a1a] rounded-xl px-4 py-2.5 mb-3 flex items-center gap-2">
+          <span className="text-green-400 text-lg">✓</span>
+          <div>
+            <div className="text-green-400 text-xs font-bold">FLA loaded from Motor tab</div>
+            <div className="text-gray-500 text-[10px]">{flaSnapshot.fla} A · {flaSnapshot.kw} kW · {flaSnapshot.voltage}V · {flaSnapshot.phase}</div>
+          </div>
+        </div>
+      )}
+      <ToggleInput label="Insulation" options={[['PVC','PVC 70°C'],['XLPE','XLPE 90°C']]} value={insul} onChange={setInsul}/>
+      <ToggleInput label="Conductor" options={[['Cu','Copper'],['Al','Aluminium']]} value={material} onChange={setMat}/>
+      <NumInput label="Design Current" value={current} onChange={setCurrent} unit="A"/>
+      <NumInput label="Cable Length (one-way)" value={length} onChange={setLength} unit="m"/>
+      <NumInput label="System Voltage" value={voltage} onChange={setVoltage} unit="V"/>
+      <NumInput label="Max Voltage Drop" value={maxVd} onChange={setMaxVd} unit="%"/>
+      <SelectInput label="Ground Temperature" value={groundTemp} onChange={setGroundTemp} options={Object.keys(GROUND_TEMP_FACTOR).map(t=>[t,`${t}°C`])}/>
+      <SelectInput label="Depth of Laying" value={depth} onChange={setDepth} options={Object.keys(DEPTH_FACTOR_DIRECT).map(d=>[d,`${d} m`])}/>
+      <ResistivityInputs resistivityMode={resistivityMode} setResistivityMode={setResistivityMode} resistivity={resistivity} setResistivity={setResistivity} soilNature={soilNature} setSoilNature={setSoilNature}/>
+      <SelectInput label="Parallel Circuits in Trench" value={circuits} onChange={setCircuits} options={['1','2','3','4','5','6','7','8','9','12','16','20'].map(n=>[n,n==='1'?'None (single circuit)':`${n} circuits`])}/>
+      {circuits!=='1' && <SelectInput label="Cable-to-Cable Clearance" value={clearance} onChange={setClearance} options={CLEARANCE_OPTIONS.map(c=>[c,c==='touching'?'Touching':c==='1dia'?'1 cable diameter':c])}/>}
+      <CalcButton onClick={calculate}/>
+      <ErrBox msg={error}/>
+      {results && <BuriedResultsTable results={results}/>}
+    </div>
+  )
+}
+
+// ── Underground Reticulation: Duct Derating ─────────────────────────────────
+function DuctDerating({ addHistory }) {
+  const { flaSnapshot } = useWorkspace()
+  const [current,setCurrent]=useState(flaSnapshot?.fla||''),[length,setLength]=useState('')
+  const [voltage,setVoltage]=useState('400'),[insul,setInsul]=useState('PVC'),[material,setMat]=useState('Cu')
+  const [groundTemp,setGroundTemp]=useState('20'),[resistivityMode,setResistivityMode]=useState('value')
+  const [resistivity,setResistivity]=useState('2.5'),[soilNature,setSoilNature]=useState('Damp')
+  const [circuits,setCircuits]=useState('1'),[clearance,setClearance]=useState('touching')
+  const [maxVd,setMaxVd]=useState('3'),[results,setResults]=useState(null),[error,setError]=useState('')
+
+  const calculate=()=>{
+    setError('')
+    setResults(null)
+    const r = ductDerating({ current, length, voltage, insul, material, groundTemp, resistivityMode, resistivity, soilNature, circuits, clearance, maxVd })
+    if (r.error) { setError(r.error); return }
+    const allResults = r.allResults.map(x => ({ size: x.size, derated: x.derated.toFixed(1), vdV: x.vdV.toFixed(2), vdPct: x.vdPct.toFixed(2), currentOK: x.currentOK, vdOK: x.vdOK, pass: x.pass }))
+    if(!r.recommended)setError('No standard size meets criteria - consider parallel cables or fewer ducts per bank')
+    setResults({recommended: r.recommended, allResults, derating:(r.derating).toFixed(3), required:r.required.toFixed(1)})
+    if(r.recommended)addHistory({tab:'Duct Derating',expr:`${pf(current)}A ${pf(length)}m in duct`,result:`${r.recommended}mm²`})
+  }
+
+  return(
+    <div className="px-4 py-3">
+      <InfoBox title="Duct-Installed Cable Derating" color="amber" lines={[
+        'IEC 60364-5-52 Annex B (method D1) base ampacities + soil/grouping correction factors',
+        'No depth correction offered - no verified full-range IEC 60502-2 duct-depth table (see notes)',
+        'Grouping factor reuses the direct-buried table - confirm against a duct-bank-specific study for large banks (>4 circuits)',
+      ]}/>
+      {flaSnapshot && (
+        <div className="bg-[#001a00] border border-[#1a3a1a] rounded-xl px-4 py-2.5 mb-3 flex items-center gap-2">
+          <span className="text-green-400 text-lg">✓</span>
+          <div>
+            <div className="text-green-400 text-xs font-bold">FLA loaded from Motor tab</div>
+            <div className="text-gray-500 text-[10px]">{flaSnapshot.fla} A · {flaSnapshot.kw} kW · {flaSnapshot.voltage}V · {flaSnapshot.phase}</div>
+          </div>
+        </div>
+      )}
+      <ToggleInput label="Insulation" options={[['PVC','PVC 70°C'],['XLPE','XLPE 90°C']]} value={insul} onChange={setInsul}/>
+      <ToggleInput label="Conductor" options={[['Cu','Copper'],['Al','Aluminium']]} value={material} onChange={setMat}/>
+      <NumInput label="Design Current" value={current} onChange={setCurrent} unit="A"/>
+      <NumInput label="Cable Length (one-way)" value={length} onChange={setLength} unit="m"/>
+      <NumInput label="System Voltage" value={voltage} onChange={setVoltage} unit="V"/>
+      <NumInput label="Max Voltage Drop" value={maxVd} onChange={setMaxVd} unit="%"/>
+      <SelectInput label="Ground Temperature" value={groundTemp} onChange={setGroundTemp} options={Object.keys(GROUND_TEMP_FACTOR).map(t=>[t,`${t}°C`])}/>
+      <ResistivityInputs resistivityMode={resistivityMode} setResistivityMode={setResistivityMode} resistivity={resistivity} setResistivity={setResistivity} soilNature={soilNature} setSoilNature={setSoilNature}/>
+      <SelectInput label="Ducts / Circuits in Bank" value={circuits} onChange={setCircuits} options={['1','2','3','4','5','6','7','8','9','12','16','20'].map(n=>[n,n==='1'?'None (single duct)':`${n} circuits`])}/>
+      {circuits!=='1' && <SelectInput label="Duct-to-Duct Clearance" value={clearance} onChange={setClearance} options={CLEARANCE_OPTIONS.map(c=>[c,c==='touching'?'Touching':c==='1dia'?'1 cable diameter':c])}/>}
+      <CalcButton onClick={calculate}/>
+      <ErrBox msg={error}/>
+      {results && <BuriedResultsTable results={results}/>}
+    </div>
+  )
+}
+
+// ── Underground Reticulation: Route Fault Level ─────────────────────────────
+function RouteFaultLevel() {
+  const [sourceKVA,setSourceKVA]=useState(''),[voltage,setVoltage]=useState('400')
+  const [segments,setSegments]=useState([{size:'95',length:'',material:'Cu'}])
+  const [result,setResult]=useState(null),[error,setError]=useState('')
+
+  const addSegment=()=>setSegments(s=>[...s,{size:'95',length:'',material:'Cu'}])
+  const removeSegment=(i)=>setSegments(s=>s.filter((_,j)=>j!==i))
+  const update=(i,field,val)=>setSegments(s=>s.map((seg,j)=>j===i?{...seg,[field]:val}:seg))
+
+  const calculate=()=>{
+    setError('')
+    setResult(null)
+    const r = routeFaultLevel({ sourceKVA, voltage, segments })
+    if (r.error) { setError(r.error); return }
+    setResult(r.nodes.map(n => ({ label: n.label, i3: (n.i3/1000).toFixed(3), i1: (n.i1/1000).toFixed(3), Zt: (n.Zt*1000).toFixed(2) })))
+  }
+
+  return(
+    <div className="px-4 py-3">
+      <InfoBox title="Route Fault Level" color="amber" lines={[
+        'Fault current at each point along a multi-segment reticulation route',
+        "Reuses the Fault I tab's simplified model (Zt = Zs + Zc), chained across segments in series",
+        'Simplified per IEC 60909 Clause 8 - for protection grading studies, confirm critical points with a full analysis',
+      ]}/>
+      <NumInput label="Source Rating (transformer/generator)" value={sourceKVA} onChange={setSourceKVA} unit="kVA"/>
+      <NumInput label="System Voltage (L-L)" value={voltage} onChange={setVoltage} unit="V"/>
+      <div className="mb-2 mt-4">
+        <label className="text-gray-400 text-xs mb-2 block">Route Segments (in order, source → furthest point)</label>
+        {segments.map((seg,i)=>(
+          <div key={i} className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-3 mb-2">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-amber-400 text-xs font-bold">Segment {i+1}</span>
+              {segments.length>1 && <button onClick={()=>removeSegment(i)} className="text-red-500 text-xs">Remove</button>}
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div><label className="text-gray-500 text-[10px]">Size</label>
+                <select value={seg.size} onChange={e=>update(i,'size',e.target.value)} className="w-full bg-[#111] border border-[#333] text-white text-sm rounded-lg px-2 py-1.5 outline-none mt-1">
+                  {CABLE_DATA.map(r=><option key={r[0]} value={String(r[0])}>{r[0]}mm²</option>)}
+                </select></div>
+              <div><label className="text-gray-500 text-[10px]">Length (m)</label>
+                <input type="text" inputMode="decimal" value={seg.length} onChange={e=>update(i,'length',e.target.value.replace(',','.'))}
+                  className="w-full bg-[#111] border border-[#333] text-white text-sm rounded-lg px-2 py-1.5 outline-none mt-1"/></div>
+              <div><label className="text-gray-500 text-[10px]">Material</label>
+                <select value={seg.material} onChange={e=>update(i,'material',e.target.value)} className="w-full bg-[#111] border border-[#333] text-white text-sm rounded-lg px-2 py-1.5 outline-none mt-1">
+                  <option value="Cu">Cu</option><option value="Al">Al</option>
+                </select></div>
+            </div>
+          </div>
+        ))}
+        <button onClick={addSegment} className="w-full bg-[#1c1c1c] text-gray-400 py-2 rounded-xl text-sm mb-3">+ Add Segment</button>
+      </div>
+      <CalcButton onClick={calculate} label="CALCULATE ROUTE"/>
+      <ErrBox msg={error}/>
+      {result && (
+        <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-4">
+          <div className="grid grid-cols-4 text-[10px] text-gray-500 font-bold px-4 py-2 bg-[#1a1a0a] border-b border-[#2a2a2a]"><span>POINT</span><span>Zt (mΩ)</span><span>3φ FAULT</span><span>1φ FAULT</span></div>
+          {result.map((n,i)=>(
+            <div key={i} className="grid grid-cols-4 px-4 py-2 border-b border-[#1a1a1a] last:border-0 text-xs">
+              <span className={`font-bold ${i===0?'text-amber-400':'text-white'}`}>{n.label}</span>
+              <span className="text-gray-300">{n.Zt}</span>
+              <span className="text-green-400">{n.i3} kA</span>
+              <span className="text-gray-400">{n.i1} kA</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const TABS=[{id:'sizing',label:'Sizing',icon:'≋'},{id:'vd',label:'Volt Drop',icon:'⬇'},{id:'isc',label:'Fault I',icon:'⚡'},{id:'trailing',label:'Trailing',icon:'〰'},{id:'conduit',label:'Conduit',icon:'○'},{id:'gland',label:'Gland',icon:'⊗'},{id:'schedule',label:'Schedule',icon:'📋'},{id:'vfd',label:'VFD',icon:'∿'},{id:'buried',label:'Buried',icon:'⏚'},{id:'duct',label:'Duct',icon:'▭'},{id:'route',label:'Route Fault',icon:'⚡'}]
 
 export default function CableCalculator({ addHistory }) {
   const [sub,setSub]=useState('sizing')
-  const map={sizing:<CableSizing addHistory={addHistory}/>,vd:<VoltDrop addHistory={addHistory}/>,isc:<ShortCircuit addHistory={addHistory}/>,trailing:<TrailingCable addHistory={addHistory}/>,conduit:<ConduitFill/>,gland:<GlandSize/>,schedule:<CableSchedule/>,vfd:<VfdCable addHistory={addHistory}/>}
+  const map={sizing:<CableSizing addHistory={addHistory}/>,vd:<VoltDrop addHistory={addHistory}/>,isc:<ShortCircuit addHistory={addHistory}/>,trailing:<TrailingCable addHistory={addHistory}/>,conduit:<ConduitFill/>,gland:<GlandSize/>,schedule:<CableSchedule/>,vfd:<VfdCable addHistory={addHistory}/>,buried:<DirectBuriedSizing addHistory={addHistory}/>,duct:<DuctDerating addHistory={addHistory}/>,route:<RouteFaultLevel/>}
   return(
     <div className="flex flex-col h-full overflow-hidden">
       <SubTabBar tabs={TABS} active={sub} onChange={setSub}/>

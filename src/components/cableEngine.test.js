@@ -5,6 +5,7 @@ import {
   trailingCableSizing, conduitFill, CABLE_OD,
   getOD, findGland, glandSelection, GLAND_SIZES,
   scheduleAutoSize, vfdCableSizing,
+  directBuriedSizing, ductDerating, routeFaultLevel,
 } from './cableEngine.js'
 
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) < eps
@@ -231,5 +232,133 @@ describe('vfdCableSizing', () => {
     assert.equal(ok.lengthOK, true)
     const tooLong = vfdCableSizing({ current: '50', length: '51', voltage: '400' })
     assert.equal(tooLong.lengthOK, false)
+  })
+})
+
+describe('directBuriedSizing', () => {
+  test('missing required inputs returns error', () => {
+    assert.ok(directBuriedSizing({ current: '', length: '50', voltage: '400' }).error)
+  })
+
+  test('40A/50m/400V/PVC/Cu, ground 30°C, 1.5 K.m/W soil, 1m depth, no grouping — recommends 6mm² (smallest passing both current and 3% VD)', () => {
+    const r = directBuriedSizing({
+      current: '40', length: '50', voltage: '400', insul: 'PVC', material: 'Cu',
+      groundTemp: '30', resistivityMode: 'value', resistivity: '1.5', depth: '1',
+      circuits: '1', clearance: 'touching', maxVd: '3',
+    })
+    assert.equal(r.recommended, 6)
+    assert.ok(close(r.derating, 1.116416))
+    assert.ok(close(r.required, 35.828938316899794))
+  })
+
+  test('hand-derived derated capacity and VD for the recommended 6mm² size match exactly', () => {
+    const r = directBuriedSizing({
+      current: '40', length: '50', voltage: '400', insul: 'PVC', material: 'Cu',
+      groundTemp: '30', resistivityMode: 'value', resistivity: '1.5', depth: '1',
+      circuits: '1', clearance: 'touching', maxVd: '3',
+    })
+    const row6 = r.allResults.find(x => x.size === 6)
+    assert.ok(close(row6.derated, 45.773056))
+    assert.ok(close(row6.vdPct, 2.667358243656071))
+  })
+
+  test('qualitative soil-nature mode applies SOIL_NATURE_FACTOR instead of the K.m/W table', () => {
+    const wet = directBuriedSizing({
+      current: '40', length: '50', voltage: '400', insul: 'PVC', material: 'Cu',
+      groundTemp: '20', resistivityMode: 'nature', soilNature: 'Wet', depth: '1', circuits: '1', clearance: 'touching', maxVd: '5',
+    })
+    assert.ok(close(wet.factors.kSoil, 1.13))
+  })
+
+  test('worse ground temperature and multiple grouped circuits increase required capacity (more conservative)', () => {
+    const good = directBuriedSizing({ current: '40', length: '10', voltage: '400', insul: 'PVC', material: 'Cu', groundTemp: '20', resistivityMode: 'value', resistivity: '2.5', depth: '0.5', circuits: '1', clearance: 'touching', maxVd: '5' })
+    const worse = directBuriedSizing({ current: '40', length: '10', voltage: '400', insul: 'PVC', material: 'Cu', groundTemp: '50', resistivityMode: 'value', resistivity: '2.5', depth: '2', circuits: '4', clearance: 'touching', maxVd: '5' })
+    assert.ok(worse.required > good.required)
+  })
+
+  test('XLPE and aluminium factors are applied the same way as cableSizing (Al needs equal or bigger CSA)', () => {
+    const cu = directBuriedSizing({ current: '80', length: '20', voltage: '400', insul: 'PVC', material: 'Cu', groundTemp: '20', resistivityMode: 'value', resistivity: '2.5', depth: '0.8', circuits: '1', clearance: 'touching', maxVd: '5' })
+    const al = directBuriedSizing({ current: '80', length: '20', voltage: '400', insul: 'PVC', material: 'Al', groundTemp: '20', resistivityMode: 'value', resistivity: '2.5', depth: '0.8', circuits: '1', clearance: 'touching', maxVd: '5' })
+    assert.ok(al.recommended >= cu.recommended)
+  })
+
+  test('1.5mm² has no aluminium option (matches D2_BASE, which has no Al column at that size)', () => {
+    const r = directBuriedSizing({ current: '5', length: '5', voltage: '400', insul: 'PVC', material: 'Al', groundTemp: '20', resistivityMode: 'value', resistivity: '2.5', depth: '0.8', circuits: '1', clearance: 'touching', maxVd: '5' })
+    assert.ok(!r.allResults.some(x => x.size === 1.5))
+  })
+})
+
+describe('ductDerating', () => {
+  test('missing required inputs returns error', () => {
+    assert.ok(ductDerating({ current: '', length: '50', voltage: '400' }).error)
+  })
+
+  test('40A/50m/400V/PVC/Cu, ground 30°C, 1.5 K.m/W soil, no grouping — recommends 10mm² (D1 base table is lower than D2, so a bigger size is needed than the direct-buried case at the same current)', () => {
+    const r = ductDerating({
+      current: '40', length: '50', voltage: '400', insul: 'PVC', material: 'Cu',
+      groundTemp: '30', resistivityMode: 'value', resistivity: '1.5',
+      circuits: '1', clearance: 'touching', maxVd: '3',
+    })
+    assert.equal(r.recommended, 10)
+    assert.ok(close(r.derating, 0.979))
+    assert.ok(close(r.required, 40.85801838610827))
+  })
+
+  test('hand-derived derated capacity for the recommended 10mm² size matches exactly', () => {
+    const r = ductDerating({
+      current: '40', length: '50', voltage: '400', insul: 'PVC', material: 'Cu',
+      groundTemp: '30', resistivityMode: 'value', resistivity: '1.5',
+      circuits: '1', clearance: 'touching', maxVd: '3',
+    })
+    const row10 = r.allResults.find(x => x.size === 10)
+    assert.ok(close(row10.derated, 48.95))
+  })
+
+  test('same current+conditions: duct (D1) recommends a size ≥ direct-buried (D2), since D1 base ampacities are lower', () => {
+    const duct = ductDerating({ current: '50', length: '30', voltage: '400', insul: 'PVC', material: 'Cu', groundTemp: '20', resistivityMode: 'value', resistivity: '2.5', circuits: '1', clearance: 'touching', maxVd: '5' })
+    const direct = directBuriedSizing({ current: '50', length: '30', voltage: '400', insul: 'PVC', material: 'Cu', groundTemp: '20', resistivityMode: 'value', resistivity: '2.5', depth: '0.6', circuits: '1', clearance: 'touching', maxVd: '5' })
+    assert.ok(duct.recommended >= direct.recommended)
+  })
+
+  test('duct engine does not accept a depth parameter — factors object has no kDepth key (intentionally out of scope, see sourcing note)', () => {
+    const r = ductDerating({ current: '40', length: '50', voltage: '400', insul: 'PVC', material: 'Cu', groundTemp: '20', resistivityMode: 'value', resistivity: '2.5', circuits: '1', clearance: 'touching', maxVd: '5' })
+    assert.equal(r.factors.kDepth, undefined)
+    assert.equal(r.factors.groupingReused, true)
+  })
+})
+
+describe('routeFaultLevel', () => {
+  test('missing source kVA/voltage returns error', () => {
+    assert.ok(routeFaultLevel({ sourceKVA: '', voltage: '400', segments: [{ size: '95', length: '50', material: 'Cu' }] }).error)
+  })
+
+  test('no segments returns error rather than a source-only result', () => {
+    assert.ok(routeFaultLevel({ sourceKVA: '1000', voltage: '400', segments: [] }).error)
+  })
+
+  test('1000kVA/400V source, then 95mm²×50m, then 70mm²×30m Cu — fault current drops at each successive node', () => {
+    const r = routeFaultLevel({ sourceKVA: '1000', voltage: '400', segments: [
+      { size: '95', length: '50', material: 'Cu' },
+      { size: '70', length: '30', material: 'Cu' },
+    ] })
+    assert.equal(r.nodes.length, 3) // source + 2 segments
+    assert.ok(close(r.nodes[0].Zt, 0.16))
+    assert.ok(close(r.nodes[1].Zt, 0.18089234309501928))
+    assert.ok(close(r.nodes[1].i3, 1276.671547974487))
+    assert.ok(close(r.nodes[1].i1, 1105.6299928347096))
+    assert.ok(close(r.nodes[2].Zt, 0.19762425281650123))
+    assert.ok(close(r.nodes[2].i3, 1168.581813135474))
+    assert.ok(close(r.nodes[2].i1, 1012.0215365758003))
+    // fault current strictly decreases as impedance accumulates along the route
+    assert.ok(r.nodes[0].i3 > r.nodes[1].i3)
+    assert.ok(r.nodes[1].i3 > r.nodes[2].i3)
+  })
+
+  test('a segment with an unrecognized cable size is skipped rather than crashing (R/X unchanged from prior node)', () => {
+    const r = routeFaultLevel({ sourceKVA: '1000', voltage: '400', segments: [
+      { size: '95', length: '50', material: 'Cu' },
+      { size: '17', length: '30', material: 'Cu' }, // not a real CABLE_DATA size
+    ] })
+    assert.ok(close(r.nodes[2].Zt, r.nodes[1].Zt)) // no additional impedance added
   })
 })

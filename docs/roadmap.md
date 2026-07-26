@@ -85,8 +85,8 @@ With Protection's original eight sub-tabs verified (§7), the two nearest "deepe
 Three §5.2 candidates run through the §5.1 checklist together in one scoping pass, so a fresh session can pick straight up on any of them without re-litigating priority/depth/module-boundary questions. **Scoping is not building** — per §5.4, these ship one at a time, in the order below, not in parallel. Nothing has been built yet; this section is the brief a new session executes against.
 
 **Build order (per [LTP-4], deepen before widening):**
-1. MV/LV Reticulation — Underground (extends a shipped module, smallest lift)
-2. Building/Installation Design (new module)
+1. ~~MV/LV Reticulation — Underground (extends a shipped module, smallest lift)~~ — **shipped and on-device verified, 2026-07-26 — see §5.6.2**
+2. Building/Installation Design (new module) — **next up**
 3. MV/LV Reticulation — Overhead (new module, most open-ended depth question)
 
 #### 5.6.1 Building/Installation Design
@@ -105,18 +105,22 @@ Three §5.2 candidates run through the §5.1 checklist together in one scoping p
 
 **Charter (one sentence, per [DES-1]/[DES-2]):** *Installation Design is responsible for building/installation-level load and circuit sizing, from connected load through to final-circuit and area-lighting design; it knows nothing of single-run cable engineering beyond calling `cableEngine.js`, and nothing of MV/LV distribution networks.*
 
-#### 5.6.2 MV/LV Reticulation — Underground
+#### 5.6.2 MV/LV Reticulation — Underground — SHIPPED, ON-DEVICE VERIFIED (2026-07-26)
 
 | Question | Answer |
 |---|---|
 | **Priority** | High — mines run extensive underground MV/LV feeder networks; directly relevant to the mining leg of the institutional pitch. |
-| **Depth** | Field-quick — direct-buried/duct derating factors (IEC 60502, SANS 1339), route fault levels. A straightforward extension of existing cable-derating logic, not new physics. |
+| **Depth** | Field-quick — direct-buried/duct derating factors (IEC 60364-5-52 Annex B + IEC 60502-2, SANS 1339), route fault levels. A straightforward extension of existing cable-derating logic, not new physics. |
 | **New module vs. extension** | **Extension of the Cable module** — same physical job (conductor sizing/derating) as Cable's existing sub-tabs, just different installation-method derating factors. Doesn't strain Cable's charter. |
 
-**Proposed scope (new Cable sub-tabs), for confirmation before build starts:**
-- **Direct-Buried Sizing** — soil thermal resistivity / burial-depth derating per IEC 60502.
-- **Duct Derating** — duct-bank grouping/spacing derating factors, distinct from Cable's existing free-air/tray grouping factors.
-- **Route Fault Level** — fault current at a point along a reticulation route, reusing `cableEngine.js`'s short-circuit logic rather than a new engine.
+**Delivered, engine-first per HAIOS approach conventions:**
+- **`directBuriedSizing()`, `ductDerating()`, `routeFaultLevel()`** added to `cableEngine.js` (16 new tests, 331 passing repo-wide). Base ampacities and correction factors (ground temperature, soil resistivity, grouping, depth-of-laying) are reproduced from IEC 60364-5-52 Annex B Tables B.52.4/B.52.15/B.52.16/B.52.18, verified against Schneider Electric's Electrical Installation Guide and cross-checked against two independent IEC 60502-2 transcriptions — not fabricated from training memory ([AI-18]).
+- **UI**: three new Cable sub-tabs — **Buried**, **Duct**, **Route Fault** — wired into `CableCalculator.jsx`, following the existing tab/`ResultBox` pattern. No PDF export added (consistent with the rest of the Cable module, which has none — see `debt.md`'s Cable PDF-export entry; that remains a separate, not-yet-approved decision).
+- **Deliberately out of scope, flagged rather than guessed:** Duct Derating has **no depth-of-laying correction** — IEC 60502-2's duct-depth table (B.13) could only be verified for 3 of ~9 rows, so it was left out entirely rather than filled in with an unverified guess. Duct grouping reuses the direct-buried grouping table (Table B.52.18) as a flagged approximation — see `debt.md` for both as tracked entries.
+
+**Verified on-device (2026-07-26), against hand-calculated expected values** (`docs/on_device_checklist_underground_reticulation.md`): Direct-Buried Sizing (2 scenarios — basic case and qualitative-soil/XLPE/Al/grouped-circuits case), Duct Derating (2 scenarios — basic case and grouped-ducts case), Route Fault Level (3-segment mixed Cu/Al route, fault current confirmed strictly decreasing at each node). All matched expected values exactly; both app-wide UI checks (conditional clearance selector, resistivity-mode input swap) also passed.
+
+**Pending:** this work exists in a verified local build (Hertz's machine) but is **not yet committed/pushed to `origin/main`** as of this update — per the project's own standing lesson ("a session's local commits are not done until pushed"), treat this as open until confirmed landed via `git log`/`git push` against `origin/main`, same discipline as every prior session.
 
 #### 5.6.3 MV/LV Reticulation — Overhead
 
@@ -135,7 +139,8 @@ Three §5.2 candidates run through the §5.1 checklist together in one scoping p
 
 #### What a fresh session should do with this section
 
-1. Confirm with Hertz which of the three to build first (default recommendation: 5.6.1's order above, starting with Underground Reticulation).
-2. Re-run [SYS-2] impact analysis for that item specifically before writing code (which existing engines/files does it touch, e.g. `cableEngine.js`).
-3. Engine-first: extracted calculation engine + tests, then UI, per the established PowerSuite pattern (§3 of the knowledge doc).
-4. Do not start item 2 or 3 in this list until item 1 is shipped and on-device verified, per §5.4.
+1. Underground Reticulation (§5.6.2) is shipped and on-device verified — **do not rebuild it.** Confirm with Hertz that the code is actually committed/pushed to `origin/main` before touching `cableEngine.js`/`CableCalculator.jsx` again (re-clone fresh per [AI-19]/[PRO-11], don't trust this doc alone for repo state).
+2. Confirm with Hertz that Building/Installation Design (§5.6.1) is next, per the build order above.
+3. Re-run [SYS-2] impact analysis for that item specifically before writing code (which existing engines/files does it touch, e.g. `cableEngine.js` for Circuit Design's reuse).
+4. Engine-first: extracted calculation engine + tests, then UI, per the established PowerSuite pattern (§3 of the knowledge doc).
+5. Do not start MV/LV Reticulation — Overhead (§5.6.3) until Building/Installation Design is shipped and on-device verified, per §5.4.

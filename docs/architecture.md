@@ -91,7 +91,7 @@ device performance baseline exists (see `debt.md`'s bundle-size entry).
 | Relay Selection | `relaySelectionEngine.js` (in `Protection.jsx`) | — | ✅ part of 32-test suite |
 | Motor | `MotorCalculator.jsx` (UI) + `motorEngine.js` (calc, 2026-07-25) | 576 | ✅ 39 tests |
 | Contactor/OLR | `ContactorOLR.jsx` (UI) + `contactorOlrEngine.js` (calc, 2026-07-25) | 450 | ✅ 15 tests |
-| Cable | `CableCalculator.jsx` (UI) + `cableEngine.js` (calc, 2026-07-25) | 939 | ✅ 37 tests |
+| Cable | `CableCalculator.jsx` (UI, 726 lines) + `cableEngine.js` (calc, 549 lines; 2026-07-25, extended 2026-07-26 with Direct-Buried/Duct/Route Fault Level per §5.6.2) | 1275 combined | ✅ 53 tests (37 original + 16 for Underground Reticulation) |
 | Earthing | `EarthingCalculator.jsx` (UI) + `earthingEngine.js` (calc, 2026-07-25) | 303 | ✅ 17 tests |
 | Power Systems (transformer/fault/busbar/motor-starting) | `PowerSysCalculator.jsx` (UI) + `powerSysEngine.js` (calc, 2026-07-25) | 355 | ✅ 16 tests |
 | Generator Sizing | `GeneratorSizing.jsx` (UI) + `generatorSizingEngine.js` (calc, 2026-07-25) | 1295 | ✅ 18 tests |
