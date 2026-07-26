@@ -18,13 +18,16 @@ export const WorkspaceContext = createContext({
   setFlaSnapshot: () => {},
   generatorSnapshot: null,
   setGeneratorSnapshot: () => {},
+  loadAssessmentSnapshot: null,
+  setLoadAssessmentSnapshot: () => {},
 })
 
 export function WorkspaceProvider({ children }) {
   const [flaSnapshot, setFlaSnapshot] = useState(null)
   const [generatorSnapshot, setGeneratorSnapshot] = useState(null)
+  const [loadAssessmentSnapshot, setLoadAssessmentSnapshot] = useState(null)
   return (
-    <WorkspaceContext.Provider value={{ flaSnapshot, setFlaSnapshot, generatorSnapshot, setGeneratorSnapshot }}>
+    <WorkspaceContext.Provider value={{ flaSnapshot, setFlaSnapshot, generatorSnapshot, setGeneratorSnapshot, loadAssessmentSnapshot, setLoadAssessmentSnapshot }}>
       {children}
     </WorkspaceContext.Provider>
   )

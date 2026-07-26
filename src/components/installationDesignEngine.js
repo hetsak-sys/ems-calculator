@@ -89,3 +89,51 @@ export function loadAssessment({ rows, voltage, phase, powerFactor }) {
 
   return { rowResults, totalConnected, totalDemand, demandKVA, current, recommendedMain, diversityAchieved, warnings }
 }
+
+// ── DB Sizing ────────────────────────────────────────────────────────────────
+// Sourcing note [AI-18], verified 2026-07-26 against the actual standard text and secondary
+// summaries citing it directly:
+// - SANS 10142-1, 6.15.2.2: "The anticipated load of a circuit that feeds socket-outlets shall
+//   not exceed 5 kW" — a real, hard `shall` clause, checked per-circuit below.
+// - SANS 10142-1 requires that, where an installation is likely to be extended, a distribution
+//   board with spare capacity should be fitted — but (same shape as Load Assessment) sets no
+//   specific percentage or way-count. The `sparePctDefault` below is a commonly-cited practice
+//   figure, not a standard requirement, and is user-editable for that reason.
+// - STANDARD_DB_SIZES is a commercially common range of DB way-counts in the SA market — a
+//   product-range convention, not an IEC/SANS table. Confirm against your actual board
+//   supplier's range.
+
+export const STANDARD_DB_SIZES = [4, 6, 8, 12, 18, 24, 36, 42]
+export const SOCKET_OUTLET_CIRCUIT_MAX_KW = 5 // SANS 10142-1, 6.15.2.2 — hard limit
+export const SPARE_WAYS_DEFAULT_PCT = 20 // commonly-cited practice, not a standard figure
+
+/**
+ * @param {Object} p
+ * @param {Array<{id:string, type:string, connected:string|number, label?:string}>} p.circuits
+ * @param {string|number} p.sparePct
+ * @param {string|number} p.mainSwitch - assessed demand current or main switch rating (A)
+ * @returns {{error:string}|{rows:Array, circuitCount:number, spareCount:number, requiredWays:number,
+ *   recommendedDB:number, recommendedMain:number|null, warnings:string[]}}
+ */
+export function dbSizing({ circuits, sparePct, mainSwitch }) {
+  const active = (circuits || []).filter(c => c.type)
+  if (!active.length) return { error: 'Add at least one circuit' }
+
+  const warnings = []
+  const rows = active.map(c => {
+    const connected = pf(c.connected)
+    const overLimit = c.type === 'sockets' && connected > SOCKET_OUTLET_CIRCUIT_MAX_KW
+    if (overLimit) warnings.push(`${c.label || c.id}: socket-outlet circuit load ${connected} kW exceeds the SANS 10142-1 6.15.2.2 limit of ${SOCKET_OUTLET_CIRCUIT_MAX_KW} kW — split into more circuits`)
+    return { ...c, connected, overLimit }
+  })
+
+  const circuitCount = rows.length
+  const spareCount = Math.ceil(circuitCount * (pf(sparePct) / 100))
+  const requiredWays = circuitCount + spareCount
+  const recommendedDB = STANDARD_DB_SIZES.find(s => s >= requiredWays) || STANDARD_DB_SIZES[STANDARD_DB_SIZES.length - 1]
+
+  const mainA = pf(mainSwitch)
+  const recommendedMain = mainA > 0 ? (MCCB_TRIPS.find(s => s >= mainA) || MCCB_TRIPS[MCCB_TRIPS.length - 1]) : null
+
+  return { rows, circuitCount, spareCount, requiredWays, recommendedDB, recommendedMain, warnings }
+}
