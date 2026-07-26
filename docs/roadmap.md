@@ -120,7 +120,7 @@ Three §5.2 candidates run through the §5.1 checklist together in one scoping p
 
 **Verified on-device (2026-07-26), against hand-calculated expected values** (`docs/on_device_checklist_underground_reticulation.md`): Direct-Buried Sizing (2 scenarios — basic case and qualitative-soil/XLPE/Al/grouped-circuits case), Duct Derating (2 scenarios — basic case and grouped-ducts case), Route Fault Level (3-segment mixed Cu/Al route, fault current confirmed strictly decreasing at each node). All matched expected values exactly; both app-wide UI checks (conditional clearance selector, resistivity-mode input swap) also passed.
 
-**Pending:** this work exists in a verified local build (Hertz's machine) but is **not yet committed/pushed to `origin/main`** as of this update — per the project's own standing lesson ("a session's local commits are not done until pushed"), treat this as open until confirmed landed via `git log`/`git push` against `origin/main`, same discipline as every prior session.
+**Confirmed (2026-07-26):** committed and pushed to `origin/main` as commit `dae503a` — independently re-verified via a fresh clone (331 tests passing, clean build). This item is fully closed.
 
 #### 5.6.3 MV/LV Reticulation — Overhead
 
@@ -139,7 +139,7 @@ Three §5.2 candidates run through the §5.1 checklist together in one scoping p
 
 #### What a fresh session should do with this section
 
-1. Underground Reticulation (§5.6.2) is shipped and on-device verified — **do not rebuild it.** Confirm with Hertz that the code is actually committed/pushed to `origin/main` before touching `cableEngine.js`/`CableCalculator.jsx` again (re-clone fresh per [AI-19]/[PRO-11], don't trust this doc alone for repo state).
+1. Underground Reticulation (§5.6.2) is shipped, on-device verified, and confirmed pushed (`dae503a`) — **do not rebuild it.** Still re-clone fresh per [AI-19]/[PRO-11] before touching `cableEngine.js`/`CableCalculator.jsx` again — this doc reflects state as of 2026-07-26, not a live guarantee.
 2. Confirm with Hertz that Building/Installation Design (§5.6.1) is next, per the build order above.
 3. Re-run [SYS-2] impact analysis for that item specifically before writing code (which existing engines/files does it touch, e.g. `cableEngine.js` for Circuit Design's reuse).
 4. Engine-first: extracted calculation engine + tests, then UI, per the established PowerSuite pattern (§3 of the knowledge doc).
