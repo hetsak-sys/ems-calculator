@@ -28,6 +28,7 @@
 // PowerSuite (generic ANSI fuse curves, SEF percentage ranges).
 
 import { MCCB_TRIPS } from './motorEngine.js'
+import { cableSizing } from './cableEngine.js'
 
 const SQRT3 = Math.sqrt(3)
 
@@ -136,4 +137,48 @@ export function dbSizing({ circuits, sparePct, mainSwitch }) {
   const recommendedMain = mainA > 0 ? (MCCB_TRIPS.find(s => s >= mainA) || MCCB_TRIPS[MCCB_TRIPS.length - 1]) : null
 
   return { rows, circuitCount, spareCount, requiredWays, recommendedDB, recommendedMain, warnings }
+}
+
+// ── Circuit Design ────────────────────────────────────────────────────────────
+// Sourcing note [AI-18], verified 2026-07-26 directly against the actual standard text (IEC
+// 60364-4-43, Clause 433.1 — SANS 10142-1 is harmonized from this same IEC series): the
+// coordination rule between a final circuit's protective device and its conductor is
+//   Ib ≤ In ≤ Iz   (design current ≤ device rated current ≤ cable's current-carrying capacity)
+// with a second condition (I2 ≤ 1.45×Iz) that standard IEC 60898 miniature circuit breakers
+// satisfy automatically once In ≤ Iz holds, so it isn't checked separately here.
+//
+// This function deliberately does NOT reimplement cableEngine.js's sizing loop — it calls
+// cableSizing() directly per [ARC-1]/[DEC-2] ("reuse the existing engine, don't fork it").
+// The one real design choice: cableSizing() is called with In (the chosen breaker rating), not
+// Ib (the raw design current). This means the cable is sized — and its voltage drop checked —
+// against In rather than the true operating current, which is mildly conservative (Ib < In
+// always) rather than optimistic: the safer assumption if this circuit ever runs closer to its
+// breaker's rating than today's connected load suggests ([DEC-4]).
+
+/**
+ * @param {Object} p
+ * @param {string|number} p.connectedLoad - kW
+ * @param {string|number} p.voltage
+ * @param {'1ph'|'3ph'} p.phase
+ * @param {string|number} p.powerFactor
+ * @param {string|number} p.length - one-way circuit length, m
+ * @param {string} p.ambient - key into cableEngine's AMBIENT table
+ * @param {string} p.groups - key into cableEngine's GROUP table
+ * @param {string} p.install - key into cableEngine's INSTALL table
+ * @param {'PVC'|'XLPE'} p.insul
+ * @param {'Cu'|'Al'} p.material
+ * @param {string|number} p.maxVd
+ * @returns {{error:string}|{Ib:number, recommendedBreaker:number, recommendedCable:number|null, sizing:Object}}
+ */
+export function circuitDesign({ connectedLoad, voltage, phase, powerFactor, length, ambient, groups, install, insul, material, maxVd }) {
+  const P = pf(connectedLoad), V = pf(voltage), PF = pf(powerFactor) || 1, L = pf(length)
+  if (!P || !V || !L) return { error: 'Enter connected load, voltage, and circuit length' }
+
+  const Ib = phase === '1ph' ? (P * 1000) / (V * PF) : (P * 1000) / (SQRT3 * V * PF)
+  const recommendedBreaker = MCCB_TRIPS.find(s => s >= Ib) || MCCB_TRIPS[MCCB_TRIPS.length - 1]
+
+  const sizing = cableSizing({ phase, current: String(recommendedBreaker), length: String(L), voltage, insul, material, ambient, groups, install, maxVd })
+  if (sizing.error) return sizing
+
+  return { Ib, recommendedBreaker, recommendedCable: sizing.recommended, sizing }
 }

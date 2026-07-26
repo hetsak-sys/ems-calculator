@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
-import { NumInput, ToggleInput, InfoBox, ErrBox, CalcButton, ResultCard, useResultCard, SubTabBar } from './shared'
+import { NumInput, ToggleInput, SelectInput, InfoBox, ErrBox, CalcButton, ResultCard, useResultCard, SubTabBar } from './shared'
 import { useSite } from './SiteContext'
 import { useWorkspace } from './WorkspaceContext'
-import { loadAssessment, LOAD_CATEGORIES, dbSizing, SPARE_WAYS_DEFAULT_PCT } from './installationDesignEngine'
+import { loadAssessment, LOAD_CATEGORIES, dbSizing, SPARE_WAYS_DEFAULT_PCT, circuitDesign } from './installationDesignEngine'
+import { AMBIENT, GROUP, INSTALL } from './cableEngine'
 
 // ── Load Assessment ──────────────────────────────────────────────────────────
 // §5.6.1 roadmap.md — first sub-tab of the new "Installation Design" module.
@@ -315,17 +316,128 @@ function DBSizing({ addHistory }) {
   )
 }
 
+// ── Circuit Design ────────────────────────────────────────────────────────
+// §5.6.1 roadmap.md — third sub-tab. Reuses cableEngine.js's cableSizing() directly rather
+// than reimplementing it (per [ARC-1]/[DEC-2]) — see installationDesignEngine.js's sourcing
+// note for the IEC 60364-4-43 433.1 coordination rule (Ib ≤ In ≤ Iz) this is built around.
+function CircuitDesign({ addHistory }) {
+  const { site } = useSite()
+  const [connectedLoad, setConnectedLoad] = useState('')
+  const [voltage, setVoltage] = useState('230')
+  const [phase, setPhase] = useState('1ph')
+  const [powerFactor, setPowerFactor] = useState('1')
+  const [length, setLength] = useState('')
+  const [ambient, setAmbient] = useState('30')
+  const [groups, setGroups] = useState('1')
+  const [install, setInstall] = useState('Conduit in wall')
+  const [insul, setInsul] = useState('PVC')
+  const [material, setMaterial] = useState('Cu')
+  const [maxVd, setMaxVd] = useState('5')
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState('')
+  const { cardData, showCard, hideCard } = useResultCard()
+  const pf_ = (v) => { const n = parseFloat(String(v).replace(',', '.')); return isNaN(n) ? 0 : n }
+
+  const calculate = () => {
+    setError('')
+    setResult(null)
+    const r = circuitDesign({ connectedLoad, voltage, phase, powerFactor, length, ambient, groups, install, insul, material, maxVd })
+    if (r.error) { setError(r.error); return }
+    if (!r.recommendedCable) { setError('No standard cable size meets both current-carrying and voltage-drop requirements for this run — try a shorter length, a larger max VD, or a bigger installation-method allowance'); return }
+    setResult(r)
+    addHistory({ tab: 'Circuit Design', expr: `${pf_(connectedLoad)}kW circuit`, result: `${r.recommendedCable}mm² / ${r.recommendedBreaker}A` })
+  }
+
+  const exportPdf = () => {
+    if (!result) return
+    const recRow = result.sizing.allResults.find(x => x.size === result.recommendedCable)
+    showCard({
+      calculator: 'Installation Design — Circuit Design',
+      site: site.name,
+      standard: 'IEC 60364-4-43 433.1 (Ib ≤ In ≤ Iz coordination); cable sizing per cableEngine.js',
+      inputs: [
+        { label: 'Connected Load', value: `${connectedLoad} kW` },
+        { label: 'Voltage / Phase', value: `${voltage} V, ${phase === '1ph' ? 'single-phase' : 'three-phase'}` },
+        { label: 'Circuit Length', value: `${length} m` },
+        { label: 'Installation Method', value: install },
+      ],
+      sections: [{
+        title: 'Results',
+        rows: [
+          { label: 'Design Current (Ib)', value: `${result.Ib.toFixed(2)} A` },
+          { label: 'Recommended Breaker (In)', value: `${result.recommendedBreaker} A`, accent: true },
+          { label: 'Recommended Cable', value: `${result.recommendedCable} mm²`, accent: true },
+          { label: 'Cable Capacity (Iz)', value: `${recRow.derated.toFixed(2)} A` },
+          { label: 'Voltage Drop', value: `${recRow.vdV.toFixed(2)} V (${recRow.vdPct.toFixed(2)}%)` },
+        ],
+      }],
+      notes: 'Cable is sized and voltage-drop-checked against the breaker rating (In), not the raw design current (Ib) — a deliberately conservative choice. Confirm final selection against your board supplier\'s actual product range.',
+    })
+  }
+
+  return (
+    <div className="px-4 py-3">
+      <InfoBox title="Circuit Design" color="blue" lines={[
+        'Coordination rule (IEC 60364-4-43, 433.1): Ib ≤ In ≤ Iz — design current, breaker rating, and cable capacity, in that order',
+        'Cable is sized against the breaker rating (In), not the raw connected-load current (Ib) — conservative by design',
+        'Reuses the same cable-sizing engine as the Cable module\'s Sizing tab — nothing here duplicates that logic',
+      ]}/>
+      <ToggleInput label="Phase" options={[['1ph','Single-phase'],['3ph','Three-phase']]} value={phase} onChange={setPhase}/>
+      <NumInput label="Connected Load" value={connectedLoad} onChange={setConnectedLoad} unit="kW"/>
+      <NumInput label="System Voltage" value={voltage} onChange={setVoltage} unit="V"/>
+      <NumInput label="Power Factor" value={powerFactor} onChange={setPowerFactor} unit=""/>
+      <NumInput label="Circuit Length (one-way)" value={length} onChange={setLength} unit="m"/>
+      <NumInput label="Max Voltage Drop" value={maxVd} onChange={setMaxVd} unit="%"/>
+      <ToggleInput label="Insulation" options={[['PVC','PVC 70°C'],['XLPE','XLPE 90°C']]} value={insul} onChange={setInsul}/>
+      <ToggleInput label="Conductor" options={[['Cu','Copper'],['Al','Aluminium']]} value={material} onChange={setMaterial}/>
+      <SelectInput label="Ambient Temperature" value={ambient} onChange={setAmbient} options={Object.keys(AMBIENT).map(t=>[t,`${t}°C (×${AMBIENT[t]})`])}/>
+      <SelectInput label="Grouped Circuits" value={groups} onChange={setGroups} options={Object.entries(GROUP).map(([g,f])=>[g,`${g} circuit${g>1?'s':''} (×${f})`])}/>
+      <SelectInput label="Installation Method" value={install} onChange={setInstall} options={Object.entries(INSTALL).map(([k,v])=>[k,`${k} (×${v})`])}/>
+
+      <CalcButton onClick={calculate}/>
+      <ErrBox msg={error}/>
+
+      {result && (
+        <>
+          <div className="bg-[#0a0f14] border border-[#003147] rounded-xl px-4 py-3 mb-4">
+            <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
+              <span className="text-gray-400 text-xs">Design Current (Ib)</span>
+              <span className="text-white text-sm font-mono font-bold">{result.Ib.toFixed(2)} A</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-[#1a1a1a]">
+              <span className="text-gray-300 text-sm font-bold">Recommended Breaker (In)</span>
+              <span className="text-2xl font-bold text-sky-400">{result.recommendedBreaker} A</span>
+            </div>
+            <div className="flex justify-between py-2">
+              <span className="text-gray-300 text-sm font-bold">Recommended Cable</span>
+              <span className="text-2xl font-bold text-sky-400">{result.recommendedCable} mm²</span>
+            </div>
+          </div>
+          <button onClick={exportPdf}
+            className="w-full py-3 rounded-xl font-bold text-sm mb-4"
+            style={{ background: 'transparent', border: '1px solid #38bdf8', color: '#38bdf8' }}>
+            📄 Export PDF
+          </button>
+        </>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
+    </div>
+  )
+}
+
 const INSTALL_TABS = [
   { id: 'load', label: 'Load Assessment', icon: '📊' },
   { id: 'db',   label: 'DB Sizing', icon: '🗄' },
+  { id: 'circuit', label: 'Circuit Design', icon: '🔌' },
 ]
 
 export default function InstallationDesign({ addHistory }) {
-  // Circuit Design and Area Lighting are scoped in roadmap.md §5.6.1 but not yet built.
+  // Area Lighting is scoped in roadmap.md §5.6.1 but not yet built.
   const [sub, setSub] = useState('load')
   const map = {
     load: <LoadAssessment addHistory={addHistory} />,
     db:   <DBSizing addHistory={addHistory} />,
+    circuit: <CircuitDesign addHistory={addHistory} />,
   }
   return (
     <div className="flex flex-col h-full overflow-hidden">

@@ -91,3 +91,42 @@ Spare Ways Allowance: `20` %, Main Switch: leave as prefilled (or enter `63` man
 Note the exact inputs and what the app showed vs. what's listed here — since the underlying
 arithmetic is simple and already covered by 9 automated tests for `dbSizing()`, a mismatch here
 almost certainly means a UI wiring bug, not a formula error.
+
+---
+
+## Circuit Design
+
+**Scenario 1 — single-phase, hand-calculated**
+Phase: Single-phase, Connected Load: `3` kW, Voltage: `230` V, Power Factor: `1`,
+Circuit Length: `15` m, Max VD: `5`%, Insulation: PVC, Conductor: Cu,
+Ambient: `30°C`, Grouped Circuits: `1`, Installation Method: Conduit in wall
+
+- [ ] Expect: Design Current (Ib) ≈ **13.04 A**
+- [ ] Expect: Recommended Breaker (In) = **16 A**
+- [ ] Expect: Recommended Cable = **2.5 mm²**
+
+**Scenario 2 — three-phase, hand-calculated**
+Phase: Three-phase, Connected Load: `15` kW, Voltage: `400` V, Power Factor: `0.85`,
+Circuit Length: `40` m, Max VD: `3`%, Insulation: PVC, Conductor: Cu,
+Ambient: `30°C`, Grouped Circuits: `1`, Installation Method: Clipped direct
+
+- [ ] Expect: Design Current (Ib) ≈ **25.47 A**
+- [ ] Expect: Recommended Breaker (In) = **32 A**
+- [ ] Expect: Recommended Cable = **6 mm²**
+
+**App-wide checks**
+- [ ] Set Max VD to an unreasonably tight value (e.g. `0.01`%) with a long length — confirm a
+      clear error appears rather than a blank or crashing result
+- [ ] Export PDF on Scenario 1 — confirm Ib, In, recommended cable, Iz, and voltage drop all
+      appear correctly, with the note about sizing against In (not Ib) present
+- [ ] Confirm the Ambient/Grouped Circuits/Installation Method dropdowns show the same options
+      and multiplier hints as the Cable module's own Sizing tab (they're pulling from the same
+      `cableEngine.js` tables — a mismatch here would mean the import is stale)
+
+---
+
+## If something doesn't match (Circuit Design)
+
+Since Circuit Design calls `cableEngine.js`'s own `cableSizing()` directly rather than
+reimplementing it, a wrong cable recommendation here would most likely also show up on the
+Cable module's Sizing tab with the same inputs — worth checking both if something looks off.

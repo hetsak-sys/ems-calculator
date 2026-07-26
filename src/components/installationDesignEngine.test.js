@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { loadAssessment, LOAD_CATEGORIES, pf, dbSizing, STANDARD_DB_SIZES, SOCKET_OUTLET_CIRCUIT_MAX_KW } from './installationDesignEngine.js'
+import { loadAssessment, LOAD_CATEGORIES, pf, dbSizing, STANDARD_DB_SIZES, SOCKET_OUTLET_CIRCUIT_MAX_KW, circuitDesign } from './installationDesignEngine.js'
 
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) < eps
 
@@ -162,5 +162,57 @@ describe('dbSizing', () => {
     const r = dbSizing({ circuits: [{ id: 'c1', type: '', connected: '5' }, { id: 'c2', type: 'lighting', connected: '1' }], sparePct: '0', mainSwitch: '' })
     assert.equal(r.circuitCount, 1)
     assert.equal(r.rows[0].id, 'c2')
+  })
+})
+
+describe('circuitDesign', () => {
+  test('missing required inputs returns error', () => {
+    assert.ok(circuitDesign({ connectedLoad: '', voltage: '230', phase: '1ph', powerFactor: '1', length: '15' }).error)
+  })
+
+  test('1ph, 3kW, 230V, PF 1, 15m, conduit-in-wall PVC/Cu — hand-derived exactly (Ib=13.04A, In=16A, cable=2.5mm²)', () => {
+    const r = circuitDesign({
+      connectedLoad: '3', voltage: '230', phase: '1ph', powerFactor: '1', length: '15',
+      ambient: '30', groups: '1', install: 'Conduit in wall', insul: 'PVC', material: 'Cu', maxVd: '5',
+    })
+    assert.ok(close(r.Ib, 13.043478260869565))
+    assert.equal(r.recommendedBreaker, 16)
+    assert.equal(r.recommendedCable, 2.5)
+    const row = r.sizing.allResults.find(x => x.size === 2.5)
+    assert.ok(close(row.derated, 18.48))
+    assert.ok(close(row.vdPct, 1.5464347826086955))
+  })
+
+  test('the cable is always sized against the breaker rating (In), not the raw design current (Ib) — Iz must be >= In', () => {
+    const r = circuitDesign({
+      connectedLoad: '3', voltage: '230', phase: '1ph', powerFactor: '1', length: '15',
+      ambient: '30', groups: '1', install: 'Conduit in wall', insul: 'PVC', material: 'Cu', maxVd: '5',
+    })
+    const row = r.sizing.allResults.find(x => x.size === r.recommendedCable)
+    assert.ok(row.derated >= r.recommendedBreaker) // Iz >= In, per IEC 60364-4-43 433.1
+    assert.ok(row.derated >= r.Ib) // and therefore also >= Ib, trivially
+  })
+
+  test('3ph, 15kW, 400V, PF 0.85, 40m, clipped-direct PVC/Cu — hand-derived exactly (Ib=25.47A, In=32A, cable=6mm²)', () => {
+    const r = circuitDesign({
+      connectedLoad: '15', voltage: '400', phase: '3ph', powerFactor: '0.85', length: '40',
+      ambient: '30', groups: '1', install: 'Clipped direct', insul: 'PVC', material: 'Cu', maxVd: '3',
+    })
+    assert.ok(close(r.Ib, 25.471335405424668))
+    assert.equal(r.recommendedBreaker, 32)
+    assert.equal(r.recommendedCable, 6)
+    const row = r.sizing.allResults.find(x => x.size === 6)
+    assert.ok(close(row.derated, 40))
+    assert.ok(close(row.vdPct, 1.7071092759398856))
+  })
+
+  test('recommendedBreaker is always a real MCCB_TRIPS value on the standard series, not an arbitrary rounded number', () => {
+    const r = circuitDesign({ connectedLoad: '3', voltage: '230', phase: '1ph', powerFactor: '1', length: '15', ambient: '30', groups: '1', install: 'Conduit in wall', insul: 'PVC', material: 'Cu', maxVd: '5' })
+    assert.ok([6, 10, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600].includes(r.recommendedBreaker))
+  })
+
+  test('an unreasonably short max VD that no cable size can satisfy propagates recommendedCable=null rather than crashing', () => {
+    const r = circuitDesign({ connectedLoad: '15', voltage: '400', phase: '3ph', powerFactor: '0.85', length: '500', ambient: '30', groups: '1', install: 'Clipped direct', insul: 'PVC', material: 'Cu', maxVd: '0.01' })
+    assert.equal(r.recommendedCable, null)
   })
 })
