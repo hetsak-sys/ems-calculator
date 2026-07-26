@@ -19,16 +19,16 @@ Per [ARC-1] (technology/scope decisions are architecture decisions, not casual o
 2. **Depth** — full design tool (derating, shading, string configuration, sag-tension curves...) or field-quick calculator (rule-of-thumb sizing + standard reference)?
 3. **New module vs. extension** — does it get its own tab, or fold into an existing module's charter ([DES-1]/[DES-2] — can the module's one-sentence charter still be written honestly if this folds in)?
 
-Other than §5.5 (now shipped, see below), none of the remaining candidates have been answered against this checklist yet — that's the next conversation, one domain at a time, not a batch decision.
+§5.5 and §5.6 have now been answered against this checklist. The remaining §5.2 candidates (building/installation design and MV/LV reticulation are now scoped as of §5.6 — see below) still need this run fresh before any further candidate starts.
 
 ### 5.2 Candidate domains
 
 | Domain | Scope | Standards | Overlap vs. new |
 |---|---|---|---|
-| **Building/installation design** | Household/office/workshop/warehouse load assessment, DB/distribution board sizing, circuit design, area & floodlighting (lux levels, pole spacing) | SANS 10142-1, SANS 10114-1, SANS 10098, IEC 60364 | New — interior lumen method exists (Power Quality), but load assessment and area lighting layout don't |
+| **Building/installation design** | Household/office/workshop/warehouse load assessment, DB/distribution board sizing, circuit design, area & floodlighting (lux levels, pole spacing) | SANS 10142-1, SANS 10114-1, SANS 10098, IEC 60364 | New — interior lumen method exists (Power Quality), but load assessment and area lighting layout don't. **Scoped 2026-07-26 — see §5.6** |
 | **Renewable energy design** | PV array sizing, inverter/battery sizing, hybrid off-grid/grid-tie design, generator hybridization | IEC 62548, IEC 61727, NRS 097, IEC 62109 | **Shipped** — see §4 |
-| **MV/LV reticulation — overhead** | Conductor sizing, sag-tension, pole spacing, clearances, transformer placement | SANS 10280, IEC 61936-1, NRS 048 | New — distinct from single-run cable sizing already in Cable module |
-| **MV/LV reticulation — underground** | Cable sizing for direct-buried/duct runs, derating, jointing, route fault levels | IEC 60502, SANS 1339, IEC 60909 | Extension of Cable module logic |
+| **MV/LV reticulation — overhead** | Conductor sizing, sag-tension, pole spacing, clearances, transformer placement | SANS 10280, IEC 61936-1, NRS 048 | New — distinct from single-run cable sizing already in Cable module. **Scoped 2026-07-26 — see §5.6** |
+| **MV/LV reticulation — underground** | Cable sizing for direct-buried/duct runs, derating, jointing, route fault levels | IEC 60502, SANS 1339, IEC 60909 | Extension of Cable module logic. **Scoped 2026-07-26 — see §5.6** |
 | **Installation testing** | IR, Ze/Zs, RCD trip time/current, polarity, continuity — SANS 10142 test schedule with pass/fail | SANS 10142-1 Annex, IEC 60364-6 | New job type — a commissioning/record tool, not a calculator; likely its own module by charter test ([DES-2]) |
 | **Feeder protection, grading & coordination** | IDMT curve selection, discrimination margins, time-current grading | IEC 60255, IEEE 242, MHSA | **Substantially shipped** as Protection Coordination TCC Study — see §4 |
 | **Earth fault protection (expanded)** | NER sizing (exists), earth fault relay settings, sensitive earth fault (SEF) for HR and solidly-earthed systems | IEC 60255, MHSA | **Shipped and verified on-device (2026-07-24)** — see §4/§5.5 |
@@ -51,6 +51,8 @@ This is a "new module vs. extension" question in its own right (§5.1): it could
 ### 5.4 Explicit not-doing (for now) [LTP-2]
 
 Nothing above is being ruled out permanently — but until at least one domain has gone through §5.1's checklist and shipped, no others should be started in parallel. Sprawl into unrelated jobs before deepening any one of them is exactly the failure mode [LTP-4] warns about.
+
+**Note (2026-07-26):** §5.6 below scopes *three* domains at once (Building/Installation Design, MV/LV Reticulation Underground, MV/LV Reticulation Overhead) rather than one. This is a deliberate, bounded exception: all three were checked together in a single scoping pass so a fresh session has a ready queue rather than one item — but §5.4's spirit still binds at the *build* level: **build and ship one at a time, in the stated order, not in parallel.** Scoping ahead of time is not the same as building ahead of time.
 
 ### 5.5 Deepening within Protection: Earth Fault Protection + Relay Selection — SHIPPED (2026-07-24)
 
@@ -78,3 +80,62 @@ With Protection's original eight sub-tabs verified (§7), the two nearest "deepe
 - Generator application: renders the out-of-scope message cleanly — no crash, no blank state, earthing/CT inputs correctly hidden.
 - Kill-and-reopen mid-input on both tabs: resets to empty on relaunch, no crash — correct behavior, since neither tab persists draft input (only the result-card recovery banner persists across a kill).
 
+### 5.6 Scoped, ready to build: Building/Installation Design + MV/LV Reticulation (2026-07-26)
+
+Three §5.2 candidates run through the §5.1 checklist together in one scoping pass, so a fresh session can pick straight up on any of them without re-litigating priority/depth/module-boundary questions. **Scoping is not building** — per §5.4, these ship one at a time, in the order below, not in parallel. Nothing has been built yet; this section is the brief a new session executes against.
+
+**Build order (per [LTP-4], deepen before widening):**
+1. MV/LV Reticulation — Underground (extends a shipped module, smallest lift)
+2. Building/Installation Design (new module)
+3. MV/LV Reticulation — Overhead (new module, most open-ended depth question)
+
+#### 5.6.1 Building/Installation Design
+
+| Question | Answer |
+|---|---|
+| **Priority** | High — load assessment, DB sizing, and circuit design (SANS 10142) are core daily work for contractors and exactly what training colleges teach. Directly serves the contractor/college leg of the institutional pitch. |
+| **Depth** | Field-quick calculator, matching the established PowerSuite pattern (rule-of-thumb sizing + standard reference tables), not a full design suite. |
+| **New module vs. extension** | **New module** — "Installation Design." |
+
+**Proposed scope (sub-tabs), for confirmation before build starts:**
+- **Load Assessment** — diversity factors per SANS 10142 Annex, connected load → maximum demand.
+- **DB Sizing** — circuit count / breaker sizing / DB way-count reference from assessed load.
+- **Circuit Design** — final-circuit sizing; cross-references `cableEngine.js` rather than duplicating its logic (per [ARC-1]/[DEC-2], reuse the existing engine, don't fork it).
+- **Area Lighting** — exterior/floodlighting lux levels and pole spacing (SANS 10114-1), extending the lux-based method already used in Power Quality's interior Lighting sub-tab, but kept here rather than in PQ since outdoor photometric layout (pole spacing, mounting height) is a distinct enough job to strain PQ's charter if folded in there.
+
+**Charter (one sentence, per [DES-1]/[DES-2]):** *Installation Design is responsible for building/installation-level load and circuit sizing, from connected load through to final-circuit and area-lighting design; it knows nothing of single-run cable engineering beyond calling `cableEngine.js`, and nothing of MV/LV distribution networks.*
+
+#### 5.6.2 MV/LV Reticulation — Underground
+
+| Question | Answer |
+|---|---|
+| **Priority** | High — mines run extensive underground MV/LV feeder networks; directly relevant to the mining leg of the institutional pitch. |
+| **Depth** | Field-quick — direct-buried/duct derating factors (IEC 60502, SANS 1339), route fault levels. A straightforward extension of existing cable-derating logic, not new physics. |
+| **New module vs. extension** | **Extension of the Cable module** — same physical job (conductor sizing/derating) as Cable's existing sub-tabs, just different installation-method derating factors. Doesn't strain Cable's charter. |
+
+**Proposed scope (new Cable sub-tabs), for confirmation before build starts:**
+- **Direct-Buried Sizing** — soil thermal resistivity / burial-depth derating per IEC 60502.
+- **Duct Derating** — duct-bank grouping/spacing derating factors, distinct from Cable's existing free-air/tray grouping factors.
+- **Route Fault Level** — fault current at a point along a reticulation route, reusing `cableEngine.js`'s short-circuit logic rather than a new engine.
+
+#### 5.6.3 MV/LV Reticulation — Overhead
+
+| Question | Answer |
+|---|---|
+| **Priority** | High for the same mining-pitch reason as underground reticulation — but see the depth caveat below, which bounds what ships first. |
+| **Depth** | **Field-quick only, for v1.** Conductor ampacity tables, rule-of-thumb pole spacing, and clearance reference tables (SANS 10280, IEC 61936-1). **Full sag-tension catenary calculation (wind/ice loading, span mechanics) is explicitly deferred** — that is genuine standalone engineering depth, not a v1 scope, and would need its own separate scoping conversation if ever wanted. Do not silently expand into sag-tension physics mid-build; if it looks tempting, stop and flag it rather than scope-creeping. |
+| **New module vs. extension** | **New module** — poles, spans, and clearances are genuinely new territory; no existing module's charter fits. |
+
+**Proposed scope (sub-tabs), for confirmation before build starts:**
+- **Conductor Sizing (Overhead)** — ampacity tables by conductor type/size, distinct from Cable's insulated-conductor derating logic (bare/ACSR conductors behave differently — no insulation derating factors apply).
+- **Pole Spacing (rule-of-thumb)** — reference-table span guidance, not a computed sag-tension curve.
+- **Clearances** — ground/crossing clearance reference tables per SANS 10280/IEC 61936-1.
+
+**Charter (one sentence):** *MV/LV Overhead Reticulation is responsible for overhead-line conductor selection and reference-table spacing/clearance guidance; it explicitly does not perform sag-tension mechanical calculations.*
+
+#### What a fresh session should do with this section
+
+1. Confirm with Hertz which of the three to build first (default recommendation: 5.6.1's order above, starting with Underground Reticulation).
+2. Re-run [SYS-2] impact analysis for that item specifically before writing code (which existing engines/files does it touch, e.g. `cableEngine.js`).
+3. Engine-first: extracted calculation engine + tests, then UI, per the established PowerSuite pattern (§3 of the knowledge doc).
+4. Do not start item 2 or 3 in this list until item 1 is shipped and on-device verified, per §5.4.
