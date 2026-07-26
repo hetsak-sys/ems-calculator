@@ -98,7 +98,7 @@ Three §5.2 candidates run through the §5.1 checklist together in one scoping p
 | **New module vs. extension** | **New module** — "Installation Design." Built as a new dashboard tile/screen (`InstallationDesign.jsx` + `installationDesignEngine.js`), lazy-loaded per the existing per-module code-splitting pattern. |
 
 **Sub-tabs (4 planned, 1 built so far):**
-1. **Load Assessment** — **built, tested, and on-device verified (2026-07-26)** — all scenarios in `docs/on_device_checklist_installation_design.md` matched exactly, including the dashboard tile, warning checks, and PDF export. **Not yet confirmed committed/pushed to `origin/main`.**
+1. **Load Assessment** — **built, tested, on-device verified, and confirmed pushed to `origin/main` (2026-07-26)** — 11 new tests (342 passing repo-wide), all scenarios in `docs/on_device_checklist_installation_design.md` matched exactly (dashboard tile, warning checks, PDF export). Commit `675bd7b`, independently re-verified via fresh clone: 342 tests passing, clean build.
 2. **DB Sizing** — circuit count / breaker sizing / DB way-count reference from assessed load. Not started.
 3. **Circuit Design** — final-circuit sizing; cross-references `cableEngine.js` rather than duplicating its logic (per [ARC-1]/[DEC-2], reuse the existing engine, don't fork it). Not started.
 4. **Area Lighting** — exterior/floodlighting lux levels and pole spacing (SANS 10114-1), extending the lux-based method already used in Power Quality's interior Lighting sub-tab, but kept here rather than in PQ since outdoor photometric layout (pole spacing, mounting height) is a distinct enough job to strain PQ's charter if folded in there. Not started.
