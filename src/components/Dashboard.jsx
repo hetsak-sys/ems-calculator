@@ -10,6 +10,7 @@ const TOOL_GRID = [
   { id: 'pq',         label: 'Power Quality',    icon: '∿',   desc: 'Harmonics · Battery · Lighting',         bgKey: 'pqBg',      borderKey: 'pqBorder',      accentKey: 'pqAccent'      },
   { id: 'renewable',  label: 'Renewable Energy', icon: '☀',  desc: 'PV Arrays · Battery · Grid-Tie · Hybrid', bgKey: 'renewableBg', borderKey: 'renewableBorder', accentKey: 'renewableAccent' },
   { id: 'installation', label: 'Installation Design', icon: '🏗', desc: 'Load Assessment · DB Sizing · Circuits', bgKey: 'installBg', borderKey: 'installBorder', accentKey: 'installAccent' },
+  { id: 'overhead',     label: 'Overhead Reticulation', icon: '🗼', desc: 'Conductor Sizing · Pole Spacing · Clearances', bgKey: 'overheadBg', borderKey: 'overheadBorder', accentKey: 'overheadAccent' },
   { id: 'convert',    label: 'Unit Converter',   icon: '⇄',  desc: '12 engineering categories',               bgKey: 'convertBg', borderKey: 'convertBorder', accentKey: 'convertAccent' },
   { id: 'formulas',   label: 'Formula Library',  icon: '∑',  desc: 'IEC · SANS · Reference cards',            bgKey: 'formulaBg', borderKey: 'formulaBorder', accentKey: 'formulaAccent' },
 ]

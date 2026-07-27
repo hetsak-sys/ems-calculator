@@ -37,6 +37,7 @@ export const THEMES = {
     formulaBg:  '#0a0010',  formulaBorder:'#2d0040', formulaAccent:'#c084fc',
     renewableBg:'#001210',  renewableBorder:'#00473d', renewableAccent:'#2dd4bf',
     installBg:  '#000a10',  installBorder:'#003147',  installAccent:'#38bdf8',
+    overheadBg: '#0a0d10',  overheadBorder:'#1e293b', overheadAccent:'#94a3b8',
 
     // Buttons
     btnNum:     { bg: '#141414', text: '#e5e7eb', border: '#222222' },
@@ -90,6 +91,7 @@ export const THEMES = {
     formulaBg:  '#faf5ff',  formulaBorder:'#e9d5ff', formulaAccent:'#9333ea',
     renewableBg:'#f0fdfa',  renewableBorder:'#99f6e4', renewableAccent:'#0d9488',
     installBg:  '#f0f9ff',  installBorder:'#bae6fd',  installAccent:'#0284c7',
+    overheadBg: '#f8fafc',  overheadBorder:'#cbd5e1', overheadAccent:'#475569',
 
     // Buttons
     btnNum:     { bg: '#f5f3ee', text: '#111111', border: '#ddd9d0' },

@@ -20,6 +20,7 @@ const PowerSysCalculator = lazy(() => import('./components/PowerSysCalculator'))
 const PQCalculator = lazy(() => import('./components/PQCalculator'))
 const RenewableEnergyCalculator = lazy(() => import('./components/RenewableEnergyCalculator'))
 const InstallationDesign = lazy(() => import('./components/InstallationDesign'))
+const OverheadReticulation = lazy(() => import('./components/OverheadReticulation'))
 import { SiteProvider, useSite } from './components/SiteContext'
 import { WorkspaceProvider } from './components/WorkspaceContext'
 import { ResultCard, getPendingResult, clearPendingResult } from './components/shared'
@@ -33,6 +34,7 @@ const SCREEN_LABELS = {
   pq:         'Power Quality',
   renewable:  'Renewable Energy',
   installation: 'Installation Design',
+  overhead:   'Overhead Reticulation',
   convert:    'Unit Converter',
   formulas:   'Formula Library',
   history:    'Calculation History',
@@ -106,6 +108,7 @@ export default function App() {
       case 'pq':         return <PQCalculator {...props} />
       case 'renewable':  return <RenewableEnergyCalculator {...props} />
       case 'installation': return <InstallationDesign {...props} />
+      case 'overhead':     return <OverheadReticulation {...props} />
       case 'convert':    return <ConvertCalculator theme={T} themeMode={themeMode} />
       case 'formulas':   return <FormulaReference history={history} theme={T} themeMode={themeMode} />
       case 'history':    return <HistoryView history={history} onClear={() => setHistory([])} theme={T} themeMode={themeMode} />
