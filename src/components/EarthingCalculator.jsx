@@ -4,6 +4,7 @@ import {
   adiabaticConductorSizing, EARTHING_MATERIALS,
   faultLoopImpedance,
 } from './earthingEngine'
+import { ResultCard, useResultCard } from './shared'
 
 const TABS = [
   { id: 'electrode',  label: 'Electrode R'   },
@@ -56,6 +57,7 @@ function ElectrodeRes() {
   const [n, setN]       = useState('1')     // number of rods
   const [s, setS]       = useState('3')     // spacing m
   const [res, setRes]   = useState(null)
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calc = () => {
     setRes(null) // COD-14: clear before validating, so an invalid resubmit never leaves a stale result on screen
@@ -66,6 +68,30 @@ function ElectrodeRes() {
       parallel: r.parallel.toFixed(3),
       ratio:    r.ratio.toFixed(2),
       pass:     r.pass,
+    })
+  }
+
+  const handleResultCard = () => {
+    if (!res) return
+    showCard({
+      calculator: 'Earthing — Electrode Resistance (Dwight\'s Formula)',
+      standard: 'IEC 62305 / SANS 10199',
+      site: '',
+      inputs: [
+        { label: 'Soil Resistivity', value: `${rho} Ω·m` }, { label: 'Rod Length', value: `${L} m` },
+        { label: 'Rod Diameter', value: `${d} m` }, { label: 'Number of Rods', value: n },
+        { label: 'Rod Spacing', value: `${s} m` },
+      ],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'Single Rod Resistance', value: `${res.single} Ω` },
+          { label: 'Parallel Resistance', value: `${res.parallel} Ω`, accent: true },
+          { label: 'Improvement Factor', value: `×${res.ratio}` },
+          { label: res.pass ? 'Below 1 Ω — acceptable for most MV systems' : 'Above 1 Ω — add more rods or treat soil', value: res.pass ? 'PASS' : 'CHECK', warn: !res.pass },
+        ]
+      }],
+      notes: "Multiple-rod resistance uses a simple 1/n parallel approximation with no mutual-resistance/spacing correction — a known simplification, not a full multi-electrode analysis. For critical earthing systems, verify with a full IEC 62305/SANS 10199 calculation including spacing effects.",
     })
   }
 
@@ -90,6 +116,12 @@ function ElectrodeRes() {
           </div>
         </div>
       )}
+      {res && (
+        <button onClick={handleResultCard} className="w-full py-3 rounded-xl font-bold text-sm mt-3 bg-[#1a1a2e] border border-[#2a2a5a] text-blue-300">
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
@@ -100,6 +132,7 @@ function TouchStep() {
   const [hs, setHs]       = useState('0.1')  // surface layer thickness m
   const [ts, setTs]       = useState('0.5')  // fault duration s
   const [res, setRes]     = useState(null)
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calc = () => {
     setRes(null)
@@ -109,6 +142,28 @@ function TouchStep() {
       Cs:    r.Cs.toFixed(3),
       touch: r.touch.toFixed(1),
       step:  r.step.toFixed(1),
+    })
+  }
+
+  const handleResultCard = () => {
+    if (!res) return
+    showCard({
+      calculator: 'Earthing — Touch & Step Voltage',
+      standard: 'IEEE Std 80',
+      site: '',
+      inputs: [
+        { label: 'Surface Layer Resistivity', value: `${rho_s} Ω·m` }, { label: 'Surface Layer Thickness', value: `${hs} m` },
+        { label: 'Fault Clearing Time', value: `${ts} s` },
+      ],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'Surface Derating Factor (Cs)', value: res.Cs },
+          { label: 'Tolerable Touch Voltage', value: `${res.touch} V`, accent: true },
+          { label: 'Tolerable Step Voltage', value: `${res.step} V`, accent: true },
+        ]
+      }],
+      notes: 'These are tolerable limits for a 50 kg body weight (IEEE 80 Eq 32/33) — not the actual touch/step voltages at a specific site. Compare against calculated GPR and mesh/step voltages from a full grid analysis; this calculator does not compute those.',
     })
   }
 
@@ -131,6 +186,12 @@ function TouchStep() {
           </div>
         </div>
       )}
+      {res && (
+        <button onClick={handleResultCard} className="w-full py-3 rounded-xl font-bold text-sm mt-3 bg-[#1a1a2e] border border-[#2a2a5a] text-blue-300">
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
@@ -144,12 +205,34 @@ function ConductorSizing() {
   const MAT = EARTHING_MATERIALS
 
   const [res, setRes] = useState(null)
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calc = () => {
     setRes(null)
     const r = adiabaticConductorSizing({ If, tf, material: mat })
     if (!r) return
     setRes({ S: r.S.toFixed(1), Smin: r.Smin, name: r.name })
+  }
+
+  const handleResultCard = () => {
+    if (!res) return
+    showCard({
+      calculator: 'Earthing — Conductor Sizing (Adiabatic)',
+      standard: 'IEC 60364-5-54',
+      site: '',
+      inputs: [
+        { label: 'Fault Current', value: `${If} A` }, { label: 'Fault Duration', value: `${tf} s` },
+        { label: 'Material', value: res.name },
+      ],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'Calculated Minimum S', value: `${res.S} mm²` },
+          { label: 'Next Standard Size', value: `${res.Smin} mm²`, accent: true },
+        ]
+      }],
+      notes: 'IEC 60364-5-54 adiabatic equation: S = I√t / k. This is the thermal minimum only — confirm mechanical strength and corrosion resistance requirements aren\'t more restrictive for this installation.',
+    })
   }
 
   return (
@@ -186,6 +269,12 @@ function ConductorSizing() {
           <ResultRow label="Material"             value={res.name} unit="" />
         </div>
       )}
+      {res && (
+        <button onClick={handleResultCard} className="w-full py-3 rounded-xl font-bold text-sm mt-3 bg-[#1a1a2e] border border-[#2a2a5a] text-blue-300">
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
@@ -198,6 +287,7 @@ function FaultLoop() {
   const [Re, setRe]   = useState('0.3')   // earth path R Ω
   const [Iop, setIop] = useState('100')   // overcurrent device trip A
   const [res, setRes] = useState(null)
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calc = () => {
     setRes(null)
@@ -209,6 +299,31 @@ function FaultLoop() {
       If1:   r.If1.toFixed(0),
       pass:  r.pass,
       ratio: r.ratio.toFixed(1),
+    })
+  }
+
+  const handleResultCard = () => {
+    if (!res) return
+    showCard({
+      calculator: 'Earthing — Fault Loop Impedance',
+      standard: 'SANS 10142',
+      site: '',
+      inputs: [
+        { label: 'Supply Voltage', value: `${Vs} V` }, { label: 'Source Impedance (Zs)', value: `${Zs} Ω` },
+        { label: 'Phase Cable Resistance (Rc)', value: `${Rc} Ω` }, { label: 'Earth Conductor Resistance (Re)', value: `${Re} Ω` },
+        { label: 'Protection Device Rating', value: `${Iop} A` },
+      ],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'Total Loop Impedance', value: `${res.Zloop} Ω` },
+          { label: '3-Phase Fault Current', value: `${res.Isc} A` },
+          { label: 'L-E Fault Current', value: `${res.If1} A`, accent: true },
+          { label: '× Device Rating', value: `${res.ratio}×` },
+          { label: res.pass ? 'Protection will operate correctly' : 'Fault current too low — protection may not trip', value: res.pass ? 'PASS' : 'CHECK', warn: !res.pass },
+        ]
+      }],
+      notes: '5× device rating pass threshold assumes magnetic trip (Type B/C MCB) — adjust for other protection device curves. Confirm actual measured loop impedance on-site; calculated values from nameplate/catalogue data may not reflect installed conditions.',
     })
   }
 
@@ -234,6 +349,12 @@ function FaultLoop() {
           </div>
         </div>
       )}
+      {res && (
+        <button onClick={handleResultCard} className="w-full py-3 rounded-xl font-bold text-sm mt-3 bg-[#1a1a2e] border border-[#2a2a5a] text-blue-300">
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }

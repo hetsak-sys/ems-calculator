@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, SubTabBar, UnitNumInput, VOLTAGE_UNITS } from './shared'
+import { pf, NumInput, SelectInput, ToggleInput, ResultBox, InfoBox, ErrBox, CalcButton, SubTabBar, UnitNumInput, VOLTAGE_UNITS, ResultCard, useResultCard } from './shared'
 import { useSite } from './SiteContext'
 import { useWorkspace } from './WorkspaceContext'
 import {
@@ -20,6 +20,7 @@ function CableSizing({ addHistory }) {
   const [voltage,setVoltage]=useState(site.defaultLV||'400'),[insul,setInsul]=useState(site.insulation||'PVC'),[material,setMat]=useState(site.material||'Cu')
   const [ambient,setAmbient]=useState(site.ambient||'30'),[groups,setGroups]=useState('1'),[install,setInstall]=useState('Clipped direct')
   const [maxVd,setMaxVd]=useState(site.maxVd||'3'),[results,setResults]=useState(null),[error,setError]=useState('')
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calculate=()=>{
     setError('')
@@ -30,6 +31,32 @@ function CableSizing({ addHistory }) {
     if(!r.recommended)setError('No single size meets criteria — consider parallel cables')
     setResults({recommended: r.recommended, allResults, derating:(r.derating*100).toFixed(1), required:r.required.toFixed(1)})
     if(r.recommended)addHistory({tab:'Cable',expr:`${pf(current)}A ${pf(length)}m ${phase}`,result:`${r.recommended}mm²`})
+  }
+
+  const handleResultCard = () => {
+    if (!results) return
+    showCard({
+      calculator: 'Cable — Sizing',
+      standard: 'IEC 60364-5-52',
+      site: site.name,
+      inputs: [
+        { label: 'Phase', value: phase }, { label: 'Design Current', value: `${pf(current)} A` },
+        { label: 'Cable Length', value: `${pf(length)} m` }, { label: 'System Voltage', value: `${pf(voltage)} V` },
+        { label: 'Insulation', value: insul }, { label: 'Conductor', value: material },
+        { label: 'Ambient Temp', value: `${ambient}°C` }, { label: 'Grouped Circuits', value: groups },
+        { label: 'Installation Method', value: install }, { label: 'Max Voltage Drop', value: `${maxVd}%` },
+      ],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'Derating Factor', value: `${results.derating}%` },
+          { label: 'Required Ampacity', value: `${results.required} A` },
+          { label: results.recommended ? 'Recommended Size' : 'No size meets criteria', value: results.recommended ? `${results.recommended} mm²` : '—', accent: true },
+          ...results.allResults.map(r => ({ label: `  ${r.size}mm² — ${r.pass ? 'OK' : 'fail'}`, value: `${r.derated}A derated, ${r.vdPct}% VD`, sub: true })),
+        ]
+      }],
+      notes: 'IEC 60364-5-52 ampacity tables with derating for ambient temperature, grouping, and installation method. Confirm voltage drop over the full circuit length including any downstream loads.',
+    })
   }
 
   return(
@@ -73,6 +100,12 @@ function CableSizing({ addHistory }) {
           ))}
         </div>
       </>}
+      {results&&results.recommended&&(
+        <button onClick={handleResultCard} className="w-full bg-[#1a1a2e] border border-[#2a2a5a] text-blue-300 font-bold py-3 rounded-xl text-sm mb-4">
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
@@ -82,6 +115,7 @@ function VoltDrop({ addHistory }) {
   const [phase,setPhase]=useState(flaSnapshot?.phase||'3ph'),[current,setCurrent]=useState(flaSnapshot?.fla||''),[pfVal,setPf]=useState(flaSnapshot?.pfVal||'0.85')
   const [length,setLength]=useState(''),[voltage,setVoltage]=useState('400'),[size,setSize]=useState('16')
   const [material,setMat]=useState('Cu'),[result,setResult]=useState(null),[error,setError]=useState('')
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calculate=()=>{
     setError('')
@@ -90,6 +124,32 @@ function VoltDrop({ addHistory }) {
     if (r.error) { setError(r.error); return }
     setResult({vdD:r.vdD.toFixed(3),vdS:r.vdS.toFixed(3),pctD:r.pctD.toFixed(3),pctS:r.pctS.toFixed(3),Vend:r.Vend.toFixed(1),pass:r.pass})
     addHistory({tab:'VD',expr:`${pf(current)}A ${pf(length)}m ${pf(size)}mm²`,result:`${r.pctD.toFixed(2)}%`})
+  }
+
+  const handleResultCard = () => {
+    if (!result) return
+    showCard({
+      calculator: 'Cable — Detailed Voltage Drop',
+      standard: 'IEC 60364-5-52 (R×cosφ + X×sinφ method)',
+      site: '',
+      inputs: [
+        { label: 'Phase', value: phase }, { label: 'Load Current', value: `${pf(current)} A` },
+        { label: 'Power Factor', value: pfVal }, { label: 'Cable Length', value: `${pf(length)} m` },
+        { label: 'System Voltage', value: `${pf(voltage)} V` }, { label: 'Cable Size', value: `${size} mm²` },
+        { label: 'Conductor', value: material },
+      ],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'IEC Detailed Voltage Drop', value: `${result.vdD} V`, accent: true },
+          { label: 'IEC %VD', value: `${result.pctD}%`, accent: true, warn: !result.pass },
+          { label: 'Simple Method VD', value: `${result.vdS} V` },
+          { label: 'Simple %VD', value: `${result.pctS}%` },
+          { label: 'Voltage at Load End', value: `${result.Vend} V` },
+        ]
+      }],
+      notes: `${result.pass ? 'Within' : 'Exceeds'} the common 3% design guideline (SANS 10142-1 does not mandate a fixed figure — confirm the applicable limit for this installation). The IEC detailed method (R×cosφ + X×sinφ) is more accurate than the simple resistivity method for larger cable sizes.`,
+    })
   }
 
   return(
@@ -120,6 +180,12 @@ function VoltDrop({ addHistory }) {
         {label:'Simple %VD',value:`${result.pctS}%`,unit:''},
         {label:'Voltage at Load End',value:result.Vend,unit:'V'},
       ]}/>}
+      {result&&(
+        <button onClick={handleResultCard} className="w-full bg-[#1a1a2e] border border-[#2a2a5a] text-blue-300 font-bold py-3 rounded-xl text-sm mb-4">
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
@@ -128,6 +194,7 @@ function ShortCircuit({ addHistory }) {
   const [sourceKVA,setSourceKVA]=useState(''),[voltage,setVoltage]=useState('400')
   const [cableSize,setCableSize]=useState('16'),[cableLen,setCableLen]=useState('')
   const [material,setMat]=useState('Cu'),[result,setResult]=useState(null),[error,setError]=useState('')
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calculate=()=>{
     setError('')
@@ -137,6 +204,31 @@ function ShortCircuit({ addHistory }) {
     const i3s = r.i3.toFixed(0), i1s = r.i1.toFixed(0)
     setResult({Zs:(r.Zs*1000).toFixed(2),Zc:(r.Zc*1000).toFixed(2),Zt:(r.Zt*1000).toFixed(2),i3:i3s,i1:i1s,i3kA:(r.i3/1000).toFixed(3),i1kA:(r.i1/1000).toFixed(3)})
     addHistory({tab:'ISC',expr:`${pf(sourceKVA)}kVA ${pf(voltage)}V`,result:`${(r.i3/1000).toFixed(3)}kA`})
+  }
+
+  const handleResultCard = () => {
+    if (!result) return
+    showCard({
+      calculator: 'Cable — Short Circuit Current',
+      standard: 'IEC 60909 (simplified series-impedance model)',
+      site: '',
+      inputs: [
+        { label: 'Source Rating', value: `${pf(sourceKVA)} kVA` }, { label: 'System Voltage', value: `${pf(voltage)} V` },
+        { label: 'Conductor', value: material }, { label: 'Cable Size to Fault', value: `${cableSize} mm²` },
+        { label: 'Cable Length to Fault', value: `${pf(cableLen)} m` },
+      ],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'Source Impedance (Zs)', value: `${result.Zs} mΩ` },
+          { label: 'Cable Loop Impedance (Zc)', value: `${result.Zc} mΩ` },
+          { label: 'Total Impedance', value: `${result.Zt} mΩ` },
+          { label: '3-Phase Fault Current', value: `${result.i3} A (${result.i3kA} kA)`, accent: true },
+          { label: '1-Phase Fault Current', value: `${result.i1} A (${result.i1kA} kA)` },
+        ]
+      }],
+      notes: 'Simplified model — series impedance only, no grid infeed or 1.05 voltage factor (IEC 60909 Clause 8). Use for initial breaker/fuse kA rating only; final protection coordination requires a dedicated study.',
+    })
   }
 
   return(
@@ -156,6 +248,12 @@ function ShortCircuit({ addHistory }) {
         {label:'3-Phase Fault Current',value:`${result.i3} A`,unit:`(${result.i3kA} kA)`,accent:true},
         {label:'1-Phase Fault Current',value:`${result.i1} A`,unit:`(${result.i1kA} kA)`},
       ]}/>}
+      {result&&(
+        <button onClick={handleResultCard} className="w-full bg-[#1a1a2e] border border-[#2a2a5a] text-blue-300 font-bold py-3 rounded-xl text-sm mb-4">
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
@@ -165,6 +263,7 @@ function TrailingCable({ addHistory }) {
   const [current,setCurrent]=useState(flaSnapshot?.fla||''),[length,setLength]=useState('')
   const [voltage,setVoltage]=useState('525'),[maxVd,setMaxVd]=useState('5')
   const [results,setResults]=useState(null),[error,setError]=useState('')
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calculate=()=>{
     setError('')
@@ -175,6 +274,28 @@ function TrailingCable({ addHistory }) {
     if(!r.recommended)setError('No standard trailing cable meets criteria')
     setResults({recommended: r.recommended, allResults, required:r.required.toFixed(1)})
     if(r.recommended)addHistory({tab:'Trailing',expr:`${pf(current)}A ${pf(length)}m ${pf(voltage)}V`,result:`${r.recommended}mm²`})
+  }
+
+  const handleResultCard = () => {
+    if (!results) return
+    showCard({
+      calculator: 'Cable — Mining Trailing Cable',
+      standard: 'IEC 60364-5-52 (flexible-use derating)',
+      site: '',
+      inputs: [
+        { label: 'Load Current', value: `${pf(current)} A` }, { label: 'Cable Length', value: `${pf(length)} m` },
+        { label: 'System Voltage', value: `${pf(voltage)} V` }, { label: 'Max Voltage Drop', value: `${maxVd}%` },
+      ],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'Required Ampacity', value: `${results.required} A` },
+          { label: results.recommended ? 'Recommended Size' : 'No size meets criteria', value: results.recommended ? `${results.recommended} mm²` : '—', accent: true },
+          ...results.allResults.map(r => ({ label: `  ${r.size}mm² — ${r.pass ? 'OK' : 'fail'}`, value: `${r.derated}A, ${r.vdPct}% VD, ${r.weight}kg`, sub: true })),
+        ]
+      }],
+      notes: 'Derating factor 0.85 applied for flexible mining trailing cable use. Common mine voltages: 525V, 1000V, 3300V — confirm the cable\'s actual insulation rating covers the system voltage.',
+    })
   }
 
   return(
@@ -212,6 +333,12 @@ function TrailingCable({ addHistory }) {
           ))}
         </div>
       </>}
+      {results&&results.recommended&&(
+        <button onClick={handleResultCard} className="w-full bg-[#1a1a2e] border border-[#2a2a5a] text-blue-300 font-bold py-3 rounded-xl text-sm mb-4">
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
@@ -219,12 +346,36 @@ function TrailingCable({ addHistory }) {
 function ConduitFill() {
   const [conduit,setConduit]=useState('25'),[cableSize,setCableSize]=useState('2.5')
   const [numCables,setNumCables]=useState(''),[result,setResult]=useState(null)
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calculate=()=>{
     setResult(null)
     const r = conduitFill({ conduit, cableSize, numCables })
     if (!r) return
     setResult({ fill: r.fill.toFixed(1), max33: r.max33, max40: r.max40, pass: r.pass, pass40: r.pass40 })
+  }
+
+  const handleResultCard = () => {
+    if (!result) return
+    showCard({
+      calculator: 'Cable — Conduit Fill',
+      standard: 'SANS 10142-1 (33%/40% fill guideline)',
+      site: '',
+      inputs: [
+        { label: 'Conduit ID', value: `${conduit} mm` }, { label: 'Cable Size', value: `${cableSize} mm²` },
+        { label: 'Number of Cables', value: numCables },
+      ],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'Actual Fill', value: `${result.fill}%`, accent: true, warn: !result.pass && !result.pass40 },
+          { label: 'Fill Status', value: result.pass ? 'OK (≤33%)' : result.pass40 ? 'OK (≤40%, straight runs only)' : 'OVERFULL', warn: !result.pass && !result.pass40 },
+          { label: 'Max Cables (33% — bends/long runs)', value: result.max33 },
+          { label: 'Max Cables (40% — straight runs only)', value: result.max40 },
+        ]
+      }],
+      notes: '33% fill limit applies where bends or long runs make cable pulling difficult; 40% is the maximum for short straight runs only.',
+    })
   }
 
   return(
@@ -239,6 +390,12 @@ function ConduitFill() {
         {label:'Max cables (33%)',value:result.max33,unit:'cables'},
         {label:'Max cables (40%)',value:result.max40,unit:'cables'},
       ]}/>}
+      {result&&(
+        <button onClick={handleResultCard} className="w-full bg-[#1a1a2e] border border-[#2a2a5a] text-blue-300 font-bold py-3 rounded-xl text-sm mb-4">
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
@@ -260,6 +417,7 @@ function GlandSize() {
   const [od, setOd]             = useState('')
   const [result, setResult]     = useState(null)
   const [error, setError]       = useState('')
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calculate = () => {
     setError('')
@@ -271,6 +429,34 @@ function GlandSize() {
     } else {
       setResult(r)
     }
+  }
+
+  const handleResultCard = () => {
+    if (!result) return
+    showCard({
+      calculator: 'Cable — Gland Size Selection',
+      standard: 'Standard metric gland reference (0–7)',
+      site: '',
+      inputs: method === 'conductor'
+        ? [
+            { label: 'Conductor Size', value: `${condSize} mm²` }, { label: 'Cores', value: cores },
+            { label: 'Armour', value: armour === 'swa' ? 'SWA (Steel Wire Armoured)' : 'Unarmoured' },
+            { label: 'Insulation', value: insul.toUpperCase() },
+          ]
+        : [{ label: 'Measured Cable OD', value: `${pf(od)} mm` }],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'Typical Cable OD', value: `${result.od} mm` },
+          { label: 'Gland Size', value: `Size ${result.gland}`, accent: true },
+          { label: 'Thread Size', value: result.thread, accent: true },
+          { label: 'Gland Type', value: result.type, accent: true },
+          { label: 'Type Description', value: result.glandType },
+          { label: 'OD Range for this Size', value: `${result.min}–${result.max} mm` },
+        ]
+      }],
+      notes: 'A2 = unarmoured PVC gland, CW/BW = SWA armoured gland. Confirm against the actual measured cable OD on-site — catalogue OD figures vary between manufacturers.',
+    })
   }
 
   return (
@@ -359,6 +545,12 @@ function GlandSize() {
           </div>
         </>
       )}
+      {result&&(
+        <button onClick={handleResultCard} className="w-full bg-[#1a1a2e] border border-[#2a2a5a] text-blue-300 font-bold py-3 rounded-xl text-sm mb-4">
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
@@ -414,6 +606,7 @@ function DirectBuriedSizing({ addHistory }) {
   const [resistivity,setResistivity]=useState('2.5'),[soilNature,setSoilNature]=useState('Damp')
   const [depth,setDepth]=useState('0.6'),[circuits,setCircuits]=useState('1'),[clearance,setClearance]=useState('touching')
   const [maxVd,setMaxVd]=useState('3'),[results,setResults]=useState(null),[error,setError]=useState('')
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calculate=()=>{
     setError('')
@@ -424,6 +617,33 @@ function DirectBuriedSizing({ addHistory }) {
     if(!r.recommended)setError('No standard size meets criteria - consider parallel cables or a shallower/less-grouped route')
     setResults({recommended: r.recommended, allResults, derating:(r.derating).toFixed(3), required:r.required.toFixed(1)})
     if(r.recommended)addHistory({tab:'Direct-Buried',expr:`${pf(current)}A ${pf(length)}m buried`,result:`${r.recommended}mm²`})
+  }
+
+  const handleResultCard = () => {
+    if (!results) return
+    showCard({
+      calculator: 'Cable — Direct-Buried Sizing',
+      standard: 'IEC 60364-5-52 Annex B (D2) · IEC 60502-2 depth correction',
+      site: '',
+      inputs: [
+        { label: 'Insulation', value: insul }, { label: 'Conductor', value: material },
+        { label: 'Design Current', value: `${pf(current)} A` }, { label: 'Cable Length', value: `${pf(length)} m` },
+        { label: 'System Voltage', value: `${pf(voltage)} V` }, { label: 'Max Voltage Drop', value: `${maxVd}%` },
+        { label: 'Ground Temperature', value: `${groundTemp}°C` }, { label: 'Depth of Laying', value: `${depth} m` },
+        { label: 'Soil Resistivity Input', value: resistivityMode === 'value' ? `${resistivity} K.m/W` : soilNature },
+        { label: 'Circuits in Trench', value: circuits }, { label: 'Cable-to-Cable Clearance', value: circuits !== '1' ? clearance : '—' },
+      ],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'Overall Derating', value: `×${results.derating}` },
+          { label: 'Required Ampacity', value: `${results.required} A` },
+          { label: results.recommended ? 'Recommended Size' : 'No size meets criteria', value: results.recommended ? `${results.recommended} mm²` : '—', accent: true },
+          ...results.allResults.map(r => ({ label: `  ${r.size}mm² — ${r.pass ? 'OK' : 'fail'}`, value: `${r.derated}A, ${r.vdPct}% VD`, sub: true })),
+        ]
+      }],
+      notes: 'Depth correction sourced from IEC 60502-2 Table B.12 — a different but compatible standard to the base IEC 60364-5-52 ampacity tables. Planning-level: for critical or parallel multi-circuit installations, confirm with a full IEC 60287 thermal study.',
+    })
   }
 
   return(
@@ -456,6 +676,12 @@ function DirectBuriedSizing({ addHistory }) {
       <CalcButton onClick={calculate}/>
       <ErrBox msg={error}/>
       {results && <BuriedResultsTable results={results}/>}
+      {results&&results.recommended&&(
+        <button onClick={handleResultCard} className="w-full bg-[#1a1a2e] border border-[#2a2a5a] text-blue-300 font-bold py-3 rounded-xl text-sm mb-4">
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
@@ -469,6 +695,7 @@ function DuctDerating({ addHistory }) {
   const [resistivity,setResistivity]=useState('2.5'),[soilNature,setSoilNature]=useState('Damp')
   const [circuits,setCircuits]=useState('1'),[clearance,setClearance]=useState('touching')
   const [maxVd,setMaxVd]=useState('3'),[results,setResults]=useState(null),[error,setError]=useState('')
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calculate=()=>{
     setError('')
@@ -479,6 +706,33 @@ function DuctDerating({ addHistory }) {
     if(!r.recommended)setError('No standard size meets criteria - consider parallel cables or fewer ducts per bank')
     setResults({recommended: r.recommended, allResults, derating:(r.derating).toFixed(3), required:r.required.toFixed(1)})
     if(r.recommended)addHistory({tab:'Duct Derating',expr:`${pf(current)}A ${pf(length)}m in duct`,result:`${r.recommended}mm²`})
+  }
+
+  const handleResultCard = () => {
+    if (!results) return
+    showCard({
+      calculator: 'Cable — Duct-Installed Derating',
+      standard: 'IEC 60364-5-52 Annex B (D1)',
+      site: '',
+      inputs: [
+        { label: 'Insulation', value: insul }, { label: 'Conductor', value: material },
+        { label: 'Design Current', value: `${pf(current)} A` }, { label: 'Cable Length', value: `${pf(length)} m` },
+        { label: 'System Voltage', value: `${pf(voltage)} V` }, { label: 'Max Voltage Drop', value: `${maxVd}%` },
+        { label: 'Ground Temperature', value: `${groundTemp}°C` },
+        { label: 'Soil Resistivity Input', value: resistivityMode === 'value' ? `${resistivity} K.m/W` : soilNature },
+        { label: 'Ducts/Circuits in Bank', value: circuits }, { label: 'Duct-to-Duct Clearance', value: circuits !== '1' ? clearance : '—' },
+      ],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'Overall Derating', value: `×${results.derating}` },
+          { label: 'Required Ampacity', value: `${results.required} A` },
+          { label: results.recommended ? 'Recommended Size' : 'No size meets criteria', value: results.recommended ? `${results.recommended} mm²` : '—', accent: true },
+          ...results.allResults.map(r => ({ label: `  ${r.size}mm² — ${r.pass ? 'OK' : 'fail'}`, value: `${r.derated}A, ${r.vdPct}% VD`, sub: true })),
+        ]
+      }],
+      notes: 'No depth correction applied — no verified full-range IEC 60502-2 duct-depth table for this method. Grouping factor reuses the direct-buried table; confirm against a duct-bank-specific study for large banks (>4 circuits).',
+    })
   }
 
   return(
@@ -510,6 +764,12 @@ function DuctDerating({ addHistory }) {
       <CalcButton onClick={calculate}/>
       <ErrBox msg={error}/>
       {results && <BuriedResultsTable results={results}/>}
+      {results&&results.recommended&&(
+        <button onClick={handleResultCard} className="w-full bg-[#1a1a2e] border border-[#2a2a5a] text-blue-300 font-bold py-3 rounded-xl text-sm mb-4">
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
@@ -519,6 +779,7 @@ function RouteFaultLevel() {
   const [sourceKVA,setSourceKVA]=useState(''),[voltage,setVoltage]=useState('400')
   const [segments,setSegments]=useState([{size:'95',length:'',material:'Cu'}])
   const [result,setResult]=useState(null),[error,setError]=useState('')
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const addSegment=()=>setSegments(s=>[...s,{size:'95',length:'',material:'Cu'}])
   const removeSegment=(i)=>setSegments(s=>s.filter((_,j)=>j!==i))
@@ -530,6 +791,24 @@ function RouteFaultLevel() {
     const r = routeFaultLevel({ sourceKVA, voltage, segments })
     if (r.error) { setError(r.error); return }
     setResult(r.nodes.map(n => ({ label: n.label, i3: (n.i3/1000).toFixed(3), i1: (n.i1/1000).toFixed(3), Zt: (n.Zt*1000).toFixed(2) })))
+  }
+
+  const handleResultCard = () => {
+    if (!result) return
+    showCard({
+      calculator: 'Cable — Route Fault Level',
+      standard: 'IEC 60909 Clause 8 (simplified, chained series impedance)',
+      site: '',
+      inputs: [
+        { label: 'Source Rating', value: `${pf(sourceKVA)} kVA` }, { label: 'System Voltage', value: `${pf(voltage)} V` },
+        ...segments.map((s, i) => ({ label: `Segment ${i + 1}`, value: `${s.size}mm² ${s.material}, ${pf(s.length)}m`, sub: true })),
+      ],
+      sections: [{
+        title: 'FAULT LEVEL BY POINT',
+        rows: result.map(n => ({ label: n.label, value: `${n.i3} kA (3φ) / ${n.i1} kA (1φ), Zt ${n.Zt}mΩ` })),
+      }],
+      notes: "Reuses the Fault Current tab's simplified model (Zt = Zs + Zc), chained across segments in series. For protection grading studies, confirm critical points with a full IEC 60909 analysis.",
+    })
   }
 
   return(
@@ -581,6 +860,12 @@ function RouteFaultLevel() {
           ))}
         </div>
       )}
+      {result&&(
+        <button onClick={handleResultCard} className="w-full bg-[#1a1a2e] border border-[#2a2a5a] text-blue-300 font-bold py-3 rounded-xl text-sm mb-4">
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
@@ -679,6 +964,7 @@ function VfdCable({ addHistory }) {
   const { flaSnapshot } = useWorkspace()
   const [current,setCurrent]=useState(flaSnapshot?.fla||''),[length,setLength]=useState('')
   const [voltage,setVoltage]=useState('400'),[result,setResult]=useState(null),[error,setError]=useState('')
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calculate=()=>{
     setError('')
@@ -687,6 +973,29 @@ function VfdCable({ addHistory }) {
     if (r.error) { setError(r.error); return }
     setResult({size:r.size, deratedI:r.deratedI.toFixed(1), vd:r.vd.toFixed(2), vdPct:r.vdPct.toFixed(2), lengthOK:r.lengthOK, maxLen:r.maxLen})
     addHistory({tab:'VFD Cable',expr:`${pf(current)}A ${pf(length)}m VFD`,result:`${r.size}mm²`})
+  }
+
+  const handleResultCard = () => {
+    if (!result) return
+    showCard({
+      calculator: 'Cable — VFD Output Cable Sizing',
+      standard: 'IEC 60364-5-52 (screened cable, harmonic + screening derating)',
+      site: '',
+      inputs: [
+        { label: 'Motor FLA', value: `${pf(current)} A` }, { label: 'Cable Length (drive to motor)', value: `${pf(length)} m` },
+        { label: 'System Voltage', value: `${pf(voltage)} V` },
+      ],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'Derated Design Current', value: `${result.deratedI} A` },
+          { label: 'Recommended Cable Size', value: `${result.size} mm² (screened)`, accent: true },
+          { label: 'Voltage Drop', value: `${result.vd} V (${result.vdPct}%)` },
+          { label: 'Cable Length Check', value: result.lengthOK ? `OK (≤${result.maxLen}m)` : `Exceeds ${result.maxLen}m — fit output reactor`, warn: !result.lengthOK },
+        ]
+      }],
+      notes: 'Derating: ×1.1 for harmonics, ×0.8 for screening effect. Use screened (shielded) cable with 360° termination at both ends — never SWA armoured cable for VFD output. Max unfiltered length ≈50m to limit dV/dt stress on motor winding; add an output reactor/filter beyond that.',
+    })
   }
 
   return(
@@ -721,6 +1030,12 @@ function VfdCable({ addHistory }) {
           '• Separate VFD cable from signal cables by ≥300mm',
         ]}/>
       </>}
+      {result&&(
+        <button onClick={handleResultCard} className="w-full bg-[#1a1a2e] border border-[#2a2a5a] text-blue-300 font-bold py-3 rounded-xl text-sm mb-4">
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }

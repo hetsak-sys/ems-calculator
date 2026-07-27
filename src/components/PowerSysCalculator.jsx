@@ -2,6 +2,7 @@ import GeneratorSizingPro from './GeneratorSizing'
 import React, { useState } from 'react'
 import { useSite } from './SiteContext'
 import { transformerParameters, pfCorrection, busbarRating, motorStartingComparison } from './powerSysEngine'
+import { ResultCard, useResultCard } from './shared'
 
 // ── Tab merge note (this session) ──────────────────────────────────────────
 // Previously two separate tabs: 'generator' (a basic single-number calc,
@@ -69,6 +70,7 @@ function TransformerCalc() {
   const [pf, setPf]     = useState('0.85')
   const [eff, setEff]   = useState('98')
   const [res, setRes]   = useState(null)
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calc = () => {
     setRes(null)
@@ -81,6 +83,32 @@ function TransformerCalc() {
       Isc3:  r.Isc3.toFixed(2),
       Isc1:  r.Isc1.toFixed(2),
       Ploss: r.Ploss.toFixed(2),
+    })
+  }
+
+  const handleResultCard = () => {
+    if (!res) return
+    showCard({
+      calculator: 'Power Systems — Transformer Parameters',
+      standard: 'IEC 60076',
+      site: site.name,
+      inputs: [
+        { label: 'Transformer Rating', value: `${kva} kVA` }, { label: 'Primary Voltage', value: `${vpri} V` },
+        { label: 'Secondary Voltage', value: `${vsec} V` }, { label: 'Impedance', value: `${zpc}%` },
+        { label: 'Load Power Factor', value: pf }, { label: 'Efficiency', value: `${eff}%` },
+      ],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'Turns Ratio', value: `${res.ratio}:1` },
+          { label: 'Primary FLC', value: `${res.Ipri} A` },
+          { label: 'Secondary FLC', value: `${res.Isec} A`, accent: true },
+          { label: '3-Phase Fault (LV side)', value: `${res.Isc3} kA`, accent: true },
+          { label: '1-Phase Fault (LV side)', value: `${res.Isc1} kA` },
+          { label: 'Transformer Losses', value: `${res.Ploss} kW` },
+        ]
+      }],
+      notes: 'Simplified model — fault current derived from nameplate %Z only, no grid infeed or 1.05 voltage factor (IEC 60909 Clause 8). Use for initial breaker/fuse kA rating only.',
     })
   }
 
@@ -103,6 +131,12 @@ function TransformerCalc() {
           <ResultRow label="Transformer Losses"      value={res.Ploss} unit="kW" />
         </div>
       )}
+      {res && (
+        <button onClick={handleResultCard} className="w-full py-3 rounded-xl font-bold text-sm mt-3" style={{ backgroundColor: '#1a1a2e', border: '1px solid #2a2a5a', color: '#93c5fd' }}>
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
@@ -115,6 +149,7 @@ function PFCorrection() {
   const [pf2, setPf2]   = useState('0.95')
   const [vv, setVv]     = useState(String(site.defaultLV || '400'))
   const [res, setRes]   = useState(null)
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calc = () => {
     setRes(null)
@@ -127,6 +162,31 @@ function PFCorrection() {
       Ibefore: r.Ibefore.toFixed(1),
       Iafter:  r.Iafter.toFixed(1),
       saving: r.saving.toFixed(1),
+    })
+  }
+
+  const handleResultCard = () => {
+    if (!res) return
+    showCard({
+      calculator: 'Power Systems — Power Factor Correction',
+      standard: 'IEEE 519 (harmonics-neutral, fundamental PF only)',
+      site: site.name,
+      inputs: [
+        { label: 'Active Power Load', value: `${kw} kW` }, { label: 'Existing Power Factor', value: pf1 },
+        { label: 'Target Power Factor', value: pf2 }, { label: 'System Voltage', value: `${vv} V` },
+      ],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'Reactive Power Required', value: `${res.Qc} kVAr`, accent: true },
+          { label: 'Standard Bank Size', value: `${res.bank} kVAr`, accent: true },
+          { label: 'Capacitor Current', value: `${res.Ic} A` },
+          { label: 'Current Before', value: `${res.Ibefore} A` },
+          { label: 'Current After', value: `${res.Iafter} A` },
+          { label: 'Current Reduction', value: `${res.saving}%` },
+        ]
+      }],
+      notes: 'Sizing based on fundamental power factor only — if significant harmonic distortion is present, confirm capacitor bank resonance risk against IEEE 519 before installation (capacitor banks can amplify harmonic currents at resonant frequencies).',
     })
   }
 
@@ -147,6 +207,12 @@ function PFCorrection() {
           <ResultRow label="Current Reduction"       value={res.saving}  unit="%" />
         </div>
       )}
+      {res && (
+        <button onClick={handleResultCard} className="w-full py-3 rounded-xl font-bold text-sm mt-3" style={{ backgroundColor: '#1a1a2e', border: '1px solid #2a2a5a', color: '#93c5fd' }}>
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
@@ -160,6 +226,7 @@ function BusbarRating() {
   const [bars, setBars] = useState('1')       // bars per phase
   const [temp, setTemp] = useState(String(site.ambient || '30'))      // ambient °C
   const [res, setRes]   = useState(null)
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calc = () => {
     setRes(null)
@@ -170,6 +237,30 @@ function BusbarRating() {
       I:    r.I.toFixed(0),
       Isc:  r.Isc.toFixed(1),
       R:    r.R.toFixed(3),
+    })
+  }
+
+  const handleResultCard = () => {
+    if (!res) return
+    showCard({
+      calculator: 'Power Systems — Busbar Rating',
+      standard: 'Current density method (Cu ≈2.0 A/mm², Al ≈1.3 A/mm², conservative)',
+      site: site.name,
+      inputs: [
+        { label: 'Material', value: mat === 'cu' ? 'Copper' : 'Aluminium' }, { label: 'Busbar Width', value: `${w} mm` },
+        { label: 'Busbar Thickness', value: `${thick} mm` }, { label: 'Bars per Phase', value: bars },
+        { label: 'Ambient Temperature', value: `${temp}°C` },
+      ],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'Total Cross Section', value: `${res.area} mm²` },
+          { label: 'Continuous Current', value: `${res.I} A`, accent: true },
+          { label: 'Fault Rating (1 s)', value: `${res.Isc} kA`, accent: true },
+          { label: 'DC Resistance', value: `${res.R} mΩ/m` },
+        ]
+      }],
+      notes: 'Current density method is a conservative planning-level estimate, not a substitute for manufacturer-tested temperature-rise ratings. Confirm against actual busbar system datasheets for the final installation, especially in enclosed switchgear.',
     })
   }
 
@@ -204,6 +295,12 @@ function BusbarRating() {
           <ResultRow label="DC Resistance"       value={res.R}    unit="mΩ/m" />
         </div>
       )}
+      {res && (
+        <button onClick={handleResultCard} className="w-full py-3 rounded-xl font-bold text-sm mt-3" style={{ backgroundColor: '#1a1a2e', border: '1px solid #2a2a5a', color: '#93c5fd' }}>
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
@@ -217,6 +314,7 @@ function MotorStarting() {
   const [pf, setPf]     = useState('0.88')
   const [method, setMethod] = useState('dol')
   const [res, setRes]   = useState(null)
+  const { cardData, showCard, hideCard } = useResultCard()
 
   const calc = () => {
     setRes(null)
@@ -235,6 +333,33 @@ function MotorStarting() {
     ['dol','DOL'],['star_delta','Y/Δ'],['autotrans','Auto-T'],
     ['vfd','VFD'],['softstarter','Soft Start'],
   ]
+
+  const methodLabel = { dol: 'DOL', star_delta: 'Star-Delta', autotrans: 'Auto-Transformer', vfd: 'VFD', softstarter: 'Soft Starter' }
+
+  const handleResultCard = () => {
+    if (!res) return
+    showCard({
+      calculator: 'Power Systems — Motor Starting Method Comparison',
+      standard: 'Standard starting-method torque/current factors',
+      site: site.name,
+      inputs: [
+        { label: 'Motor Rating', value: `${kw} kW` }, { label: 'System Voltage', value: `${vv} V` },
+        { label: 'Motor Efficiency', value: `${eff}%` }, { label: 'Motor Power Factor', value: pf },
+        { label: 'Starting Method', value: methodLabel[method] },
+      ],
+      sections: [{
+        title: 'RESULTS',
+        rows: [
+          { label: 'Full Load Current', value: `${res.Ifull} A` },
+          { label: 'Starting Current', value: `${res.Istart} A`, accent: true },
+          { label: 'Starting kVA', value: `${res.kVA} kVA`, accent: true },
+          { label: 'Starting Torque', value: `${res.torque}× FLT` },
+          { label: 'Approx Voltage Dip', value: `${res.dip}%` },
+        ]
+      }],
+      notes: 'Voltage dip is a rough estimate assuming ~5% source impedance — confirm against actual supply fault level for accurate dip prediction, particularly on weak or long rural feeders.',
+    })
+  }
 
   return (
     <div>
@@ -268,6 +393,12 @@ function MotorStarting() {
           <ResultRow label="Approx Volt Dip"   value={res.dip}     unit="%" />
         </div>
       )}
+      {res && (
+        <button onClick={handleResultCard} className="w-full py-3 rounded-xl font-bold text-sm mt-3" style={{ backgroundColor: '#1a1a2e', border: '1px solid #2a2a5a', color: '#93c5fd' }}>
+          📄 Generate Result Card
+        </button>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
     </div>
   )
 }
