@@ -29,6 +29,7 @@
 
 import { MCCB_TRIPS } from './motorEngine.js'
 import { cableSizing } from './cableEngine.js'
+import { lightingLumenMethod } from '../lib/lumenMethod.js'
 
 const SQRT3 = Math.sqrt(3)
 
@@ -181,4 +182,191 @@ export function circuitDesign({ connectedLoad, voltage, phase, powerFactor, leng
   if (sizing.error) return sizing
 
   return { Ib, recommendedBreaker, recommendedCable: sizing.recommended, sizing }
+}
+
+// ── Area Lighting ──────────────────────────────────────────────────────────────
+// Sourcing note [AI-18] — history preserved because the evidentiary status changed materially
+// across two sessions; don't collapse this into a single "final" paragraph that hides the trail.
+//
+// 2026-07-26 (original scoping): the roadmap described this tab as "extending the lux-based
+// method already used in Power Quality's interior Lighting sub-tab" under SANS 10114-1 — but
+// SANS 10114-1 is exclusively an interior standard. The correct exterior standard, SANS 10389-1
+// ("Exterior lighting, Part 1: Artificial lighting of exterior areas for work and safety"), was
+// not accessible to this project at that time, so the tab shipped deliberately scoped down: no
+// lux-guide table, user-supplied illuminance only.
+//
+// 2026-07-27 (standing sourcing hierarchy established): when SANS text isn't accessible, check
+// for a harmonized IEC/ISO/CIE parent before falling back to scope-down. SANS 10389-1's likely
+// parent, ISO/CIE 8995-3:2018 ("Lighting of work places — Part 3: Lighting requirements for
+// safety and security of outdoor work places"), was identified — but its preview content was
+// copyright-protected and unlicensed for use here. Status at that point: licensing-blocked.
+//
+// 2026-07-27 (later session — status upgraded): two further, freely-published sources were
+// found and cross-checked line-by-line:
+//   1. Genlux Lighting's "Lighting Terminology Guide" (ACTOM group; openly published industry
+//      reference, not a paywalled standard) — its "Exterior Lighting" table explicitly attributes
+//      its figures to SANS 10389-1.
+//   2. The ISO/CIE 8995-3:2018 preview located the prior session.
+// For every "safety & security" risk-tier category common to both sources (Industrial Yards,
+// Power Plants, Petrochemical, Water & Sewage), the illuminance, uniformity ratios, and glare
+// limits match exactly across both sources — including the same footnote exceptions (e.g. the
+// building-sites/saw-mills higher glare allowance). This is strong secondary-source
+// cross-validation, NOT a direct read of SANS 10389-1's own clause text — still labelled
+// accordingly below and in the UI, per [AI-18]/[AI-10]. Building Sites and Parking Lots are
+// sourced from Genlux only (not covered by ISO/CIE 8995-3's simpler 4-row table) and carry a
+// lighter confidence flag (`crossValidated: false`) for that reason.
+//
+// Category list deliberately scoped to PowerSuite's actual target market (mines, industrial
+// yards, power/utility plants, contractors) — the source tables' harbours, shipyards, railway,
+// and saw-mill categories are omitted as out of scope for this project, per [LTP-3].
+//
+// Fitting-count math still reuses src/lib/lumenMethod.js's lightingLumenMethod() directly — the
+// lux/area/lumens/CU/MF formula itself is generic photometrics, not standard-specific, shared
+// with Power Quality's interior tab via that extraction (2026-07-26, see lumenMethod.js's file
+// header). Mounting height and pole spacing still use widely-published, non-SANS-specific
+// industry rules of thumb (mounting height ≈ half the distance across the lit area; spacing ≈ 4×
+// mounting height) — unrelated to this guide table, and unchanged from the original scoping.
+//
+// ── Standing sourcing hierarchy for a national standard that isn't accessible (2026-07-27) ──
+// Generalizes beyond this tab. When a cited SANS standard's own text isn't available:
+//   1. SANS text directly, if it can be read — most authoritative for this project's actual
+//      market (SA/Lesotho inspectors, MHSA, consulting engineers sign off against SANS, not its
+//      international parent). Use this whenever available, as done for SANS 10142-1 above.
+//   2. The IEC/ISO/CIE standard SANS is harmonized from, if SANS states that harmonization AND
+//      the parent's text is accessible — labelled as "the international standard SANS is based
+//      on, not confirmed identical to SANS's own clause."
+//   3. Cross-validated independent secondary sources (two or more agreeing sources, neither
+//      being SANS's own text) — labelled as secondary-sourced and cross-checked, not a standard
+//      citation. This is the tier this guide table sits at.
+//   4. Honest scope-down (user judgement, no reference table) if nothing above is available.
+// This is a fallback chain, not a preference for international over national — SANS remains the
+// first choice whenever it's actually readable, and tier 3 is a step down from tier 2, not a
+// replacement for eventually getting the actual standard text.
+
+// Reference illuminance/uniformity/glare-rating values by application category, per the sourcing
+// note above. NOT a SANS 10389-1 citation — cross-validated secondary-source data (tier 3 of the
+// hierarchy above). `crossValidated: true` categories matched exactly against the ISO/CIE 8995-3
+// preview; `false` categories are Genlux-only.
+export const AREA_LIGHTING_GUIDE = [
+  {
+    id: 'industrialYards',
+    label: 'Industrial Yards & Storage Areas',
+    crossValidated: true,
+    tiers: [
+      { id: 'low', label: 'Low risk — e.g. storage with occasional traffic', lux: 5, uniformityAvg: 0.25, uniformityMax: 0.125, glareMax: 55 },
+      { id: 'medium', label: 'Medium risk — e.g. vehicle storage/container terminals, frequent traffic', lux: 20, uniformityAvg: 0.40, uniformityMax: 0.167, glareMax: 50 },
+      { id: 'high', label: 'High risk — e.g. fire, poison, radiation risk areas', lux: 50, uniformityAvg: 0.40, uniformityMax: 0.2, glareMax: 45 },
+    ],
+  },
+  {
+    id: 'powerPlants',
+    label: 'Power, Electricity, Gas & Heat Plants',
+    crossValidated: true,
+    tiers: [
+      { id: 'low', label: 'Low risk — e.g. coal fields', lux: 5, uniformityAvg: 0.25, uniformityMax: 0.1, glareMax: 55 },
+      { id: 'medium', label: 'Medium risk — e.g. oil stores', lux: 20, uniformityAvg: 0.40, uniformityMax: 0.167, glareMax: 50 },
+      { id: 'high', label: 'High risk — e.g. switch yards', lux: 50, uniformityAvg: 0.40, uniformityMax: 0.2, glareMax: 45 },
+    ],
+  },
+  {
+    id: 'petrochemical',
+    label: 'Petrochemical & Other Hazardous Industries',
+    crossValidated: true,
+    tiers: [
+      { id: 'low', label: 'Low risk — e.g. risk-free process areas, occasionally used platforms/stairs', lux: 10, uniformityAvg: 0.40, uniformityMax: 0.167, glareMax: 50 },
+      { id: 'medium', label: 'Medium risk — e.g. vehicle storage areas, conveyors', lux: 20, uniformityAvg: 0.40, uniformityMax: 0.167, glareMax: 50 },
+      { id: 'high', label: 'High risk — e.g. oil stores, cooling towers, boilers, switch-yards', lux: 50, uniformityAvg: 0.40, uniformityMax: 0.2, glareMax: 45 },
+      { id: 'fuelLoading', label: 'Fuel loading & unloading sites', lux: 100, uniformityAvg: 0.40, uniformityMax: 0.2, glareMax: 45 },
+    ],
+  },
+  {
+    id: 'waterSewage',
+    label: 'Water & Sewage Plants',
+    crossValidated: true,
+    tiers: [
+      { id: 'low', label: 'Low risk — e.g. occasionally used stairs, waste water cleaning/aeration tanks', lux: 5, uniformityAvg: 0.25, uniformityMax: 0.1, glareMax: 55 },
+      { id: 'medium', label: 'Medium risk — e.g. regularly used stairs, basins/filters', lux: 20, uniformityAvg: 0.40, uniformityMax: 0.167, glareMax: 50 },
+    ],
+  },
+  {
+    id: 'buildingSites',
+    label: 'Building Sites (work areas/tasks)',
+    crossValidated: false, // Genlux-only; ISO/CIE 8995-3 preview only covers a single 50 lux "safety & security" row for this category, not this task-based breakdown
+    tiers: [
+      { id: 'veryRough', label: 'Very rough work — e.g. clearance, excavation, loading', lux: 20, uniformityAvg: 0.25, uniformityMax: 0.125, glareMax: 55 },
+      { id: 'rough', label: 'Rough work — e.g. drainage, transport, auxiliary/storage tasks', lux: 50, uniformityAvg: 0.40, uniformityMax: 0.2, glareMax: 50 },
+      { id: 'accurate', label: 'Accurate work — e.g. framework/reinforcement, electrical piping/cabling', lux: 100, uniformityAvg: 0.40, uniformityMax: 0.2, glareMax: 45 },
+      { id: 'fine', label: 'Fine work — e.g. element jointing, demanding electrical/machine work', lux: 200, uniformityAvg: 0.50, uniformityMax: 0.2, glareMax: 45 },
+    ],
+  },
+  {
+    id: 'parkingLots',
+    label: 'Parking Lots & Driveways',
+    crossValidated: false,
+    tiers: [
+      { id: 'light', label: 'Light traffic — e.g. small parking areas', lux: 5, uniformityAvg: 0.25, uniformityMax: 0.1, glareMax: 55 },
+      { id: 'medium', label: 'Medium traffic — e.g. office/commercial parking', lux: 10, uniformityAvg: 0.25, uniformityMax: 0.125, glareMax: 50 },
+      { id: 'heavy', label: 'Heavy traffic — e.g. major shopping/sports complex parking', lux: 20, uniformityAvg: 0.25, uniformityMax: 0.125, glareMax: 55 },
+    ],
+  },
+]
+
+/**
+ * Look up a single guide entry by category and tier id. Returns null (not a throw) for an
+ * unknown category or tier, so a UI dropdown can never crash on a stale/invalid selection.
+ * @param {string} categoryId
+ * @param {string} tierId
+ * @returns {null|{category:string, tier:string, lux:number, uniformityAvg:number,
+ *   uniformityMax:number, glareMax:number, crossValidated:boolean}}
+ */
+export function findAreaLightingGuideEntry(categoryId, tierId) {
+  const cat = AREA_LIGHTING_GUIDE.find(c => c.id === categoryId)
+  if (!cat) return null
+  const tier = cat.tiers.find(t => t.id === tierId)
+  if (!tier) return null
+  return {
+    category: cat.label,
+    tier: tier.label,
+    lux: tier.lux,
+    uniformityAvg: tier.uniformityAvg,
+    uniformityMax: tier.uniformityMax,
+    glareMax: tier.glareMax,
+    crossValidated: cat.crossValidated,
+  }
+}
+
+/**
+ * @param {Object} p
+ * @param {string|number} p.areaWidth - m, the "distance across" the area to be lighted — used
+ *   for the mounting-height/pole-spacing rule of thumb, NOT the same as p.areaLength
+ * @param {string|number} p.areaLength - m, used only to compute total area for the lumen method
+ * @param {string|number} p.lux - required illuminance. May come from the user's own judgement or
+ *   from AREA_LIGHTING_GUIDE (see file header sourcing note — the guide is cross-validated
+ *   secondary-source data, not a direct SANS 10389-1 citation)
+ * @param {string|number} p.CU - coefficient of (beam) utilization
+ * @param {string|number} p.MF - maintenance factor
+ * @param {string|number} p.lumens - lumens per fitting
+ * @param {string|number} p.watts - watts per fitting
+ * @returns {{error:string}|{mountingHeight:number, poleSpacing:number, area:number, N:number,
+ *   N_ceil:number, W:number, Wm2:number, lux_act:number, note:string}}
+ */
+export function areaLighting({ areaWidth, areaLength, lux, CU, MF, lumens, watts }) {
+  const W = pf(areaWidth), L = pf(areaLength)
+  if (!W || !L) return { error: 'Enter area width and length' }
+
+  // Rule-of-thumb pole geometry — deliberately independent of areaLength (see JSDoc above).
+  const mountingHeight = 0.5 * W
+  const poleSpacing = 4 * mountingHeight
+
+  const area = W * L
+  const lighting = lightingLumenMethod({ area: String(area), lux, CU, MF, lumens, watts })
+  if (!lighting) return { error: 'Enter required illuminance, coefficient of utilization, maintenance factor, and fitting output/wattage' }
+
+  return {
+    mountingHeight,
+    poleSpacing,
+    area,
+    ...lighting,
+    note: 'Mounting height and pole spacing are generic industry rule-of-thumb figures (mounting height ≈ half the distance across the lit area; spacing ≈ 4× mounting height) — not a SANS 10389-1 citation. This project does not have direct access to SANS 10389-1\'s actual exterior-lighting content. Verify against manufacturer photometric data or a qualified lighting designer for anything safety-critical.',
+  }
 }

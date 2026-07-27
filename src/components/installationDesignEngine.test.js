@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { loadAssessment, LOAD_CATEGORIES, pf, dbSizing, STANDARD_DB_SIZES, SOCKET_OUTLET_CIRCUIT_MAX_KW, circuitDesign } from './installationDesignEngine.js'
+import { loadAssessment, LOAD_CATEGORIES, pf, dbSizing, STANDARD_DB_SIZES, SOCKET_OUTLET_CIRCUIT_MAX_KW, circuitDesign, areaLighting, AREA_LIGHTING_GUIDE, findAreaLightingGuideEntry } from './installationDesignEngine.js'
 
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) < eps
 
@@ -214,5 +214,130 @@ describe('circuitDesign', () => {
   test('an unreasonably short max VD that no cable size can satisfy propagates recommendedCable=null rather than crashing', () => {
     const r = circuitDesign({ connectedLoad: '15', voltage: '400', phase: '3ph', powerFactor: '0.85', length: '500', ambient: '30', groups: '1', install: 'Clipped direct', insul: 'PVC', material: 'Cu', maxVd: '0.01' })
     assert.equal(r.recommendedCable, null)
+  })
+})
+
+describe('areaLighting', () => {
+  test('missing area width or length returns error', () => {
+    assert.ok(areaLighting({ areaWidth: '', areaLength: '25', lux: '50', CU: '0.4', MF: '0.8', lumens: '20000', watts: '200' }).error)
+    assert.ok(areaLighting({ areaWidth: '40', areaLength: '', lux: '50', CU: '0.4', MF: '0.8', lumens: '20000', watts: '200' }).error)
+  })
+
+  test('missing lighting-specific inputs returns error even when area width/length are present', () => {
+    const r = areaLighting({ areaWidth: '40', areaLength: '25', lux: '', CU: '0.4', MF: '0.8', lumens: '20000', watts: '200' })
+    assert.ok(r.error)
+  })
+
+  test('40m width × 25m length, 50lux, CU0.4, MF0.8, 20000lm/200W fittings — hand-derived exactly', () => {
+    const r = areaLighting({ areaWidth: '40', areaLength: '25', lux: '50', CU: '0.4', MF: '0.8', lumens: '20000', watts: '200' })
+    assert.ok(close(r.mountingHeight, 20)) // 0.5 × 40
+    assert.ok(close(r.poleSpacing, 80)) // 4 × 20
+    assert.ok(close(r.area, 1000)) // 40 × 25
+    assert.ok(close(r.N, 7.8125)) // (50×1000)/(20000×0.4×0.8)
+    assert.equal(r.N_ceil, 8)
+    assert.equal(r.W, 1600) // 8 × 200W
+    assert.ok(close(r.Wm2, 1.6))
+    assert.ok(close(r.lux_act, 51.2))
+  })
+
+  test('pole spacing is always exactly 4× mounting height (invariant)', () => {
+    const r = areaLighting({ areaWidth: '18', areaLength: '60', lux: '30', CU: '0.5', MF: '0.75', lumens: '15000', watts: '150' })
+    assert.ok(close(r.poleSpacing, r.mountingHeight * 4))
+  })
+
+  test('mounting height depends only on areaWidth, not areaLength', () => {
+    const short = areaLighting({ areaWidth: '40', areaLength: '10', lux: '50', CU: '0.4', MF: '0.8', lumens: '20000', watts: '200' })
+    const long = areaLighting({ areaWidth: '40', areaLength: '200', lux: '50', CU: '0.4', MF: '0.8', lumens: '20000', watts: '200' })
+    assert.equal(short.mountingHeight, long.mountingHeight)
+    assert.equal(short.poleSpacing, long.poleSpacing)
+  })
+
+  test('comma-decimal input normalizes correctly for area width/length', () => {
+    const withComma = areaLighting({ areaWidth: '40,5', areaLength: '25', lux: '50', CU: '0.4', MF: '0.8', lumens: '20000', watts: '200' })
+    const withPeriod = areaLighting({ areaWidth: '40.5', areaLength: '25', lux: '50', CU: '0.4', MF: '0.8', lumens: '20000', watts: '200' })
+    assert.ok(close(withComma.mountingHeight, withPeriod.mountingHeight))
+  })
+
+  test('result carries an explicit non-SANS-10389-1 disclaimer for the pole-geometry figures', () => {
+    const r = areaLighting({ areaWidth: '40', areaLength: '25', lux: '50', CU: '0.4', MF: '0.8', lumens: '20000', watts: '200' })
+    assert.match(r.note, /not a SANS 10389-1 citation/)
+  })
+
+  test('reuses lightingLumenMethod\'s own N-always-rounds-up behavior, not a reimplementation', () => {
+    // Picking inputs where N is not a whole number confirms N_ceil comes from the shared
+    // lib function's Math.ceil, not a separately (and possibly differently) rounded value here.
+    const r = areaLighting({ areaWidth: '40', areaLength: '25', lux: '50', CU: '0.4', MF: '0.8', lumens: '20000', watts: '200' })
+    assert.ok(r.N < r.N_ceil) // 7.8125 < 8 — confirms this is genuinely a non-integer case
+    assert.equal(r.N_ceil, Math.ceil(r.N))
+  })
+})
+
+describe('AREA_LIGHTING_GUIDE / findAreaLightingGuideEntry', () => {
+  test('every category has an id, label, crossValidated boolean, and at least one tier', () => {
+    for (const cat of AREA_LIGHTING_GUIDE) {
+      assert.ok(cat.id)
+      assert.ok(cat.label)
+      assert.equal(typeof cat.crossValidated, 'boolean')
+      assert.ok(Array.isArray(cat.tiers) && cat.tiers.length > 0)
+    }
+  })
+
+  test('every tier has an id, label, and all four numeric reference fields', () => {
+    for (const cat of AREA_LIGHTING_GUIDE) {
+      for (const tier of cat.tiers) {
+        assert.ok(tier.id)
+        assert.ok(tier.label)
+        assert.equal(typeof tier.lux, 'number')
+        assert.equal(typeof tier.uniformityAvg, 'number')
+        assert.equal(typeof tier.uniformityMax, 'number')
+        assert.equal(typeof tier.glareMax, 'number')
+      }
+    }
+  })
+
+  test('the four risk-tier categories cross-checked against ISO/CIE 8995-3 are flagged crossValidated:true', () => {
+    for (const id of ['industrialYards', 'powerPlants', 'petrochemical', 'waterSewage']) {
+      const cat = AREA_LIGHTING_GUIDE.find(c => c.id === id)
+      assert.equal(cat.crossValidated, true, `${id} should be flagged cross-validated`)
+    }
+  })
+
+  test('Building Sites and Parking Lots (Genlux-only) are flagged crossValidated:false', () => {
+    for (const id of ['buildingSites', 'parkingLots']) {
+      const cat = AREA_LIGHTING_GUIDE.find(c => c.id === id)
+      assert.equal(cat.crossValidated, false, `${id} should NOT be flagged cross-validated`)
+    }
+  })
+
+  test('within each risk-tier category, lux is non-decreasing from low to high risk', () => {
+    for (const id of ['industrialYards', 'powerPlants', 'waterSewage']) {
+      const cat = AREA_LIGHTING_GUIDE.find(c => c.id === id)
+      for (let i = 1; i < cat.tiers.length; i++) {
+        assert.ok(cat.tiers[i].lux >= cat.tiers[i - 1].lux, `${id}: tier ${i} lux should be >= tier ${i - 1}`)
+      }
+    }
+  })
+
+  test('findAreaLightingGuideEntry: industrialYards/medium matches the hand-checked reference row exactly', () => {
+    const r = findAreaLightingGuideEntry('industrialYards', 'medium')
+    assert.equal(r.lux, 20)
+    assert.equal(r.uniformityAvg, 0.40)
+    assert.equal(r.uniformityMax, 0.167)
+    assert.equal(r.glareMax, 50)
+    assert.equal(r.crossValidated, true)
+  })
+
+  test('findAreaLightingGuideEntry: unknown category returns null, not a throw', () => {
+    assert.equal(findAreaLightingGuideEntry('nonexistentCategory', 'low'), null)
+  })
+
+  test('findAreaLightingGuideEntry: known category but unknown tier returns null, not a throw', () => {
+    assert.equal(findAreaLightingGuideEntry('industrialYards', 'nonexistentTier'), null)
+  })
+
+  test('petrochemical\'s fuelLoading tier is a real single-entry tier, not part of the low/medium/high risk sequence', () => {
+    const r = findAreaLightingGuideEntry('petrochemical', 'fuelLoading')
+    assert.equal(r.lux, 100)
+    assert.equal(r.crossValidated, true)
   })
 })

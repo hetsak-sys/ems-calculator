@@ -34,6 +34,21 @@ describe('harmonicsAnalysis', () => {
     assert.equal(r.K, 1)
     assert.equal(r.derate, 100)
   })
+
+  // New (2026-07-26): comma-decimal fix bundled with the lumenMethod
+  // extraction — see pqEngine.js's file header. Per [TST-8].
+  test('comma-decimal inputs normalize correctly (Android decimal keyboard behavior)', () => {
+    const withComma = harmonicsAnalysis({ I1: '100', I3: '5,5', I5: '20', I7: '14', I11: '9', I13: '7' })
+    const withPeriod = harmonicsAnalysis({ I1: '100', I3: '5.5', I5: '20', I7: '14', I11: '9', I13: '7' })
+    assert.ok(close(withComma.THD, withPeriod.THD))
+  })
+
+  test('a legitimate zero-amplitude harmonic is not mistaken for a missing field (isNaN guard, not falsy guard)', () => {
+    // I3..I13 are all legitimately '0' in the "pure fundamental" case above;
+    // this confirms that stays true after the pf() rewrite specifically.
+    const r = harmonicsAnalysis({ I1: '100', I3: '0', I5: '0', I7: '0', I11: '0', I13: '0' })
+    assert.notEqual(r, null)
+  })
 })
 
 describe('upsBatterySizing', () => {
@@ -71,28 +86,28 @@ describe('upsBatterySizing', () => {
     const long = upsBatterySizing({ loadKw: '10', pf: '0.9', runtimeMin: '60', vdc: '48', dodPct: '80', etaPct: '85' })
     assert.ok(close(long.Ah, short.Ah * 4, 0.5)) // 60min is 4x 15min (allow for internal 2dp rounding)
   })
+
+  // New (2026-07-26): comma-decimal fix — see pqEngine.js's file header.
+  test('comma-decimal inputs normalize correctly (Android decimal keyboard behavior)', () => {
+    const withComma = upsBatterySizing({ loadKw: '10', pf: '0,9', runtimeMin: '30', vdc: '48', dodPct: '80', etaPct: '85' })
+    const withPeriod = upsBatterySizing({ loadKw: '10', pf: '0.9', runtimeMin: '30', vdc: '48', dodPct: '80', etaPct: '85' })
+    assert.ok(close(withComma.kVA, withPeriod.kVA))
+  })
 })
 
-describe('lightingLumenMethod', () => {
-  test('100m²/300lux/CU0.65/MF0.80/4000lm/36W fittings — matches hand-derived reference', () => {
+// lightingLumenMethod()'s own formula tests now live in
+// src/lib/lumenMethod.test.mjs, alongside the function itself (2026-07-26
+// extraction). This describe block only confirms the re-export wiring
+// through pqEngine.js still works — it is not re-testing the formula.
+describe('lightingLumenMethod (re-export wiring)', () => {
+  test('pqEngine.js re-exports the same working function from src/lib/lumenMethod.js', () => {
     const r = lightingLumenMethod({ area: '100', lux: '300', CU: '0.65', MF: '0.80', lumens: '4000', watts: '36' })
-    assert.ok(close(r.N, 14.423076923076923))
-    assert.equal(r.N_ceil, 15) // always rounds UP — partial fittings aren't installable
-    assert.equal(r.W, 540) // 15 × 36W
-    assert.ok(close(r.Wm2, 5.4))
-    assert.ok(close(r.lux_act, 312)) // actual illuminance with the rounded-up fitting count
+    assert.equal(r.N_ceil, 15)
   })
+})
 
-  test('actual illuminance after rounding up fittings is always ≥ the required illuminance', () => {
-    const r = lightingLumenMethod({ area: '100', lux: '300', CU: '0.65', MF: '0.80', lumens: '4000', watts: '36' })
-    assert.ok(r.lux_act >= 300)
-  })
-
-  test('missing/non-numeric input returns null', () => {
-    assert.equal(lightingLumenMethod({ area: '', lux: '300', CU: '0.65', MF: '0.80', lumens: '4000', watts: '36' }), null)
-  })
-
-  test('LUX_GUIDE reference table is ascending by lux level', () => {
+describe('LUX_GUIDE reference table', () => {
+  test('is ascending by lux level', () => {
     for (let i = 1; i < LUX_GUIDE.length; i++) {
       assert.ok(LUX_GUIDE[i].lux > LUX_GUIDE[i - 1].lux)
     }
