@@ -1,9 +1,12 @@
-# On-Device Verification Checklist — Installation Design (§5.6.1, Load Assessment)
+# On-Device Verification Checklist — Installation Design (§5.6.1, all four sub-tabs)
 
-**Purpose:** the arithmetic below is already verified by the automated test suite (11 new tests,
-342 passing repo-wide). This checklist confirms the on-device UI (new module tile, navigation,
-real React rendering, real rounding, touch input) produces the same numbers the engine does in
-isolation.
+**Purpose:** the arithmetic below is already verified by the automated test suite. This checklist
+confirms the on-device UI (new module tile, navigation, real React rendering, real rounding, touch
+input) produces the same numbers the engine does in isolation. Test counts below are as-of each
+sub-tab's own build session, not a running total — see `debt.md`/`architecture.md` for the current
+repo-wide total.
+
+**Status: §5.6.1 fully closed as of Area Lighting (2026-07-27), commit `210ed02` — on-device verification confirmed by Hertz (2026-07-27).**
 
 **Note on this sub-tab's nature:** unlike other PowerSuite calculators, Load Assessment has no
 single "correct" answer to check against a standard — see the in-app info box and
@@ -130,3 +133,68 @@ Ambient: `30°C`, Grouped Circuits: `1`, Installation Method: Clipped direct
 Since Circuit Design calls `cableEngine.js`'s own `cableSizing()` directly rather than
 reimplementing it, a wrong cable recommendation here would most likely also show up on the
 Cable module's Sizing tab with the same inputs — worth checking both if something looks off.
+
+---
+
+## Area Lighting
+
+**Verified 2026-07-27** against commit `210ed02` (feat: Installation Design - Area Lighting
+sub-tab complete with cross-validated lux guide (§5.6.1 closed); same commit also fixed
+comma-decimal parsing in `pqEngine.js` and extracted the shared lumen-method core to
+`src/lib/lumenMethod.js` — see `debt.md` for both). Engine-side: 43/43 tests passing in
+`installationDesignEngine.test.js` (includes the `AREA_LIGHTING_GUIDE`/`findAreaLightingGuideEntry`
+suite).
+
+**Note on this sub-tab's nature:** like Load Assessment, there's no SANS 10389-1 lux-guide table
+built in — the standard's actual exterior-lighting content wasn't accessible to this project, so
+the app takes user-entered illuminance directly, or (optionally) a reference category whose
+illuminance/uniformity/glare figures come from cross-checked secondary sources (an ISO/CIE
+8995-3:2018 preview + an industry lighting guide attributing SANS 10389-1), explicitly labeled as
+such — not a direct standard citation. Fitting-count math reuses the same generic lumen-method
+formula as Power Quality's interior Lighting tab (now factored out to `src/lib/lumenMethod.js`,
+shared rather than duplicated). Mounting height/pole spacing are generic industry rules of thumb
+(height ≈ half the area's width; spacing ≈ 4× mounting height), explicitly not SANS-specific.
+
+**Scenario — hand-calculated, matches actual device output**
+Reference Category: Water & Sewage Plants — Medium risk (or "None, enter your own lux" with the
+same numeric values below — both paths should agree)
+- Area Width (distance across): `40` m
+- Area Length: `80` m
+- Required Illuminance: `20` lux
+- Coefficient of Utilization (CU): `0.4`
+- Maintenance Factor (MF): `0.8`
+- Fitting Output: `20000` lm / `200` W
+
+- [ ] Expect: Fittings Required = **10.0 → 10**
+- [ ] Expect: Actual Illuminance = **20 lux**
+- [ ] Expect: Mounting Height = **20.0 m** (= half of Area Width)
+- [ ] Expect: Pole Spacing = **80.0 m** (= 4 × Mounting Height)
+- [ ] Expect: Total Load = **2000 W**
+- [ ] Expect: Power Density ≈ **0.63 W/m²**
+- [ ] Expect (if a reference category was selected): Reference Uniformity (min/avg) = **0.4**,
+      Reference Max Glare Rating = **50**
+
+**Guide-table / manual-entry toggle**
+- [ ] Selecting "— None, enter your own lux —" leaves Required Illuminance, CU, and MF as
+      plain editable fields with no reference values shown
+- [ ] Selecting a reference category (e.g. Water & Sewage Plants — Medium risk) auto-fills
+      Required Illuminance and surfaces the category's Reference Uniformity/Glare figures in the
+      result, without needing CU/MF to be looked up manually
+- [ ] Switching back to "None" after selecting a category doesn't leave stale reference figures
+      showing in the result
+
+**PDF export**
+- [ ] Export PDF — confirm the sourcing note text (SANS 10389-1 not directly accessible,
+      cross-validated secondary sources, "not a substitute for professional sign-off") renders in
+      full, with no glyph corruption on any special characters
+- [ ] Confirm the exported card shows the same Reference Category/Uniformity/Glare figures as the
+      on-screen result when a guide category was selected
+
+---
+
+## If something doesn't match (Area Lighting)
+
+Since `areaLighting()`'s fitting-count math now calls the same shared `lumenMethod.js` used by
+Power Quality's interior Lighting tab, a wrong fitting count here would likely also show up there
+with equivalent inputs — worth checking both. A wrong mounting height/pole spacing, by contrast, is
+isolated to `areaLighting()` itself (simple width-based ratios, no shared dependency).

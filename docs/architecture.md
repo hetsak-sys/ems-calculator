@@ -98,6 +98,7 @@ device performance baseline exists (see `debt.md`'s bundle-size entry).
 | Power Quality | `PQCalculator.jsx` (UI) + `pqEngine.js` (calc, 2026-07-25) | 412 | ✅ 15 tests |
 | Renewable Energy | `RenewableEnergyCalculator.jsx` (already UI-only) + `src/lib/{generatorDerating,gridTieCompliance,hybridSizing}.js` (2026-07-25) | 863 | ✅ 35 tests (dependency libs; component itself was already engine-first) |
 | Quick Math | `QuickMath.jsx` (UI) + `src/lib/calcEngine.js` (parser/evaluator, 2026-07-25) | 838 | ✅ 49 tests |
+| Installation Design (§5.6.1, shipped 2026-07-27) | `InstallationDesign.jsx` (UI) + `installationDesignEngine.js` (calc, in `src/components/` per the existing engine-location note above) — Area Lighting sub-tab also uses shared `src/lib/lumenMethod.js` | — | ✅ 43 tests (`installationDesignEngine.test.js`, cumulative across all four sub-tabs) |
 
 This table is the concrete map behind `debt.md`'s "no automated test suite for most modules" entry —
 kept here rather than duplicated in the debt register, since it's architectural fact, not a debt
