@@ -16,15 +16,26 @@ import { Share } from '@capacitor/share'
 function pad2(n) { return String(n).padStart(2, '0') }
 
 // jsPDF's built-in 'helvetica' font is WinAnsi/Latin-1 only — it has no
-// glyphs for Greek letters or arrows, and silently substitutes whatever
-// byte happens to collide (Ω -> '©', φ -> '¦' or 'Æ' depending on case,
-// → -> garbage that also throws off text-width calculations, which is
-// how the combined-report title got clipped rather than just garbled).
-// Targeted substitution rather than embedding a Unicode font: keeps the
-// jsPDF bundle-size tradeoff as-is (already an accepted call, see
-// conventions.md §3) instead of adding a second embedded font on top of it.
-// If full Unicode symbol fidelity is wanted later, that's the upgrade path.
-function sanitizeForPdf(str) {
+// glyphs for Greek letters, math operators, or arrows, and silently
+// substitutes whatever byte happens to collide (Ω -> '©', φ -> '¦' or 'Æ'
+// depending on case, → -> garbage that also throws off text-width
+// calculations, which is how the combined-report title got clipped rather
+// than just garbled). Targeted substitution rather than embedding a Unicode
+// font: keeps the jsPDF bundle-size tradeoff as-is (already an accepted
+// call, see conventions.md §3) instead of adding a second embedded font on
+// top of it. If full Unicode symbol fidelity is wanted later, that's the
+// upgrade path.
+//
+// Expanded 2026-07-27: the original 5-symbol list missed most of the
+// Greek/math symbols actually used in engineering note/standard text across
+// the app (√, ≈, ≤, ≥, ÷, −, ∆, ≠, π, ρ, θ, η, μ, α, Σ — confirmed present in
+// note/standard/label strings in a repo-wide scan, not just code comments).
+// Any one of these silently corrupting a character also throws off
+// splitTextToSize's width calculation for the rest of that line, which is
+// why a corrupted ≈ in Area Lighting's note also truncated unrelated text
+// later in the same sentence — same failure mode as the → bug this file
+// already documents, just a different symbol.
+export function sanitizeForPdf(str) {
   if (str == null) return str
   return String(str)
     .replace(/Ω/g, 'ohm')
@@ -32,6 +43,21 @@ function sanitizeForPdf(str) {
     .replace(/φ/g, 'ph')
     .replace(/→/g, '->')
     .replace(/←/g, '<-')
+    .replace(/≈/g, '~')
+    .replace(/≤/g, '<=')
+    .replace(/≥/g, '>=')
+    .replace(/√/g, 'sqrt ')
+    .replace(/÷/g, '/')
+    .replace(/−/g, '-')
+    .replace(/∆/g, 'delta ')
+    .replace(/≠/g, '!=')
+    .replace(/π/g, 'pi')
+    .replace(/ρ/g, 'rho')
+    .replace(/θ/g, 'theta')
+    .replace(/η/g, 'eta')
+    .replace(/μ/g, 'u')
+    .replace(/α/g, 'alpha')
+    .replace(/Σ/g, 'sum ')
 }
 
 /**
@@ -104,12 +130,25 @@ export function buildResultPdf(data) {
   y += 18
 
   // ── Standard badge ──────────────────────────────────────────────────
+  // Fixed 2026-07-27: this was the one text block still using a single
+  // unwrapped doc.text() call — title (line ~88) and notes (below) already
+  // got the splitTextToSize wrap fix after the combined-report title
+  // clipping bug, but this one was missed. A long standard string (e.g.
+  // Area Lighting's "Generic photometric lumen method (shared with Power
+  // Quality's interior tab); mounting height/pole spacing are industry
+  // rule-of-thumb, NOT SANS 10389-1") silently ran off the page edge with
+  // no wrap and no visible error.
   if (data.standard) {
     doc.setFontSize(10)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(30, 80, 140)
-    doc.text(`Standard: ${sanitizeForPdf(data.standard)}`, margin, y)
-    y += 18
+    const standardLines = doc.splitTextToSize(`Standard: ${sanitizeForPdf(data.standard)}`, pageWidth - margin * 2)
+    standardLines.forEach(line => {
+      checkPageBreak(14)
+      doc.text(line, margin, y)
+      y += 14
+    })
+    y += 4
   }
 
   // ── Table renderer (shared by Inputs and each result section) ──────
