@@ -354,7 +354,10 @@ export default function QuickMath({ onClose, addHistory }) {
         sourceVar: passFailCfg.sourceVar,
         operator: passFailCfg.operator,
         thresholdMode: passFailCfg.thresholdMode,
-        thresholdValue: parseFloat(passFailCfg.thresholdValue) || 0,
+        // Comma-decimal fix (2026-07-27, repo-wide sweep per debt.md): this
+        // threshold field is a plain text input outside the expression
+        // engine's own parser, so it needed the same comma-tolerance fix.
+        thresholdValue: parseFloat(String(passFailCfg.thresholdValue).replace(',', '.')) || 0,
         thresholdVar: passFailCfg.thresholdVar,
         passLabel: passFailCfg.passLabel.trim() || 'Pass',
         failLabel: passFailCfg.failLabel.trim() || 'Fail',

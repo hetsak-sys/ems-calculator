@@ -82,7 +82,13 @@ const CHEMISTRY_OPTIONS = [
 ]
 
 const nextStd = (arr, val) => arr.find((s) => s >= val) || arr[arr.length - 1]
-const pf = (v, fallback = 0) => parseFloat(v) || fallback
+// Comma-decimal fix (2026-07-27, repo-wide sweep per debt.md): this pf() had
+// the same name as the comma-safe helper used everywhere else in the app
+// (shared.jsx, GeneratorSizing.jsx, cableEngine.js, etc.) but this local copy
+// never actually stripped commas — parseFloat(v) alone silently truncated
+// "1,5" to 1 across all 35 call sites in this module (PV array sizing,
+// battery/off-grid, grid-tie NRS 097-2, hybrid). Now matches the real pattern.
+const pf = (v, fallback = 0) => parseFloat(String(v).replace(',', '.')) || fallback
 
 // ─── Style (matches GeneratorSizing.jsx conventions) ────────────────────────
 

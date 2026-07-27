@@ -118,3 +118,34 @@ describe('faultLoopImpedance', () => {
     assert.equal(faultLoopImpedance({ Vs: 'x', Zs: '0.8', Rc: '0.5', Re: '0.3', Iop: '100' }), null)
   })
 })
+
+// Comma-decimal regression (2026-07-27, repo-wide sweep per debt.md). Before
+// the fix, plain parseFloat("0,1") silently returned 1 (truncating at the
+// comma) rather than NaN — so this bad input passed every isNaN() check and
+// produced a real-looking but wrong result. Confirms all four functions now
+// match their comma-free, semantically-equivalent equivalents exactly.
+describe('comma-decimal input tolerance (2026-07-27 fix)', () => {
+  test('dwightElectrodeResistance accepts comma-decimals identically to period-decimals', () => {
+    const withComma = dwightElectrodeResistance({ rho: '100', L: '2,4', d: '0,016', n: '1', s: '3' })
+    const withPeriod = dwightElectrodeResistance({ rho: '100', L: '2.4', d: '0.016', n: '1', s: '3' })
+    assert.deepEqual(withComma, withPeriod)
+  })
+
+  test('ieee80TouchStepVoltage accepts comma-decimals identically to period-decimals', () => {
+    const withComma = ieee80TouchStepVoltage({ rhoS: '150', hs: '0,1', ts: '0,5' })
+    const withPeriod = ieee80TouchStepVoltage({ rhoS: '150', hs: '0.1', ts: '0.5' })
+    assert.deepEqual(withComma, withPeriod)
+  })
+
+  test('adiabaticConductorSizing accepts comma-decimals identically to period-decimals', () => {
+    const withComma = adiabaticConductorSizing({ If: '1000', tf: '0,5', material: 'cu' })
+    const withPeriod = adiabaticConductorSizing({ If: '1000', tf: '0.5', material: 'cu' })
+    assert.deepEqual(withComma, withPeriod)
+  })
+
+  test('faultLoopImpedance accepts comma-decimals identically to period-decimals', () => {
+    const withComma = faultLoopImpedance({ Vs: '230', Zs: '0,1', Rc: '0,1', Re: '0,1', Iop: '100' })
+    const withPeriod = faultLoopImpedance({ Vs: '230', Zs: '0.1', Rc: '0.1', Re: '0.1', Iop: '100' })
+    assert.deepEqual(withComma, withPeriod)
+  })
+})

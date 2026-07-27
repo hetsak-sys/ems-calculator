@@ -114,3 +114,32 @@ describe('motorStartingComparison', () => {
     assert.equal(motorStartingComparison({ kw: '', vv: '400', eff: '92', pf: '0.88', method: 'dol' }), null)
   })
 })
+
+// Comma-decimal regression (2026-07-27, repo-wide sweep per debt.md). Same
+// issue as earthingEngine.js: plain parseFloat("6,5") silently returned 6
+// rather than NaN, so bad input passed isNaN() checks undetected.
+describe('comma-decimal input tolerance (2026-07-27 fix)', () => {
+  test('transformerParameters accepts comma-decimals identically to period-decimals', () => {
+    const withComma = transformerParameters({ kva: '1000', vpri: '11000', vsec: '400', zpc: '6', pf: '0,85', eff: '98' })
+    const withPeriod = transformerParameters({ kva: '1000', vpri: '11000', vsec: '400', zpc: '6', pf: '0.85', eff: '98' })
+    assert.deepEqual(withComma, withPeriod)
+  })
+
+  test('pfCorrection accepts comma-decimals identically to period-decimals', () => {
+    const withComma = pfCorrection({ kw: '100', pf1: '0,7', pf2: '0,95', vv: '400' })
+    const withPeriod = pfCorrection({ kw: '100', pf1: '0.7', pf2: '0.95', vv: '400' })
+    assert.deepEqual(withComma, withPeriod)
+  })
+
+  test('busbarRating accepts comma-decimals identically to period-decimals', () => {
+    const withComma = busbarRating({ mat: 'cu', w: '100', thick: '6,3', bars: '2', temp: '35' })
+    const withPeriod = busbarRating({ mat: 'cu', w: '100', thick: '6.3', bars: '2', temp: '35' })
+    assert.deepEqual(withComma, withPeriod)
+  })
+
+  test('motorStartingComparison accepts comma-decimals identically to period-decimals', () => {
+    const withComma = motorStartingComparison({ kw: '75', vv: '400', eff: '92', pf: '0,88', method: 'dol' })
+    const withPeriod = motorStartingComparison({ kw: '75', vv: '400', eff: '92', pf: '0.88', method: 'dol' })
+    assert.deepEqual(withComma, withPeriod)
+  })
+})

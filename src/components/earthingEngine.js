@@ -7,6 +7,18 @@
 // the [COD-14] "clear result before validating" pattern that Motor,
 // Protection, and ContactorOLR already had). That's fixed in the UI wiring,
 // not here — this file only returns null on invalid input, same as before.
+//
+// Comma-decimal fix (2026-07-27, repo-wide sweep per debt.md): this file had
+// NO comma tolerance at all — plain parseFloat/parseInt on every field. Unlike
+// the GeneratorSizing/pqEngine cases (caught because a bad value produced a
+// visible warning or an obviously-wrong result), a value like "1,5" here
+// silently parses to 1 rather than NaN, so the existing isNaN() validation
+// checks don't catch it — this is genuinely safety-relevant, since these
+// functions feed IEEE 80 touch/step voltage and fault-loop-impedance pass/fail
+// results. Fixed by routing every input through pf()/pi() below.
+
+function pf(v) { return parseFloat(String(v).replace(',', '.')) }
+function pi(v) { return parseInt(String(v).replace(',', '.'), 10) }
 
 // ── 1. Electrode Resistance (Dwight's formula, IEC 62305 / SANS 10199) ──
 /**
@@ -20,8 +32,8 @@
  * @returns {{single:number, parallel:number, ratio:number, pass:boolean}|null}
  */
 export function dwightElectrodeResistance({ rho, L, d, n, s }) {
-  const r = parseFloat(rho), l = parseFloat(L), dia = parseFloat(d)
-  const nr = parseInt(n), sp = parseFloat(s)
+  const r = pf(rho), l = pf(L), dia = pf(d)
+  const nr = pi(n), sp = pf(s)
   if ([r, l, dia].some(isNaN) || l <= 0 || dia <= 0) return null
 
   // Dwight's formula: R = (ρ/2πL)(ln(4L/d) - 1)
@@ -50,7 +62,7 @@ export function dwightElectrodeResistance({ rho, L, d, n, s }) {
  * @returns {{Cs:number, touch:number, step:number}|null}
  */
 export function ieee80TouchStepVoltage({ rhoS, hs, ts }) {
-  const rs = parseFloat(rhoS), h = parseFloat(hs), t = parseFloat(ts)
+  const rs = pf(rhoS), h = pf(hs), t = pf(ts)
   if ([rs, h, t].some(isNaN)) return null
 
   // Cs = surface layer derating factor (IEEE 80)
@@ -80,7 +92,7 @@ export const STANDARD_CSA_MM2 = [1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95, 120
  * @returns {{S:number, Smin:number|'>300', name:string}|null}
  */
 export function adiabaticConductorSizing({ If, tf, material }) {
-  const i = parseFloat(If), t = parseFloat(tf)
+  const i = pf(If), t = pf(tf)
   if (isNaN(i) || isNaN(t)) return null
   const { k, name } = EARTHING_MATERIALS[material]
   // IEC 60364-5-54: S = (I × √t) / k
@@ -100,8 +112,8 @@ export function adiabaticConductorSizing({ If, tf, material }) {
  * @returns {{Zloop:number, Isc:number, If1:number, ratio:number, pass:boolean}|null}
  */
 export function faultLoopImpedance({ Vs, Zs, Rc, Re, Iop }) {
-  const v = parseFloat(Vs), zs = parseFloat(Zs)
-  const rc = parseFloat(Rc), re = parseFloat(Re), io = parseFloat(Iop)
+  const v = pf(Vs), zs = pf(Zs)
+  const rc = pf(Rc), re = pf(Re), io = pf(Iop)
   if ([v, zs, rc, re, io].some(isNaN)) return null
 
   const Zloop = zs + rc + re                     // total loop impedance

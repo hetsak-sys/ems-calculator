@@ -158,7 +158,10 @@ export default function ConvertCalculator({ theme: T }) {
   }
 
   const convert = () => {
-    const val = parseFloat(input)
+    // Comma-decimal fix (2026-07-27, repo-wide sweep): plain parseFloat()
+    // silently truncated "1,5" to 1 instead of failing — same bug class as
+    // GeneratorSizing/pqEngine, see debt.md.
+    const val = parseFloat(String(input).replace(',', '.'))
     if (isNaN(val) || !fromId || !toId) return
 
     if (cat.special === 'temperature') {

@@ -4,8 +4,19 @@
 // numeric changes. Same [COD-14] stale-result gap found here as in Earthing/
 // Cable (none of these 4 calculators cleared the previous result before
 // validating) — fixed in the UI wiring, not here.
+//
+// Comma-decimal fix (2026-07-27, repo-wide sweep per debt.md): this file, like
+// earthingEngine.js, had no comma tolerance — plain parseFloat/parseInt, which
+// silently truncates "1,5" to 1 rather than producing NaN, bypassing the
+// isNaN() validation below it. Fixed with cnum()/cint() rather than the usual
+// pf() name, since `pf` is already used here as a destructured parameter name
+// for "power factor" in two function signatures below — reusing it as a
+// helper name would shadow that parameter inside those function bodies.
 
 const SQRT3 = Math.sqrt(3)
+
+function cnum(v) { return parseFloat(String(v).replace(',', '.')) }
+function cint(v) { return parseInt(String(v).replace(',', '.'), 10) }
 
 // ── 1. Transformer parameters / fault current ────────────────────────────
 /**
@@ -19,10 +30,10 @@ const SQRT3 = Math.sqrt(3)
  * @returns {{ratio:number, Ipri:number, Isec:number, Isc3:number, Isc1:number, Ploss:number}|null}
  */
 export function transformerParameters({ kva, vpri, vsec, zpc, pf, eff }) {
-  const S = parseFloat(kva) * 1000
-  const Vp = parseFloat(vpri), Vs = parseFloat(vsec)
-  const Z = parseFloat(zpc) / 100
-  const p = parseFloat(pf), e = parseFloat(eff) / 100
+  const S = cnum(kva) * 1000
+  const Vp = cnum(vpri), Vs = cnum(vsec)
+  const Z = cnum(zpc) / 100
+  const p = cnum(pf), e = cnum(eff) / 100
   if ([S, Vp, Vs, Z, p, e].some(isNaN)) return null
 
   const Ipri = S / (SQRT3 * Vp)
@@ -54,8 +65,8 @@ export const PFC_CAPACITOR_STEPS_KVAR = [5, 10, 12.5, 15, 20, 25, 30, 40, 50, 60
  * @returns {{Qc:number, bank:number|'>300', Ic:number, Ibefore:number, Iafter:number, saving:number}|null}
  */
 export function pfCorrection({ kw, pf1, pf2, vv }) {
-  const P = parseFloat(kw), p1 = parseFloat(pf1), p2 = parseFloat(pf2)
-  const V = parseFloat(vv)
+  const P = cnum(kw), p1 = cnum(pf1), p2 = cnum(pf2)
+  const V = cnum(vv)
   if ([P, p1, p2, V].some(isNaN) || p1 >= 1 || p2 > 1) return null
 
   const Qc = P * (Math.tan(Math.acos(p1)) - Math.tan(Math.acos(p2)))
@@ -78,8 +89,8 @@ export function pfCorrection({ kw, pf1, pf2, vv }) {
  * @returns {{area:number, I:number, Isc:number, R:number}|null}
  */
 export function busbarRating({ mat, w, thick, bars, temp }) {
-  const W = parseFloat(w), T = parseFloat(thick)
-  const n = parseInt(bars), ta = parseFloat(temp)
+  const W = cnum(w), T = cnum(thick)
+  const n = cint(bars), ta = cnum(temp)
   if ([W, T, n, ta].some(isNaN)) return null
 
   // I = J × A (current density method), Copper ~2.0 A/mm², Aluminium ~1.3 A/mm² (conservative)
@@ -115,8 +126,8 @@ export const MOTOR_STARTING_FACTORS = {
  * @returns {{Ifull:number, Istart:number, kVA:number, dip:number, torque:number}|null}
  */
 export function motorStartingComparison({ kw, vv, eff, pf, method }) {
-  const P = parseFloat(kw) * 1000, V = parseFloat(vv)
-  const e = parseFloat(eff) / 100, p = parseFloat(pf)
+  const P = cnum(kw) * 1000, V = cnum(vv)
+  const e = cnum(eff) / 100, p = cnum(pf)
   if ([P, V, e, p].some(isNaN)) return null
 
   const Ifull = P / (SQRT3 * V * p * e)
