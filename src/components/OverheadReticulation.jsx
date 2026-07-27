@@ -7,67 +7,88 @@ import {
   phaseSpacing,
 } from './overheadReticulationEngine'
 
-const SOURCE_NOTE = 'SANS 10280-1 itself is a paywalled SABS publication and could not be accessed directly for this module. Figures here come from two independent, publicly accessible Eskom/NRS documents that implement it — DST_34-1191 and NRS 033:1996 — cross-verified against each other. This is a generic/secondary-sourced planning reference, not a primary SANS 10280-1 citation.'
+const SOURCE_NOTE = 'SANS 10280-1 itself is a paywalled SABS publication and could not be accessed directly for this module. Clearance/spacing figures come from two independent, publicly accessible Eskom/NRS documents that implement it — DST_34-1191 and NRS 033:1996 — cross-verified against each other. This is a generic/secondary-sourced planning reference, not a primary SANS 10280-1 citation.'
 
-const CONDUCTOR_OPTIONS = Object.keys(CONDUCTORS).map(key => {
-  const c = CONDUCTORS[key]
-  const label = key.charAt(0).toUpperCase() + key.slice(1)
-  return [key, `${label} (${c.type}, ${c.ratingA}A)`]
-})
+const CONDUCTOR_SOURCE_NOTE = 'Conductor data is sourced from "Phase Conductor Standard for Eskom Overhead Lines" (240-152844641 Rev 2, 2021) — a single current, internally-consistent document. Current rating genuinely depends on assumed conductor operating temperature, which is why you choose a temperature band rather than seeing one flat number.'
+
+const TEMP_OPTIONS = [['50', '50°C'], ['60', '60°C'], ['70', '70°C'], ['80', '80°C']]
+const RATE_OPTIONS = [['normal', 'Rate A — Normal/Continuous'], ['emergency', 'Rate B — Emergency']]
+
+const CONDUCTOR_OPTIONS = Object.entries(CONDUCTORS)
+  .sort((a, b) => a[1].areaMM2 - b[1].areaMM2)
+  .map(([key, c]) => {
+    const label = key.charAt(0).toUpperCase() + key.slice(1)
+    return [key, `${label} (${c.type}, ${c.areaMM2}mm²)`]
+  })
 
 // ── Conductor Sizing ─────────────────────────────────────────────────────────
 // §5.6.3 roadmap.md — first sub-tab of Overhead Reticulation. Standard bare
-// ACSR/AAAC conductor lookup — distinct from Cable's insulated-conductor
+// ACSR/AAAC/AAC conductor lookup — distinct from Cable's insulated-conductor
 // derating, since bare overhead conductors carry no insulation and no
-// derating factors apply. Source: DST_34-1191 Table 7.
+// derating factors apply. Source: 240-152844641 Rev 2 (2021), Annex C.
+// Covers Squirrel through IEC 800 (835mm²) — comfortably past 66kV
+// sub-transmission conductor sizes.
 function ConductorSizing({ addHistory }) {
   const { site } = useSite()
   const [code, setCode] = useState('hare')
+  const [tempC, setTempC] = useState('70')
+  const [rateClass, setRateClass] = useState('normal')
   const [result, setResult] = useState(null)
   const { cardData, showCard, hideCard } = useResultCard()
 
   const calculate = () => {
-    const r = conductorLookup(code)
+    const r = conductorLookup(code, tempC, rateClass)
     setResult(r)
-    if (r) addHistory({ tab: 'Overhead — Conductor Sizing', expr: r.name, result: `${r.ratingA} A` })
+    if (r && r.verified) addHistory({ tab: 'Overhead — Conductor Sizing', expr: `${r.name} @ ${r.tempC}°C`, result: `${r.ratingA} A` })
   }
 
   const exportPdf = () => {
-    if (!result) return
+    if (!result || !result.verified) return
     showCard({
       calculator: 'Overhead Reticulation — Conductor Sizing',
       site: site.name,
       standard: result.standard,
-      inputs: [{ label: 'Conductor', value: result.name }],
+      inputs: [
+        { label: 'Conductor', value: result.name },
+        { label: 'Operating Temperature', value: `${result.tempC}°C` },
+        { label: 'Rate Class', value: result.rateClass === 'emergency' ? 'Rate B — Emergency' : 'Rate A — Normal/Continuous' },
+      ],
       sections: [{
         title: 'Conductor Properties',
         rows: [
-          { label: 'Type', value: result.type },
-          { label: 'Stranding', value: result.stranding },
+          { label: 'IEC Code', value: result.iecCode },
           { label: 'Cross-Sectional Area', value: `${result.areaMM2} mm²` },
           { label: 'Overall Diameter', value: `${result.diaMM} mm` },
           { label: 'Mass', value: `${result.massKgKm} kg/km` },
-          { label: 'Breaking Load', value: `${result.breakingLoadKg} kg` },
-          { label: 'Current Rating', value: `${result.ratingA} A`, accent: true },
+          { label: 'Ultimate Tensile Strength', value: `${result.utsKN} kN` },
+          { label: 'DC Resistance @ 20°C', value: `${result.resistanceOhmKm} Ω/km` },
+          { label: `Current Rating @ ${result.tempC}°C (Rate A / Rate B)`, value: `${result.ratingNormalA} A / ${result.ratingEmergencyA} A` },
+          { label: 'Selected Rating', value: `${result.ratingA} A`, accent: true },
         ],
       }],
-      notes: SOURCE_NOTE,
+      notes: CONDUCTOR_SOURCE_NOTE,
     })
   }
 
   return (
     <div className="px-4 py-3">
       <InfoBox title="Bare Overhead Conductors" color="blue" lines={[
-        'Standard ACSR/AAAC conductors for MV/LV overhead reticulation, up to 33kV wood-pole construction only.',
+        'ACSR, AAAC, and AAC conductors for overhead reticulation — Squirrel through IEC 800 (835mm²), comfortably past 66kV sub-transmission sizes.',
         'Bare conductors carry no insulation — none of the Cable module\'s derating factors (grouping, ambient, installation method) apply here.',
-        SOURCE_NOTE,
+        CONDUCTOR_SOURCE_NOTE,
       ]} />
 
       <SelectInput label="Conductor" value={code} onChange={setCode} options={CONDUCTOR_OPTIONS} />
+      <SelectInput label="Assumed Max Operating Temperature" value={tempC} onChange={setTempC} options={TEMP_OPTIONS} note="Current rating is temperature-dependent — this is the four verified bands, not an arbitrary choice" />
+      <SelectInput label="Rate Class" value={rateClass} onChange={setRateClass} options={RATE_OPTIONS} />
 
       <CalcButton onClick={calculate} label="LOOK UP" />
 
-      {result && (
+      {result && !result.verified && (
+        <InfoBox title="Not Verified For This Input" color="amber" lines={[result.message]} />
+      )}
+
+      {result && result.verified && (
         <>
           <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-4">
             <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]">
@@ -75,8 +96,8 @@ function ConductorSizing({ addHistory }) {
             </div>
             <div className="px-4 py-3">
               <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
-                <span className="text-gray-400 text-xs">Stranding</span>
-                <span className="text-white text-sm font-mono">{result.stranding}</span>
+                <span className="text-gray-400 text-xs">IEC Code</span>
+                <span className="text-white text-xs font-mono text-right">{result.iecCode}</span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
                 <span className="text-gray-400 text-xs">Cross-Sectional Area</span>
@@ -91,11 +112,19 @@ function ConductorSizing({ addHistory }) {
                 <span className="text-white text-sm font-mono">{result.massKgKm} kg/km</span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
-                <span className="text-gray-400 text-xs">Breaking Load</span>
-                <span className="text-white text-sm font-mono">{result.breakingLoadKg} kg</span>
+                <span className="text-gray-400 text-xs">Ultimate Tensile Strength</span>
+                <span className="text-white text-sm font-mono">{result.utsKN} kN</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
+                <span className="text-gray-400 text-xs">DC Resistance @ 20°C</span>
+                <span className="text-white text-sm font-mono">{result.resistanceOhmKm} Ω/km</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
+                <span className="text-gray-400 text-xs">Rate A / Rate B @ {result.tempC}°C</span>
+                <span className="text-white text-sm font-mono">{result.ratingNormalA} A / {result.ratingEmergencyA} A</span>
               </div>
               <div className="flex justify-between py-2 mt-1">
-                <span className="text-gray-300 text-sm font-bold">Current Rating</span>
+                <span className="text-gray-300 text-sm font-bold">Selected Rating</span>
                 <span className="text-2xl font-bold text-sky-400">{result.ratingA} A</span>
               </div>
             </div>
