@@ -5,6 +5,7 @@ import {
   conductorLookup, CONDUCTORS,
   clearanceLookup, structureClearance,
   phaseSpacing,
+  fittingSelection, FITTING_TYPES, STRUCTURE_TYPES, STRUCTURE_MATERIALS,
 } from './overheadReticulationEngine'
 
 const SOURCE_NOTE = 'SANS 10280-1 itself is a paywalled SABS publication and could not be accessed directly for this module. Clearance/spacing figures come from two independent, publicly accessible Eskom/NRS documents that implement it — DST_34-1191 and NRS 033:1996 — cross-verified against each other. This is a generic/secondary-sourced planning reference, not a primary SANS 10280-1 citation.'
@@ -88,7 +89,42 @@ function ConductorSizing({ addHistory }) {
         <InfoBox title="Not Verified For This Input" color="amber" lines={[result.message]} />
       )}
 
-      {result && result.verified && (
+      {result && result.verified && result.ratingsAvailable === false && (
+        <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-4">
+          <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]">
+            <span className="text-amber-400 text-xs font-bold">{result.name.toUpperCase()} — {result.type} (DIMENSIONAL DATA ONLY)</span>
+          </div>
+          <div className="px-4 py-3">
+            <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
+              <span className="text-gray-400 text-xs">Construction</span>
+              <span className="text-white text-xs font-mono text-right">{result.iecCode}</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
+              <span className="text-gray-400 text-xs">Cross-Sectional Area</span>
+              <span className="text-white text-sm font-mono">{result.areaMM2} mm²</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
+              <span className="text-gray-400 text-xs">Overall Diameter</span>
+              <span className="text-white text-sm font-mono">{result.diaMM} mm</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
+              <span className="text-gray-400 text-xs">Mass</span>
+              <span className="text-white text-sm font-mono">{result.massKgKm} kg/km</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
+              <span className="text-gray-400 text-xs">Ultimate Tensile Strength</span>
+              <span className="text-white text-sm font-mono">{result.utsKN} kN</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
+              <span className="text-gray-400 text-xs">DC Resistance @ 20°C</span>
+              <span className="text-white text-sm font-mono">{result.resistanceOhmKm} Ω/km</span>
+            </div>
+            <div className="text-amber-400 text-xs pt-2">⚠ {result.ratingsMessage}</div>
+          </div>
+        </div>
+      )}
+
+      {result && result.verified && result.ratingsAvailable !== false && (
         <>
           <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-4">
             <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]">
@@ -291,9 +327,8 @@ function Clearances({ addHistory }) {
   return (
     <div className="px-4 py-3">
       <InfoBox title="Minimum Overhead Line Clearances" color="blue" lines={[
-        'Ground, road/rail, communication-line, and building clearances by voltage band, up to 33kV wood-pole distribution only.',
-        'Above 33kV is transmission-class (steel lattice/tower structures under SANS 60826) — a different design standard, out of scope here.',
-        SOURCE_NOTE,
+        'Ground, road/rail, communication-line, and building clearances by voltage band, up to the 100kV band — covers 11/22/33kV distribution and 44/66/88kV sub-transmission.',
+        'Sourced directly from the primary regulation: OHS Act Electrical Machinery Regulations, 1988, Regulation 15 table. The regulation\'s 145kV band exists but was truncated in the accessible source text, so voltages above 100kV are honestly flagged rather than guessed.',
       ]} />
 
       <NumInput label="Nominal Voltage" value={voltageKV} onChange={setVoltageKV} unit="kV" placeholder="e.g. 11, 22, 33" />
@@ -328,10 +363,16 @@ function Clearances({ addHistory }) {
                 <span className="text-gray-400 text-xs">To Comms/Other Power Lines</span>
                 <span className="text-white text-sm font-mono">{result.toCommsOtherLinesM} m</span>
               </div>
-              <div className="flex justify-between py-1.5">
+              <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
                 <span className="text-gray-400 text-xs">To Buildings/Structures</span>
                 <span className="text-white text-sm font-mono">{result.toBuildingsM} m</span>
               </div>
+              {result.safetyClearanceM !== null && (
+                <div className="flex justify-between py-1.5">
+                  <span className="text-gray-400 text-xs">Min Safety Clearance (phase)</span>
+                  <span className="text-white text-sm font-mono">{result.safetyClearanceM} m</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -368,10 +409,109 @@ function Clearances({ addHistory }) {
   )
 }
 
+// ── Fittings & Structures ────────────────────────────────────────────────────
+// Fourth sub-tab, added 2026-07-27. Preformed fitting selection keys on
+// CONDUCTOR DIAMETER — the actual cross-manufacturer selection criterion —
+// with an explicit warning that colour codes are manufacturer-specific and
+// contradictory between suppliers (documented: same conductor, different
+// colours at different manufacturers). A colour lookup table presented as
+// authoritative would be dangerous; this is the honest version.
+// Structure typology is a qualitative reference — structural strength
+// design stays out of scope, same boundary as sag-tension mechanics.
+function FittingsStructures({ addHistory }) {
+  const [code, setCode] = useState('hare')
+  const [fittingType, setFittingType] = useState('deadend')
+  const [result, setResult] = useState(null)
+  const [showStructures, setShowStructures] = useState(false)
+
+  const FITTING_OPTIONS = FITTING_TYPES.map(f => [f.id, f.label])
+
+  const calculate = () => {
+    const r = fittingSelection(code, fittingType)
+    setResult(r)
+    if (r && r.applicable) addHistory({ tab: 'Overhead — Fitting Selection', expr: `${r.conductorName} / ${r.fitting}`, result: `match ${r.matchDiameterMM} mm` })
+  }
+
+  return (
+    <div className="px-4 py-3">
+      <InfoBox title="Preformed Fitting Selection" color="blue" lines={[
+        'Dead-ends, splices, and armor rods are selected by matching the CONDUCTOR DIAMETER against the fitting\'s tagged diameter range — that is the criterion every manufacturer catalogue actually uses.',
+        'Colour codes on fittings are manufacturer-specific and NOT standardized: the same conductor can carry different colours at different manufacturers, and colours repeat across size groups. Never select by colour alone.',
+      ]} />
+
+      <SelectInput label="Conductor" value={code} onChange={setCode} options={CONDUCTOR_OPTIONS} />
+      <SelectInput label="Fitting Type" value={fittingType} onChange={setFittingType} options={FITTING_OPTIONS} />
+
+      <CalcButton onClick={calculate} label="SELECT FITTING" />
+
+      {result && !result.applicable && (
+        <InfoBox title="Sized Differently" color="amber" lines={[result.message, result.colourWarning]} />
+      )}
+
+      {result && result.applicable && (
+        <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-4">
+          <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]">
+            <span className="text-amber-400 text-xs font-bold">{result.conductorName.toUpperCase()} — {result.fitting.toUpperCase()}</span>
+          </div>
+          <div className="px-4 py-3">
+            <div className="flex justify-between py-2 border-b border-[#1a1a1a]">
+              <span className="text-gray-300 text-sm font-bold">Match Diameter</span>
+              <span className="text-2xl font-bold text-sky-400">{result.matchDiameterMM} mm</span>
+            </div>
+            <div className="text-gray-300 text-xs pt-2 pb-1">{result.guidance}</div>
+            <div className="text-amber-400 text-xs pt-2">⚠ {result.colourWarning}</div>
+          </div>
+        </div>
+      )}
+
+      <button onClick={() => setShowStructures(s => !s)}
+        className="w-full py-3 rounded-xl font-bold text-sm mb-3"
+        style={{ background: 'transparent', border: '1px solid #94a3b8', color: '#94a3b8' }}>
+        {showStructures ? 'HIDE' : 'SHOW'} SUPPORT STRUCTURE REFERENCE
+      </button>
+
+      {showStructures && (
+        <>
+          <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-3">
+            <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]">
+              <span className="text-amber-400 text-xs font-bold">STRUCTURE TYPES</span>
+            </div>
+            <div className="px-4 py-2">
+              {STRUCTURE_TYPES.map(s => (
+                <div key={s.id} className="py-2 border-b border-[#1a1a1a] last:border-b-0">
+                  <div className="text-white text-sm font-bold">{s.label}</div>
+                  <div className="text-gray-400 text-xs pt-0.5">{s.role}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-3">
+            <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]">
+              <span className="text-amber-400 text-xs font-bold">STRUCTURE MATERIALS</span>
+            </div>
+            <div className="px-4 py-2">
+              {STRUCTURE_MATERIALS.map(m => (
+                <div key={m.id} className="py-2 border-b border-[#1a1a1a] last:border-b-0">
+                  <div className="text-white text-sm font-bold">{m.label}</div>
+                  <div className="text-gray-400 text-xs pt-0.5">{m.notes}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <InfoBox title="Scope Note" color="amber" lines={[
+            'This is a typology reference only. Structural strength design — wind/ice loading, foundation design, tower member sizing (SANS 60826) — remains out of this module\'s field-quick scope, same boundary as sag-tension mechanics.',
+          ]} />
+        </>
+      )}
+    </div>
+  )
+}
+
 const OVERHEAD_TABS = [
   { id: 'conductor', label: 'Conductor Sizing', icon: '〰' },
   { id: 'spacing',   label: 'Pole Spacing', icon: '📏' },
   { id: 'clearance', label: 'Clearances', icon: '⛔' },
+  { id: 'fittings',  label: 'Fittings & Structures', icon: '🔩' },
 ]
 
 export default function OverheadReticulation({ addHistory }) {
@@ -380,6 +520,7 @@ export default function OverheadReticulation({ addHistory }) {
     conductor: <ConductorSizing addHistory={addHistory} />,
     spacing:   <PoleSpacing addHistory={addHistory} />,
     clearance: <Clearances addHistory={addHistory} />,
+    fittings:  <FittingsStructures addHistory={addHistory} />,
   }
   return (
     <div className="flex flex-col h-full overflow-hidden">

@@ -2,6 +2,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   conductorLookup, clearanceLookup, structureClearance, phaseSpacing,
+  fittingSelection, FITTING_TYPES, STRUCTURE_TYPES, STRUCTURE_MATERIALS,
   CONDUCTORS, CLEARANCE_BANDS,
 } from './overheadReticulationEngine.js'
 
@@ -75,16 +76,96 @@ describe('conductorLookup', () => {
   test('conductor set extends through IEC 800 (835mm²), well past 66kV sub-transmission sizes', () => {
     assert.ok('iec800acsr' in CONDUCTORS)
     assert.equal(CONDUCTORS.iec800acsr.areaMM2, 835)
-    assert.equal(Object.keys(CONDUCTORS).length, 40)
+    assert.equal(Object.keys(CONDUCTORS).length, 47) // 40 Eskom-rated + 7 BS215 dimension-only
   })
 
-  test('every conductor has all four temperature bands with ra <= rb', () => {
+  test('every Eskom-rated conductor has all four temperature bands with ra <= rb', () => {
     for (const [name, c] of Object.entries(CONDUCTORS)) {
+      if (c.ratings === null) continue // BS215 dimension-only set
       for (const t of [50, 60, 70, 80]) {
         const band = c.ratings[t]
         assert.ok(band, `${name} missing ${t}°C band`)
         assert.ok(band.ra <= band.rb, `${name} at ${t}°C: RA (${band.ra}) should be <= RB (${band.rb})`)
       }
+    }
+  })
+
+  test('Rabbit (BS215 dimension-only) returns real dimensions but honestly NO ampacity', () => {
+    const r = conductorLookup('rabbit')
+    assert.equal(r.verified, true)
+    assert.equal(r.ratingsAvailable, false)
+    assert.equal(r.diaMM, 10.05)
+    assert.equal(r.ratingA, undefined)
+    assert.ok(r.ratingsMessage.includes('240-152844641'))
+  })
+
+  test('all 7 BS215 dimension-only conductors present with null ratings', () => {
+    const bs215 = ['gopher', 'weasel', 'ferret', 'rabbit', 'otter', 'dog', 'lynx']
+    for (const name of bs215) {
+      assert.ok(name in CONDUCTORS, `${name} missing`)
+      assert.equal(CONDUCTORS[name].ratings, null)
+    }
+  })
+
+  test('Eskom-rated conductors carry ratingsAvailable:true', () => {
+    assert.equal(conductorLookup('hare').ratingsAvailable, true)
+  })
+})
+
+describe('fittingSelection', () => {
+  test('dead-end for Hare keys on diameter, not colour', () => {
+    const r = fittingSelection('hare', 'deadend')
+    assert.equal(r.applicable, true)
+    assert.equal(r.matchDiameterMM, 14.16)
+    assert.ok(r.guidance.includes('14.16'))
+    assert.ok(r.guidance.includes('ACSR'))
+  })
+
+  test('every result carries the manufacturer-specific colour warning', () => {
+    const r = fittingSelection('zebra', 'splice')
+    assert.ok(r.colourWarning.includes('MANUFACTURER-SPECIFIC'))
+    assert.ok(r.colourWarning.includes('identification tag'))
+  })
+
+  test('guy grip is honestly flagged as sized to the stay strand, not the phase conductor', () => {
+    const r = fittingSelection('hare', 'guyGrip')
+    assert.equal(r.applicable, false)
+    assert.ok(r.message.includes('STRAND'))
+  })
+
+  test('works for BS215 dimension-only conductors too (fitting match needs only diameter)', () => {
+    const r = fittingSelection('rabbit', 'armorRods')
+    assert.equal(r.applicable, true)
+    assert.equal(r.matchDiameterMM, 10.05)
+  })
+
+  test('unknown conductor or fitting type returns null', () => {
+    assert.equal(fittingSelection('unobtainium', 'deadend'), null)
+    assert.equal(fittingSelection('hare', 'flyingButtress'), null)
+    assert.equal(fittingSelection(null, 'deadend'), null)
+  })
+
+  test('all 4 fitting types have id, label, and use', () => {
+    assert.equal(FITTING_TYPES.length, 4)
+    for (const f of FITTING_TYPES) {
+      assert.ok(f.id && f.label && f.use)
+    }
+  })
+})
+
+describe('structure typology reference', () => {
+  test('all 5 structure types have id, label, and role — qualitative only, no fabricated numbers', () => {
+    assert.equal(STRUCTURE_TYPES.length, 5)
+    for (const s of STRUCTURE_TYPES) {
+      assert.ok(s.id && s.label && s.role)
+      assert.ok(!/\d+\s*(kN|MPa|Pa)\b/.test(s.role), `${s.id} should not contain fabricated strength figures`)
+    }
+  })
+
+  test('all 4 structure materials have id, label, and notes', () => {
+    assert.equal(STRUCTURE_MATERIALS.length, 4)
+    for (const m of STRUCTURE_MATERIALS) {
+      assert.ok(m.id && m.label && m.notes)
     }
   })
 })
@@ -106,17 +187,35 @@ describe('clearanceLookup', () => {
     assert.equal(r.groundOutsideTownshipM, 5.1)
   })
 
-  test('33kV band (top of MV/LV clearance scope)', () => {
+  test('33kV falls in the regulation\'s 36kV band — 6.5m roads, the banding fix from the primary source', () => {
     const r = clearanceLookup('33')
-    assert.equal(r.voltageBandKV, 33)
+    assert.equal(r.voltageBandKV, 36)
     assert.equal(r.groundOutsideTownshipM, 5.3)
-    assert.equal(r.aboveRoadsRailM, 6.6)
+    assert.equal(r.aboveRoadsRailM, 6.5) // was wrongly 6.6 under the DST-derived table
+    assert.equal(r.safetyClearanceM, 0.43)
   })
 
-  test('above 33kV is flagged out of scope, not silently answered', () => {
+  test('66kV is now IN scope — falls in the 72kV band per the primary regulation', () => {
     const r = clearanceLookup('66')
+    assert.equal(r.outOfScope, undefined)
+    assert.equal(r.voltageBandKV, 72)
+    assert.equal(r.groundOutsideTownshipM, 5.7)
+    assert.equal(r.aboveRoadsRailM, 6.9)
+    assert.equal(r.toBuildingsM, 3.2)
+    assert.equal(r.safetyClearanceM, 0.77)
+  })
+
+  test('88kV falls in the 100kV band', () => {
+    const r = clearanceLookup('88')
+    assert.equal(r.voltageBandKV, 100)
+    assert.equal(r.groundOutsideTownshipM, 5.9)
+    assert.equal(r.aboveRoadsRailM, 7.1)
+  })
+
+  test('above 100kV is honestly flagged (145kV row truncated in source), not guessed', () => {
+    const r = clearanceLookup('132')
     assert.equal(r.outOfScope, true)
-    assert.ok(r.message.includes('transmission'))
+    assert.ok(r.message.includes('145'))
   })
 
   test('comma-decimal input handled', () => {
@@ -131,8 +230,8 @@ describe('clearanceLookup', () => {
     assert.equal(clearanceLookup(''), null)
   })
 
-  test('all 5 voltage bands present in the source table', () => {
-    assert.equal(CLEARANCE_BANDS.length, 5)
+  test('all 8 voltage bands of the primary-source table are present', () => {
+    assert.equal(CLEARANCE_BANDS.length, 8)
   })
 })
 

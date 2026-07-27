@@ -89,6 +89,22 @@ export const CONDUCTORS = {
   hornet:    { type: 'AAC', iecCode: '157.62-A1-19/3.25', diaMM: 16.25, areaMM2: 157.62, massKgKm: 435,  utsKN: 26,     resistanceOhmKm: 0.1825, ratings: { 50: { ra: 357, rb: 510 }, 60: { ra: 427, rb: 584 }, 70: { ra: 478, rb: 647 }, 80: { ra: 524, rb: 700 } } },
   centipede: { type: 'AAC', iecCode: '415.22-A1-37/3.78', diaMM: 26.46, areaMM2: 415.22, massKgKm: 1150, utsKN: 67.2,   resistanceOhmKm: 0.0694, ratings: { 50: { ra: 695, rb: 975 }, 60: { ra: 816, rb: 1121 }, 70: { ra: 913, rb: 1242 }, 80: { ra: 1002, rb: 1349 } } },
   bull:      { type: 'AAC', iecCode: '865.36-A1-61/4.25', diaMM: 38.25, areaMM2: 865.36, massKgKm: 2400, utsKN: 139,    resistanceOhmKm: 0.0334, ratings: { 50: { ra: 1150, rb: 1654 }, 60: { ra: 1365, rb: 1900 }, 70: { ra: 1517, rb: 2117 }, 80: { ra: 1660, rb: 2291 } } },
+
+  // BS 215-family ACSR conductors NOT in the Eskom 240-152844641 spec but
+  // widely encountered on-site in Southern Africa (Rabbit especially).
+  // DIMENSIONAL DATA ONLY — stranding/diameter/mass per the widely-published
+  // BS 215 Part 2 / IEC-equivalent tables. Ampacity is deliberately NOT
+  // provided (ratings: null) because these conductors do not appear in the
+  // verified Eskom rating source and no equivalent Rate A/B basis is
+  // available [AI-18]. conductorLookup() returns dimensions with an honest
+  // ratingsAvailable:false for these.
+  gopher:    { type: 'ACSR', iecCode: 'BS215: 6/1/2.36',  diaMM: 7.08,  areaMM2: 31.6,   massKgKm: 106,  utsKN: 9.6,   resistanceOhmKm: 1.093,  ratings: null },
+  weasel:    { type: 'ACSR', iecCode: 'BS215: 6/1/2.59',  diaMM: 7.77,  areaMM2: 38.4,   massKgKm: 128,  utsKN: 11.5,  resistanceOhmKm: 0.9077, ratings: null },
+  ferret:    { type: 'ACSR', iecCode: 'BS215: 6/1/3.00',  diaMM: 9.00,  areaMM2: 49.5,   massKgKm: 172,  utsKN: 15.2,  resistanceOhmKm: 0.6766, ratings: null },
+  rabbit:    { type: 'ACSR', iecCode: 'BS215: 6/1/3.35',  diaMM: 10.05, areaMM2: 61.7,   massKgKm: 214,  utsKN: 18.4,  resistanceOhmKm: 0.5426, ratings: null },
+  otter:     { type: 'ACSR', iecCode: 'BS215: 6/1/4.22',  diaMM: 12.66, areaMM2: 97.9,   massKgKm: 339,  utsKN: 28.5,  resistanceOhmKm: 0.3434, ratings: null },
+  dog:       { type: 'ACSR', iecCode: 'BS215: 6/4.72+7/1.57', diaMM: 14.15, areaMM2: 118.5, massKgKm: 394, utsKN: 32.7, resistanceOhmKm: 0.2733, ratings: null },
+  lynx:      { type: 'ACSR', iecCode: 'BS215: 30/7/2.79', diaMM: 19.53, areaMM2: 226.2,  massKgKm: 842,  utsKN: 79.8,  resistanceOhmKm: 0.1441, ratings: null },
 }
 
 const VALID_TEMPS = [50, 60, 70, 80]
@@ -109,6 +125,25 @@ export function conductorLookup(code, tempC = 70, rateClass = 'normal') {
   const c = CONDUCTORS[key]
   if (!c) return null
 
+  // Dimension-only conductors (BS 215 family, e.g. Rabbit): real physical
+  // data, but honestly NO ampacity — not present in the Eskom rating source.
+  if (c.ratings === null) {
+    return {
+      verified: true,
+      ratingsAvailable: false,
+      name: key.charAt(0).toUpperCase() + key.slice(1),
+      type: c.type,
+      iecCode: c.iecCode,
+      diaMM: c.diaMM,
+      areaMM2: c.areaMM2,
+      massKgKm: c.massKgKm,
+      utsKN: c.utsKN,
+      resistanceOhmKm: c.resistanceOhmKm,
+      ratingsMessage: 'This conductor is not in the Eskom rating source (240-152844641) — dimensional data is per the widely-published BS 215 tables, but no verified Rate A/B ampacity is available. Consult the fitting/conductor manufacturer datasheet for current rating.',
+      standard: 'BS 215 Part 2 (dimensional data only — see ratingsMessage)',
+    }
+  }
+
   const temp = Math.round(pf(tempC))
   if (!VALID_TEMPS.includes(temp)) {
     return {
@@ -122,6 +157,7 @@ export function conductorLookup(code, tempC = 70, rateClass = 'normal') {
 
   return {
     verified: true,
+    ratingsAvailable: true,
     name: key.charAt(0).toUpperCase() + key.slice(1),
     type: c.type,
     iecCode: c.iecCode,
@@ -140,21 +176,121 @@ export function conductorLookup(code, tempC = 70, rateClass = 'normal') {
 }
 
 // ---------------------------------------------------------------------
-// Clearances — Table 8, DST_34-1191 / NRS 033 Table 4
-// Minimum clearances for bare MV overhead lines, sourced from the OHS Act
-// Electrical Machinery Regulations (Reg. 15), cross-verified in both docs.
+// Preformed Fitting Selection — dead-ends, splices, armor rods, guy grips.
+// SOURCING NOTE [AI-18]: every major manufacturer (AFL, PLP, and others)
+// colour-codes preformed fittings for on-site identification, BUT the
+// colour-to-size mapping is MANUFACTURER-SPECIFIC and NOT standardized —
+// documented cases exist of the same conductor mapping to different colours
+// at different manufacturers (e.g. Panther: Red at one, Orange at another).
+// A colour lookup table presented as authoritative would be actively
+// dangerous. The real selection criterion, consistent across every
+// manufacturer catalogue, is the CONDUCTOR DIAMETER matched against the
+// fitting's tagged diameter range. This function therefore keys on
+// diameter and instructs verification against the fitting's own
+// identification tag — the honest version of what a colour table pretends
+// to do.
+// ---------------------------------------------------------------------
+
+export const FITTING_TYPES = [
+  { id: 'deadend',    label: 'Dead-End (Termination) Grip', use: 'Full-tension termination of the conductor at strain/terminal structures' },
+  { id: 'splice',     label: 'Full-Tension Splice (Joint)', use: 'Mid-span joining of two conductor lengths at full mechanical tension' },
+  { id: 'armorRods',  label: 'Armor Rods',                  use: 'Protecting the conductor at suspension clamps against fatigue/abrasion' },
+  { id: 'guyGrip',    label: 'Guy Grip (Stay Wire)',        use: 'Terminating galvanized-steel stay/guy strand at anchors and pole eyes — sized to the STAY WIRE diameter, not the phase conductor' },
+]
+
+/**
+ * Fitting selection guidance for a given conductor. Keys on conductor
+ * diameter — the actual cross-manufacturer selection criterion — and
+ * explicitly warns that colour codes are manufacturer-specific.
+ * @param {string} conductorCode - key in CONDUCTORS
+ * @param {string} fittingTypeId - key in FITTING_TYPES
+ * @returns {Object|null}
+ */
+export function fittingSelection(conductorCode, fittingTypeId) {
+  if (!conductorCode || !fittingTypeId) return null
+  const key = String(conductorCode).trim().toLowerCase()
+  const c = CONDUCTORS[key]
+  const fitting = FITTING_TYPES.find(f => f.id === fittingTypeId)
+  if (!c || !fitting) return null
+
+  if (fittingTypeId === 'guyGrip') {
+    return {
+      conductorName: key.charAt(0).toUpperCase() + key.slice(1),
+      fitting: fitting.label,
+      applicable: false,
+      message: 'Guy grips are sized to the stay/guy STRAND diameter (galvanized steel wire), not the phase conductor. Measure or read the stay strand diameter and match it against the guy grip\'s tagged diameter range.',
+      colourWarning: COLOUR_WARNING,
+    }
+  }
+
+  return {
+    conductorName: key.charAt(0).toUpperCase() + key.slice(1),
+    conductorType: c.type,
+    fitting: fitting.label,
+    fittingUse: fitting.use,
+    applicable: true,
+    matchDiameterMM: c.diaMM,
+    guidance: `Select a ${fitting.label.toLowerCase()} whose tagged diameter range includes ${c.diaMM} mm, and whose material matches the conductor type (${c.type}). The fitting's identification tag (catalogue number + diameter range + nominal size) is the authoritative match — confirm against it before installation.`,
+    colourWarning: COLOUR_WARNING,
+    standard: 'Manufacturer-catalogue practice (AFL, PLP, and equivalents) — diameter-range matching; no national/IEC standard governs preformed-fitting colour codes',
+  }
+}
+
+const COLOUR_WARNING = 'Colour codes on preformed fittings are MANUFACTURER-SPECIFIC, not standardized — the same conductor can carry different colours at different manufacturers, and colours repeat across size groups within one range. Never select a fitting by colour alone; always confirm against the fitting\'s own identification tag.'
+
+// ---------------------------------------------------------------------
+// Support Structure Typology — qualitative reference only, no fabricated
+// strength/loading figures. Structure strength design (wind/ice loading,
+// foundation design, tower member sizing) remains explicitly out of this
+// module's field-quick scope, same boundary as sag-tension mechanics.
+// ---------------------------------------------------------------------
+export const STRUCTURE_TYPES = [
+  { id: 'suspension', label: 'Suspension (Intermediate) Structure', role: 'Carries the conductor on straight-line sections; conductor hangs from suspension insulators/clamps and the structure sees mainly vertical + wind load, not line tension.' },
+  { id: 'strain',     label: 'Strain (Tension) Structure',          role: 'Terminates conductor tension in one or both directions using dead-end fittings; placed at intervals along straight runs to limit cascade failure and at stringing section boundaries.' },
+  { id: 'angle',      label: 'Angle Structure',                     role: 'Placed where the line changes direction; carries the resultant of the two conductor tension vectors, usually stayed/guyed along the bisector or built as a stronger strain structure.' },
+  { id: 'terminal',   label: 'Terminal (Dead-End) Structure',       role: 'Final structure at a substation or line end; carries full one-sided conductor tension permanently, typically the heaviest-built structure on the line.' },
+  { id: 'transposition', label: 'Transposition Structure',          role: 'Rotates phase positions on long lines to balance impedance between phases; encountered on longer sub-transmission and transmission lines.' },
+]
+
+export const STRUCTURE_MATERIALS = [
+  { id: 'wood',     label: 'Wood Pole',            notes: 'Standard for MV/LV distribution reticulation up to 33kV (SANS 10280-1/NRS 033 territory); light, field-handleable, suited to areas without heavy plant access.' },
+  { id: 'concrete', label: 'Concrete Pole',        notes: 'Common for sub-transmission and urban distribution; long service life and fire/termite immunity, at the cost of mass and transport/handling requirements.' },
+  { id: 'lattice',  label: 'Lattice Steel Tower',  notes: 'Used where strength governs — heavy angle/terminal points and transmission-class lines; structural design falls under SANS 60826, outside this module\'s scope.' },
+  { id: 'steelPole',label: 'Steel Monopole',       notes: 'Used where footprint is constrained (urban sub-transmission); foundation and structural design are specialist scope, as with lattice.' },
+]
+
+// ---------------------------------------------------------------------
+// Clearances — OHS Act Electrical Machinery Regulations, 1988 (GN R.1593),
+// Regulation 15 Table — PRIMARY SOURCE (labour.gov.za regulation text),
+// upgraded 2026-07-27 from the earlier DST_34-1191/NRS 033 reproduction.
+// The primary source both extends the table (voltage bands up to 145kV;
+// this module includes up to the 100kV band, covering 66/88kV
+// sub-transmission) and corrected a banding discrepancy in the earlier
+// secondary reproduction: the regulation's 36kV band is 6.5m above roads,
+// with 6.6m belonging to the 48kV band — the previously-ingested
+// "33kV → 6.6m" row conflated the two. The 145kV row of the regulation was
+// truncated in the accessible text and is deliberately NOT included rather
+// than guessed [AI-18].
+// safetyClearanceM is the regulation's "minimum safety clearance" column
+// (phase clearance for which insulation is designed).
 // ---------------------------------------------------------------------
 export const CLEARANCE_BANDS = [
-  { maxKV: 1.1, groundOutsideM: 4.9, groundTownshipM: 5.5, roadsRailM: 6.1, commsOtherLinesM: 0.6, buildingsM: 3.0 },
-  { maxKV: 7.2, groundOutsideM: 5.0, groundTownshipM: 5.5, roadsRailM: 6.2, commsOtherLinesM: 0.7, buildingsM: 3.0 },
-  { maxKV: 12,  groundOutsideM: 5.1, groundTownshipM: 5.5, roadsRailM: 6.3, commsOtherLinesM: 0.8, buildingsM: 3.0 },
-  { maxKV: 24,  groundOutsideM: 5.2, groundTownshipM: 5.5, roadsRailM: 6.4, commsOtherLinesM: 0.9, buildingsM: 3.0 },
-  { maxKV: 33,  groundOutsideM: 5.3, groundTownshipM: 5.5, roadsRailM: 6.6, commsOtherLinesM: 1.0, buildingsM: 3.0 },
+  { maxKV: 1.1, safetyClearanceM: null, groundOutsideM: 4.9, groundTownshipM: 5.5, roadsRailM: 6.1, commsOtherLinesM: 0.6, buildingsM: 3.0 },
+  { maxKV: 7.2, safetyClearanceM: 0.15, groundOutsideM: 5.0, groundTownshipM: 5.5, roadsRailM: 6.2, commsOtherLinesM: 0.7, buildingsM: 3.0 },
+  { maxKV: 12,  safetyClearanceM: 0.20, groundOutsideM: 5.1, groundTownshipM: 5.5, roadsRailM: 6.3, commsOtherLinesM: 0.8, buildingsM: 3.0 },
+  { maxKV: 24,  safetyClearanceM: 0.32, groundOutsideM: 5.2, groundTownshipM: 5.5, roadsRailM: 6.4, commsOtherLinesM: 0.9, buildingsM: 3.0 },
+  { maxKV: 36,  safetyClearanceM: 0.43, groundOutsideM: 5.3, groundTownshipM: 5.5, roadsRailM: 6.5, commsOtherLinesM: 1.0, buildingsM: 3.0 },
+  { maxKV: 48,  safetyClearanceM: 0.54, groundOutsideM: 5.4, groundTownshipM: 5.5, roadsRailM: 6.6, commsOtherLinesM: 1.1, buildingsM: 3.0 },
+  { maxKV: 72,  safetyClearanceM: 0.77, groundOutsideM: 5.7, groundTownshipM: 5.7, roadsRailM: 6.9, commsOtherLinesM: 1.4, buildingsM: 3.2 },
+  { maxKV: 100, safetyClearanceM: 1.00, groundOutsideM: 5.9, groundTownshipM: 5.9, roadsRailM: 7.1, commsOtherLinesM: 1.6, buildingsM: 3.4 },
 ]
 
 /**
  * Minimum clearances (ground, roads/rail, comms/other lines, buildings)
- * for a given nominal MV overhead line voltage, up to 33 kV.
+ * for a given nominal overhead line voltage, up to the 100kV band —
+ * covers 66kV and 88kV sub-transmission. Above 100kV the regulation's
+ * 145kV row was truncated in the accessible source text and is honestly
+ * flagged rather than guessed.
  * @param {string|number} voltageKVInput
  * @returns {Object|null}
  */
@@ -162,22 +298,23 @@ export function clearanceLookup(voltageKVInput) {
   const voltageKV = pf(voltageKVInput)
   if (isNaN(voltageKV) || voltageKV <= 0) return null
 
-  if (voltageKV > 33) {
+  if (voltageKV > 100) {
     return {
       outOfScope: true,
-      message: 'Voltages above 33 kV are transmission-class (steel lattice/tower structures under SANS 60826) — outside the scope of this MV/LV wood-pole distribution module.',
+      message: 'The regulation continues to a 145kV band, but that row was truncated in the accessible source text — its values are deliberately not guessed here. For voltages above 100kV, consult the OHS Act Electrical Machinery Regulations Reg. 15 table directly.',
     }
   }
 
   const band = CLEARANCE_BANDS.find(b => voltageKV <= b.maxKV) || CLEARANCE_BANDS[CLEARANCE_BANDS.length - 1]
   return {
     voltageBandKV: band.maxKV,
+    safetyClearanceM: band.safetyClearanceM,
     groundOutsideTownshipM: band.groundOutsideM,
     groundInsideTownshipM: band.groundTownshipM,
     aboveRoadsRailM: band.roadsRailM,
     toCommsOtherLinesM: band.commsOtherLinesM,
     toBuildingsM: band.buildingsM,
-    standard: 'OHS Act Electrical Machinery Regulations Reg. 15, as reproduced in DST_34-1191 Table 8 and NRS 033:1996 Table 4 (cross-verified — both independently cite the same regulation)',
+    standard: 'OHS Act Electrical Machinery Regulations, 1988 (GN R.1593), Regulation 15 — primary regulation text (labour.gov.za)',
   }
 }
 
