@@ -670,3 +670,33 @@ describe('SANS 10280-1 Table E.1 supersession — sourcing discipline (2026-07-2
     }
   })
 })
+
+// ── Table E.1 internal-structure transcription-integrity check (2026-07-29) ──
+// Observed property of the transcribed data, NOT a formula stated by the
+// standard: each row decomposes as a base accessibility component plus the
+// voltage-dependent safety clearance (rounded to 0.1m by the standard):
+//   groundClearanceM ≈ max(5.5, safetyClearanceM + 4.9)   [MV ground floor]
+//   roadsRailM       ≈ safetyClearanceM + 6.1
+// 4.9m / 6.1m are exactly the LV bare-conductor Table E.2 base figures.
+// Purpose: any future single-cell transcription slip breaks this loudly.
+// Tolerance ±0.06m covers the standard's own 0.1m rounding of the sums.
+test('SANS10280 Table E.1 internal structure: ground and roads/rail decompose onto the safety clearance (transcription-integrity)', () => {
+  const rows = SANS10280_CLEARANCE_TABLE.filter(r => r.safetyClearanceM !== null)
+  assert.ok(rows.length >= 14, 'expected all non-LV rows present')
+  for (const r of rows) {
+    const expectedGround = Math.max(5.5, r.safetyClearanceM + 4.9)
+    const expectedRoads = r.safetyClearanceM + 6.1
+    assert.ok(Math.abs(r.groundClearanceM - expectedGround) <= 0.06,
+      `${r.nominalKV}kV ground ${r.groundClearanceM} deviates from structural expectation ${expectedGround.toFixed(2)}`)
+    assert.ok(Math.abs(r.roadsRailM - expectedRoads) <= 0.06,
+      `${r.nominalKV}kV roads/rail ${r.roadsRailM} deviates from structural expectation ${expectedRoads.toFixed(2)}`)
+  }
+})
+
+test('SANS10280 Table E.1: 765kV ground clearance is 10.4m and decomposes as 5.5 (cross-validated safety) + 4.9 (Table E.2 LV base)', () => {
+  const row = SANS10280_CLEARANCE_TABLE.find(r => r.nominalKV === 765)
+  assert.equal(row.groundClearanceM, 10.4)
+  assert.equal(row.safetyClearanceM, 5.5)
+  assert.ok(Math.abs(row.groundClearanceM - (row.safetyClearanceM + 4.9)) < 1e-9)
+  assert.equal(LV_GROUND_CLEARANCE_TABLE.bare.excludingRoadsM, 4.9)
+})

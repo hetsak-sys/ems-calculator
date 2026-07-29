@@ -350,6 +350,21 @@ export function voltageClass(voltageKVInput) {
 // NOT-in-this-source figure remains structure (at-pole) phase
 // clearances (structureClearance() below), which SANS 10280-1 Annex E
 // does not cover.
+//
+// INTERNAL STRUCTURE (observed 2026-07-29, transcription-integrity aid,
+// NOT a formula stated by the standard): every transcribed row decomposes
+// as base-accessibility-component + voltage-dependent safety clearance,
+// rounded to 0.1m:
+//   groundClearanceM  ≈ max(5.5 MV floor, safetyClearanceM + 4.9)
+//   roadsRailM        ≈ safetyClearanceM + 6.1
+// where 4.9m and 6.1m are exactly the LV bare-conductor ground and
+// proclaimed-road figures from Table E.2. This is why 765kV ground
+// clearance is 10.4m (= 5.5 safety + 4.9 base) — the safety component
+// (5.5m) was independently cross-validated against the retired
+// ESKASABG3/Reg-15 data, so 10.4m is doubly anchored: primary-source
+// transcription + internal decomposition onto a cross-validated figure.
+// A structural test in the test file locks this in so any future
+// transcription slip in a single cell breaks loudly.
 // ---------------------------------------------------------------------
 const SANS10280_STANDARD = 'SANS 10280-1:2017 (Edition 2.1, Amdt 1) — Overhead power lines for conditions prevailing in South Africa, Part 1: Safety, Annex E (normative), Table E.1. Referenced normatively by the OHS Act Electrical Machinery Regulations (EMR), section 44.'
 const SANS10280_TABLE_E2_STANDARD = 'SANS 10280-1:2017 (Edition 2.1, Amdt 1), Annex E (normative), Table E.2 — LV (<1kV) ground clearance detail by conductor system and road/crossing category.'
