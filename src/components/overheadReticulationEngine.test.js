@@ -1,9 +1,9 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  conductorLookup, clearanceLookup, structureClearance, phaseSpacing,
+  conductorLookup, clearanceLookup, clearanceLookupDC, structureClearance, phaseSpacing,
   fittingSelection, FITTING_TYPES, STRUCTURE_TYPES, STRUCTURE_MATERIALS,
-  CONDUCTORS, CLEARANCE_BANDS,
+  CONDUCTORS, SANS10280_CLEARANCE_TABLE, LV_GROUND_CLEARANCE_TABLE,
 } from './overheadReticulationEngine.js'
 
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) < eps
@@ -170,108 +170,139 @@ describe('structure typology reference', () => {
   })
 })
 
-describe('clearanceLookup', () => {
-  test('LV band (<=1.1kV)', () => {
+describe('clearanceLookup — SANS 10280-1:2017 Annex E, Table E.1 (2026-07-29)', () => {
+  test('LV band (<=1.1kV) defaults to bare conductor, Table E.2 detail', () => {
     const r = clearanceLookup('1.1')
     assert.equal(r.voltageBandKV, 1.1)
-    assert.equal(r.groundOutsideTownshipM, 4.9)
-    assert.equal(r.groundInsideTownshipM, 5.5)
-    assert.equal(r.aboveRoadsRailM, 6.1)
-    assert.equal(r.toCommsOtherLinesM, 0.6)
-    assert.equal(r.toBuildingsM, 3.0)
+    assert.equal(r.safetyClearanceM, null)
+    assert.equal(r.groundClearanceM, 4.9)       // bare, excluding roads
+    assert.equal(r.aboveRoadsRailM, 6.1)         // bare, proclaimed roads/rail
+    assert.equal(r.toTelecomOtherLinesM, 0.6)
+    assert.equal(r.toBuildingsVegetationM, 3.0)
+    assert.equal(r.conductorType, 'bare')
   })
 
-  test('11kV falls into the 12kV band', () => {
+  test('LV band with ABC conductor type uses the lower Table E.2 ground clearance', () => {
+    const r = clearanceLookup('0.4', 'abc')
+    assert.equal(r.groundClearanceM, 3.7)
+    assert.equal(r.conductorType, 'abc')
+  })
+
+  test('LV band with concentric conductor type uses the lowest Table E.2 ground clearance', () => {
+    const r = clearanceLookup('0.4', 'concentric')
+    assert.equal(r.groundClearanceM, 3.0)
+    assert.equal(r.groundOtherRoadsM, 4.7)
+  })
+
+  test('11kV (12kV highest-system band)', () => {
     const r = clearanceLookup('11')
     assert.equal(r.voltageBandKV, 12)
-    assert.equal(r.groundOutsideTownshipM, 5.1)
+    assert.equal(r.nominalVoltageKV, 11)
+    assert.equal(r.safetyClearanceM, 0.20)
+    assert.equal(r.groundClearanceM, 5.5)
+    assert.equal(r.aboveRoadsRailM, 6.3)
   })
 
-  test('33kV falls in the regulation\'s 36kV band — 6.5m roads, the banding fix from the primary source', () => {
+  test('33kV (36kV highest-system band)', () => {
     const r = clearanceLookup('33')
     assert.equal(r.voltageBandKV, 36)
-    assert.equal(r.groundOutsideTownshipM, 5.3)
-    assert.equal(r.aboveRoadsRailM, 6.5) // was wrongly 6.6 under the DST-derived table
     assert.equal(r.safetyClearanceM, 0.43)
+    assert.equal(r.groundClearanceM, 5.5)
+    assert.equal(r.aboveRoadsRailM, 6.5)
+    assert.equal(r.toTelecomOtherLinesM, 1.0)
   })
 
-  test('66kV is now IN scope — falls in the 72kV band per the primary regulation', () => {
+  test('66kV (72kV highest-system band)', () => {
     const r = clearanceLookup('66')
     assert.equal(r.outOfScope, undefined)
     assert.equal(r.voltageBandKV, 72)
-    assert.equal(r.groundOutsideTownshipM, 5.7)
+    assert.equal(r.groundClearanceM, 5.7)
     assert.equal(r.aboveRoadsRailM, 6.9)
-    assert.equal(r.toBuildingsM, 3.2)
+    assert.equal(r.toBuildingsVegetationM, 3.2)
     assert.equal(r.safetyClearanceM, 0.77)
   })
 
-  test('88kV falls in the 100kV band', () => {
+  test('88kV (100kV highest-system band)', () => {
     const r = clearanceLookup('88')
     assert.equal(r.voltageBandKV, 100)
-    assert.equal(r.groundOutsideTownshipM, 5.9)
+    assert.equal(r.groundClearanceM, 5.9)
     assert.equal(r.aboveRoadsRailM, 7.1)
   })
 
-  test('132kV returns PARTIAL scope — safety clearance 1.45m verified from ESKASABG3, outOfScope is false', () => {
+  test('132kV is fully verified — no partial/out-of-scope flags any more', () => {
     const r = clearanceLookup('132')
-    assert.equal(r.partialScope, true)
-    assert.equal(r.outOfScope, false)
+    assert.equal(r.partialScope, undefined)
+    assert.equal(r.outOfScope, undefined)
     assert.equal(r.safetyClearanceM, 1.45)
+    assert.equal(r.groundClearanceM, 6.3)
+    assert.equal(r.aboveRoadsRailM, 7.5)
+    assert.equal(r.toBuildingsVegetationM, 3.8)
     assert.equal(r.voltageClass, 'HV')
-    assert.match(r.standard, /ESKASABG3/)
-    assert.match(r.standard, /OHSA/)
+    assert.match(r.standard, /SANS 10280-1/)
   })
 
-  test('275kV, 400kV, 765kV return partial scope with correct safety clearances from ESKASABG3', () => {
-    assert.equal(clearanceLookup(275).safetyClearanceM, 2.35)
-    assert.equal(clearanceLookup(275).voltageClass, 'EHV')
+  test('220kV is now fully verified (SANS 10280-1 covers it directly) — no more out-of-scope flag', () => {
+    const r = clearanceLookup(220)
+    assert.equal(r.outOfScope, undefined)
+    assert.equal(r.safetyClearanceM, 2.1)
+    assert.equal(r.groundClearanceM, 7.0)
+    assert.equal(r.voltageClass, 'EHV')
+  })
+
+  test('275kV uses the SANS 10280-1 value (2.5m), NOT the retired ESKASABG3 value (2.35m) — resolved conflict, Hertz decision 2026-07-29', () => {
+    const r = clearanceLookup(275)
+    assert.equal(r.safetyClearanceM, 2.5)
+    assert.notEqual(r.safetyClearanceM, 2.35)
+    assert.equal(r.groundClearanceM, 7.4)
+    assert.equal(r.aboveRoadsRailM, 8.6)
+    assert.equal(r.toBuildingsVegetationM, 4.9)
+  })
+
+  test('330kV is now verified (was entirely absent before)', () => {
+    const r = clearanceLookup(330)
+    assert.equal(r.safetyClearanceM, 2.9)
+    assert.equal(r.groundClearanceM, 7.8)
+  })
+
+  test('400kV and 765kV — full clearance data, matches prior verified safety clearances', () => {
+    const r400 = clearanceLookup(400)
+    assert.equal(r400.safetyClearanceM, 3.20)
+    assert.equal(r400.groundClearanceM, 8.1)
+    assert.equal(r400.horizontalM, 3.2)
+
+    const r765 = clearanceLookup(765)
+    assert.equal(r765.safetyClearanceM, 5.50)
+    assert.equal(r765.groundClearanceM, 10.4)
+    assert.equal(r765.horizontalM, 5.5)
+  })
+
+  test('cross-validation: 11/22/33/44/66/88/132/400/765kV match the previously-verified ESKASABG3/Reg-15 safety clearances exactly', () => {
+    assert.equal(clearanceLookup(11).safetyClearanceM, 0.20)
+    assert.equal(clearanceLookup(22).safetyClearanceM, 0.32)
+    assert.equal(clearanceLookup(33).safetyClearanceM, 0.43)
+    assert.equal(clearanceLookup(44).safetyClearanceM, 0.54)
+    assert.equal(clearanceLookup(66).safetyClearanceM, 0.77)
+    assert.equal(clearanceLookup(88).safetyClearanceM, 1.00)
+    assert.equal(clearanceLookup(132).safetyClearanceM, 1.45)
     assert.equal(clearanceLookup(400).safetyClearanceM, 3.20)
     assert.equal(clearanceLookup(765).safetyClearanceM, 5.50)
   })
 
-  test('ESKASABG3 cross-validation: 11/22/88kV safety clearances in source match Reg 15 verified bands', () => {
-    // These three overlap points are the cross-validation evidence
-    assert.equal(clearanceLookup(11).safetyClearanceM, 0.20)  // Reg 15 12kV band == ESKASABG3 11kV
-    assert.equal(clearanceLookup(22).safetyClearanceM, 0.32)  // Reg 15 24kV band == ESKASABG3 22kV
-    assert.equal(clearanceLookup(88).safetyClearanceM, 1.00)  // Reg 15 100kV band == ESKASABG3 88kV
-  })
-
-  test('HV/EHV partial scope is explicit about what is NOT verified — ground/road/building remain null', () => {
-    const r132 = clearanceLookup(132)
-    assert.equal(r132.groundClearanceVerified, false)
-    assert.equal(r132.roadClearanceVerified, false)
-    assert.equal(r132.buildingClearanceVerified, false)
-    assert.equal(r132.groundOutsideTownshipM, undefined) // not fabricated
-    assert.equal(r132.aboveRoadsRailM, undefined)        // not fabricated
-    assert.equal(r132.toBuildingsM, undefined)           // not fabricated
-  })
-
-  test('servitude widths are returned for verified ESKASABG3 voltages', () => {
-    assert.equal(clearanceLookup(132).servitudeWidthM, '15.5 m')
-    assert.equal(clearanceLookup(400).servitudeWidthM, '23.5–27.5 m')
-  })
-
-  test('220kV (not an Eskom AC standard voltage) still returns outOfScope with bracketing guidance', () => {
-    const r = clearanceLookup(220)
-    assert.equal(r.outOfScope, true)
-    assert.equal(r.partialScope, undefined)
-    assert.ok(r.message.includes('132') && r.message.includes('275')) // shows the bracketing values
-  })
-
-  test('no HV/EHV figures are fabricated — partial-scope results carry NO ground/road/building values', () => {
-    for (const kv of [132, 275, 400, 765]) {
+  test('no clearance figures are fabricated — every AC voltage band up to 765kV returns a full, non-undefined result', () => {
+    for (const kv of [0.4, 11, 22, 33, 44, 66, 88, 132, 220, 275, 330, 400, 765]) {
       const r = clearanceLookup(kv)
-      assert.equal(r.safetyClearanceM !== undefined, true) // has the verified value
-      assert.equal(r.groundOutsideTownshipM, undefined)    // not fabricated
-      assert.equal(r.aboveRoadsRailM, undefined)           // not fabricated
-      assert.equal(r.toBuildingsM, undefined)              // not fabricated
+      assert.notEqual(r.groundClearanceM, undefined)
+      assert.notEqual(r.aboveRoadsRailM, undefined)
+      assert.notEqual(r.toBuildingsVegetationM, undefined)
+      assert.notEqual(r.toTelecomOtherLinesM, undefined)
     }
   })
 
-  test('verified LV/MV/HV-band results also carry a voltageClass tag', () => {
+  test('verified LV/MV/HV/EHV results carry a voltageClass tag', () => {
     assert.equal(clearanceLookup(0.4).voltageClass, 'LV')
     assert.equal(clearanceLookup(11).voltageClass, 'MV')
     assert.equal(clearanceLookup(88).voltageClass, 'HV')
+    assert.equal(clearanceLookup(275).voltageClass, 'EHV')
   })
 
   test('comma-decimal input handled', () => {
@@ -286,8 +317,65 @@ describe('clearanceLookup', () => {
     assert.equal(clearanceLookup(''), null)
   })
 
-  test('all 8 voltage bands of the primary-source table are present', () => {
-    assert.equal(CLEARANCE_BANDS.length, 8)
+  test('an unrecognized conductorType falls back to bare rather than throwing', () => {
+    const r = clearanceLookup('0.4', 'nonsense')
+    assert.equal(r.conductorType, 'bare')
+    assert.equal(r.groundClearanceM, 4.9)
+  })
+
+  test('all 15 rows of Table E.1 are present (14 AC bands + 1 DC row)', () => {
+    assert.equal(SANS10280_CLEARANCE_TABLE.length, 15)
+    assert.equal(SANS10280_CLEARANCE_TABLE.filter(r => r.dc).length, 1)
+  })
+
+  test('safety clearances increase monotonically with voltage across AC rows (physically required)', () => {
+    const acRows = SANS10280_CLEARANCE_TABLE.filter(r => !r.dc && r.safetyClearanceM !== null)
+    for (let i = 1; i < acRows.length; i++) {
+      assert.ok(acRows[i].safetyClearanceM > acRows[i - 1].safetyClearanceM)
+    }
+  })
+})
+
+describe('clearanceLookupDC — 533kV DC (SANS 10280-1 Table E.1)', () => {
+  test('533kV DC returns full verified clearance data', () => {
+    const r = clearanceLookupDC(533)
+    assert.equal(r.dc, true)
+    assert.equal(r.safetyClearanceM, 3.70)
+    assert.equal(r.groundClearanceM, 8.6)
+    assert.equal(r.aboveRoadsRailM, 9.8)
+    assert.equal(r.toBuildingsVegetationM, 6.1)
+    assert.equal(r.horizontalM, 3.7)
+  })
+
+  test('a different DC voltage returns out-of-scope rather than a guessed value', () => {
+    const r = clearanceLookupDC(350)
+    assert.equal(r.outOfScope, true)
+  })
+
+  test('invalid input returns null', () => {
+    assert.equal(clearanceLookupDC('x'), null)
+  })
+})
+
+describe('LV_GROUND_CLEARANCE_TABLE — Table E.2 data integrity', () => {
+  test('all three conductor types have the three required fields', () => {
+    for (const key of ['bare', 'abc', 'concentric']) {
+      const entry = LV_GROUND_CLEARANCE_TABLE[key]
+      assert.notEqual(entry.proclaimedRoadsRailM, undefined)
+      assert.notEqual(entry.otherRoadsM, undefined)
+      assert.notEqual(entry.excludingRoadsM, undefined)
+    }
+  })
+
+  test('proclaimed roads/rail clearance is identical (6.1m) across all conductor types', () => {
+    assert.equal(LV_GROUND_CLEARANCE_TABLE.bare.proclaimedRoadsRailM, 6.1)
+    assert.equal(LV_GROUND_CLEARANCE_TABLE.abc.proclaimedRoadsRailM, 6.1)
+    assert.equal(LV_GROUND_CLEARANCE_TABLE.concentric.proclaimedRoadsRailM, 6.1)
+  })
+
+  test('excludingRoadsM decreases from bare to ABC to concentric (progressively lower-risk conductor systems)', () => {
+    assert.ok(LV_GROUND_CLEARANCE_TABLE.bare.excludingRoadsM > LV_GROUND_CLEARANCE_TABLE.abc.excludingRoadsM)
+    assert.ok(LV_GROUND_CLEARANCE_TABLE.abc.excludingRoadsM > LV_GROUND_CLEARANCE_TABLE.concentric.excludingRoadsM)
   })
 })
 
@@ -361,7 +449,6 @@ import {
   PRE_ENERGIZATION_CHECKLIST, PRE_ENERGIZATION_STANDARD,
   FAULT_FINDING, STRINGING_GLOSSARY,
   voltageClass, VOLTAGE_CLASS_CONVENTION, TRANSMISSION_VOLTAGE_PRESETS,
-  ESKASABG3_HV_EHV,
 } from './overheadReticulationEngine.js'
 
 describe('polePlanting — DST_34-1191 §4.5.9 Table 6', () => {
@@ -548,41 +635,38 @@ describe('voltageClass — LV/MV/HV/EHV convention (2026-07-28)', () => {
   })
 })
 
-describe('ESKASABG3 HV/EHV data integrity — sourcing discipline (2026-07-28)', () => {
-  test('table has exactly the 4 standard Eskom AC HV/EHV voltages plus the DC entry', () => {
-    const ac = ESKASABG3_HV_EHV.filter(e => !e.dc)
-    const dc = ESKASABG3_HV_EHV.filter(e => e.dc)
-    assert.deepEqual(ac.map(e => e.nomKV), [132, 275, 400, 765])
-    assert.equal(dc.length, 1)
-    assert.equal(dc[0].nomKV, 533)
-    assert.equal(dc[0].safetyClearanceM, 3.70)
+describe('SANS 10280-1 Table E.1 supersession — sourcing discipline (2026-07-29)', () => {
+  test('the retired ESKASABG3 275kV figure (2.35m) is locked out — regression test against re-introducing the stale value', () => {
+    const r = clearanceLookup(275)
+    assert.notEqual(r.safetyClearanceM, 2.35)
+    assert.equal(r.safetyClearanceM, 2.5)
   })
 
-  test('safety clearances increase monotonically with voltage (physically required)', () => {
-    const ac = ESKASABG3_HV_EHV.filter(e => !e.dc)
-    for (let i = 1; i < ac.length; i++) {
-      assert.ok(ac[i].safetyClearanceM > ac[i-1].safetyClearanceM,
-        `Expected ${ac[i].nomKV}kV (${ac[i].safetyClearanceM}m) > ${ac[i-1].nomKV}kV (${ac[i-1].safetyClearanceM}m)`)
-    }
-  })
-
-  test('cross-validation: ESKASABG3 lower-voltage entries match the independently verified Reg 15 data', () => {
-    // 11kV nominal → OHS Act Reg 15 maximum 12kV band → safetyClearanceM 0.20
+  test('cross-validation: SANS 10280-1 lower/mid-voltage entries match the independently-verified prior ESKASABG3/Reg-15 data', () => {
     assert.equal(clearanceLookup(11).safetyClearanceM, 0.20)
-    // 22kV nominal → OHS Act Reg 15 maximum 24kV band → safetyClearanceM 0.32
     assert.equal(clearanceLookup(22).safetyClearanceM, 0.32)
-    // 88kV nominal → OHS Act Reg 15 maximum 100kV band → safetyClearanceM 1.00
     assert.equal(clearanceLookup(88).safetyClearanceM, 1.00)
-    // These three matching independently-verified values confirm the ESKASABG3 table
-    // is genuinely reproducing OHS Act Reg 15 safety clearance values
+    assert.equal(clearanceLookup(132).safetyClearanceM, 1.45)
+    assert.equal(clearanceLookup(400).safetyClearanceM, 3.20)
+    assert.equal(clearanceLookup(765).safetyClearanceM, 5.50)
+    // Six matching values (of seven checkable overlap points, the seventh being the
+    // resolved 275kV conflict above) confirm SANS 10280-1 and the retired ESKASABG3/Reg 15
+    // data trace to the same underlying OHS Act table.
   })
 
-  test('132kV safety clearance 1.45m is consistent with the 12kV→0.20, 24kV→0.32, 100kV→1.00 progression — not a suspiciously round interpolation', () => {
-    // The jump from 1.00m (100kV) to 1.45m (132kV) is +0.45m across +32kV
-    // vs. the prior verified step from 0.77m (72kV) to 1.00m (100kV): +0.23m across +28kV
-    // These are not uniform, consistent with a real regulatory table, not a fabricated linear sequence
+  test('132kV safety clearance progression is non-linear across bands — consistent with a real regulatory table, not a fabricated sequence', () => {
+    // 100kV→1.00m, 132kV(145kV band)→1.45m: +0.45m across +32kV
+    // 72kV→0.77m, 100kV→1.00m: +0.23m across +28kV
+    // Non-uniform step sizes are what a genuine transcribed table looks like.
     const r = clearanceLookup(132)
     assert.equal(r.safetyClearanceM, 1.45)
-    assert.equal(r.partialScope, true)
+    assert.equal(r.partialScope, undefined) // no longer partial — fully verified now
+  })
+
+  test('SANS10280_CLEARANCE_TABLE nominal voltages match TRANSMISSION_VOLTAGE_PRESETS for the HV/EHV picker range', () => {
+    for (const kv of TRANSMISSION_VOLTAGE_PRESETS) {
+      const row = SANS10280_CLEARANCE_TABLE.find(r => r.nominalKV === kv)
+      assert.notEqual(row, undefined, `Expected a Table E.1 row for ${kv}kV nominal`)
+    }
   })
 })

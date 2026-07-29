@@ -12,10 +12,15 @@ import {
   PRE_ENERGIZATION_CHECKLIST, PRE_ENERGIZATION_STANDARD,
   FAULT_FINDING, STRINGING_GLOSSARY,
   voltageClass, VOLTAGE_CLASS_CONVENTION, TRANSMISSION_VOLTAGE_PRESETS,
-  ESKASABG3_HV_EHV,
 } from './overheadReticulationEngine'
 
+// NOTE: SOURCE_NOTE below still applies to Pole Spacing (phaseSpacing), which
+// remains sourced from DST_34-1191/NRS 033 — that scope is unchanged this
+// session. Clearances (below) now has direct, primary SANS 10280-1 access
+// and uses its own CLEARANCE_SOURCE_NOTE instead.
 const SOURCE_NOTE = 'SANS 10280-1 itself is a paywalled SABS publication and could not be accessed directly for this module. Clearance/spacing figures come from two independent, publicly accessible Eskom/NRS documents that implement it — DST_34-1191 and NRS 033:1996 — cross-verified against each other. This is a generic/secondary-sourced planning reference, not a primary SANS 10280-1 citation.'
+
+const CLEARANCE_SOURCE_NOTE = 'SANS 10280-1:2017 (Edition 2.1, Amdt 1), Annex E (normative), Table E.1 — obtained directly this session. This is a primary citation, not a secondary reproduction. Table E.1 is referenced normatively by the OHS Act Electrical Machinery Regulations (EMR), section 44. Supersedes the prior ESKASABG3-derived HV/EHV partial-scope data and the prior DST_34-1191/NRS-033-derived LV/MV bands for ALL voltage bands. One conflict was found and resolved: the retired ESKASABG3 275kV safety clearance (2.35m) is superseded by SANS 10280-1\'s value (2.5m).'
 
 const CONDUCTOR_SOURCE_NOTE = 'Conductor data is sourced from "Phase Conductor Standard for Eskom Overhead Lines" (240-152844641 Rev 2, 2021) — a single current, internally-consistent document. Current rating genuinely depends on assumed conductor operating temperature, which is why you choose a temperature band rather than seeing one flat number.'
 
@@ -276,67 +281,53 @@ function PoleSpacing({ addHistory }) {
 }
 
 // ── Clearances ───────────────────────────────────────────────────────────────
-// §5.6.3 roadmap.md — third sub-tab. Table 8 (DST_34-1191 / NRS 033),
-// cross-verified against the same OHS Act Electrical Machinery Regulations
-// table in both documents. Voltages above 33kV are explicitly out of scope
-// (transmission-class, steel lattice/tower structures under SANS 60826).
+// §5.6.3 roadmap.md — third sub-tab. Rebuilt 2026-07-29 on SANS 10280-1:2017
+// Annex E, Table E.1 (normative) — obtained directly this session. This is
+// now a single, complete, primary-sourced table covering LV through 765kV
+// AC and 533kV DC. No partial-scope or out-of-scope branches remain for AC
+// voltages; the UI below reflects that (single result card, full data).
 function Clearances({ addHistory }) {
   const { site } = useSite()
   const [voltageKV, setVoltageKV] = useState('11')
+  const [conductorType, setConductorType] = useState('bare')
   const [result, setResult] = useState(null)
   const [structure, setStructure] = useState(null)
   const [error, setError] = useState('')
   const { cardData, showCard, hideCard } = useResultCard()
 
+  const isLV = parseFloat(String(voltageKV).replace(',', '.')) <= 1.1
+
   const calculate = () => {
     setError('')
     setResult(null)
     setStructure(null)
-    const r = clearanceLookup(voltageKV)
+    const r = clearanceLookup(voltageKV, conductorType)
     if (!r) { setError('Enter a valid voltage.'); return }
     setResult(r)
     setStructure(structureClearance(voltageKV))
-    if (!r.outOfScope) {
-      addHistory({ tab: 'Overhead — Clearances', expr: `${voltageKV}kV`, result: `${r.groundOutsideTownshipM} m to ground` })
-    }
+    addHistory({ tab: 'Overhead — Clearances', expr: `${voltageKV}kV`, result: `${r.groundClearanceM} m to ground` })
   }
 
   const exportPdf = () => {
-    if (!result || result.outOfScope) return
-    if (result.partialScope) {
-      showCard({
-        calculator: 'Overhead Reticulation — Clearances (HV/EHV)',
-        site: site.name,
-        standard: result.standard,
-        inputs: [
-          { label: 'Nominal Voltage', value: `${result.nominalVoltageKV} kV ${result.dc ? '(DC)' : '(AC)'}` },
-          { label: 'Voltage Class', value: result.voltageClass },
-        ],
-        sections: [{
-          title: 'Verified from ESKASABG3 Annex C (citing OHS Act)',
-          rows: [
-            { label: 'Minimum Safety Clearance', value: `${result.safetyClearanceM} m`, accent: true },
-            { label: 'Servitude Width (from centre line)', value: result.servitudeWidthM },
-          ],
-        }],
-        notes: 'Ground clearance (above roads, townships), clearance to communication lines, and clearance to buildings are NOT verified from an accessible primary source for HV/EHV voltages. Consult IEC 61936-1 (AC electrical installations exceeding 1 kV) and your utility\'s (Eskom Transmission / NTCSA) own internal transmission-line design standards for those figures.',
-      })
-      return
-    }
+    if (!result) return
     showCard({
       calculator: 'Overhead Reticulation — Clearances',
       site: site.name,
       standard: result.standard,
-      inputs: [{ label: 'Nominal Voltage', value: `${voltageKV} kV (band: up to ${result.voltageBandKV} kV, class: ${result.voltageClass})` }],
+      inputs: [
+        { label: 'Nominal Voltage', value: `${voltageKV} kV (highest system voltage band: ${result.voltageBandKV} kV, class: ${result.voltageClass})` },
+        ...(isLV ? [{ label: 'Conductor Type', value: result.conductorType }] : []),
+      ],
       sections: [
         {
           title: 'Minimum Clearances',
           rows: [
-            { label: 'To Ground (outside townships)', value: `${result.groundOutsideTownshipM} m` },
-            { label: 'To Ground (inside townships)', value: `${result.groundInsideTownshipM} m` },
+            ...(result.safetyClearanceM !== null ? [{ label: 'Minimum Safety Clearance', value: `${result.safetyClearanceM} m` }] : []),
+            { label: 'To Ground', value: `${result.groundClearanceM} m` },
             { label: 'Above Roads / Railway Lines', value: `${result.aboveRoadsRailM} m`, accent: true },
-            { label: 'To Communication/Other Power Lines', value: `${result.toCommsOtherLinesM} m` },
-            { label: 'To Buildings/Structures', value: `${result.toBuildingsM} m` },
+            { label: 'To Buildings/Structures/Vegetation', value: `${result.toBuildingsVegetationM} m` },
+            { label: 'To Telecom Lines / Other Power Lines', value: `${result.toTelecomOtherLinesM} m` },
+            { label: 'Horizontal Clearance', value: `${result.horizontalM} m` },
           ],
         },
         ...(structure && structure.verified ? [{
@@ -347,19 +338,23 @@ function Clearances({ addHistory }) {
           ],
         }] : []),
       ],
-      notes: SOURCE_NOTE + (structure && !structure.verified ? ` Structure (at-pole) clearances: ${structure.message}` : ''),
+      notes: CLEARANCE_SOURCE_NOTE + (structure && !structure.verified ? ` Structure (at-pole) clearances: ${structure.message}` : ''),
     })
   }
 
   return (
     <div className="px-4 py-3">
       <InfoBox title="Minimum Overhead Line Clearances" color="blue" lines={[
-        'Ground, road/rail, communication-line, and building clearances by voltage band (OHS Act Reg 15), covering LV/MV distribution and sub-transmission up to the 100kV band.',
-        'HV (132kV) and EHV (275/400/765kV) Eskom standard transmission voltages now show verified minimum safety clearances and servitude widths from Eskom ESKASABG3 Annex C (normative), which cites the OHS Act as its source — cross-validated at 11/22/88kV against the independently verified Reg 15 data. Ground and road clearances at HV/EHV remain unverified.',
-        '220kV is not a standard Eskom AC network voltage (Eskom uses 275kV for sub-transmission) and is honestly flagged as such.',
+        'Safety, ground, road/rail crossing, building/vegetation, telecom/other-line, and horizontal clearances — one verified table covering LV through 765kV AC and 533kV DC, per SANS 10280-1:2017 Annex E, Table E.1 (normative).',
+        'This is a direct, primary citation of SANS 10280-1 (obtained 2026-07-29) — it supersedes the prior partial-scope ESKASABG3-based HV/EHV data and the prior secondary-sourced LV/MV bands for every voltage.',
       ]} />
 
       <NumInput label="Nominal Voltage" value={voltageKV} onChange={setVoltageKV} unit="kV" placeholder="e.g. 11, 22, 33, 132, 400" />
+
+      {isLV && (
+        <SelectInput label="LV Conductor Type" value={conductorType} onChange={setConductorType}
+          options={[['bare', 'Bare conductor'], ['abc', 'Aerial Bundled Conductor (ABC)'], ['concentric', 'Concentric cable']]} />
+      )}
 
       <div className="mb-3">
         <label className="text-gray-400 text-xs mb-1.5 block">HV / EHV Transmission Presets</label>
@@ -376,82 +371,44 @@ function Clearances({ addHistory }) {
       <CalcButton onClick={calculate} />
       <ErrBox msg={error} />
 
-      {result && result.outOfScope && (
-        <>
-          <div className="bg-[#111] border border-amber-900 rounded-xl overflow-hidden mb-4">
-            <div className="bg-[#1a1a0a] px-4 py-2 border-b border-amber-900 flex justify-between items-center">
-              <span className="text-amber-400 text-xs font-bold">{result.voltageClass} — PARTIAL DATA ONLY</span>
-              <span className="text-amber-400 text-xs font-mono">{voltageKV} kV</span>
-            </div>
-            <div className="px-4 py-3">
-              <div className="text-gray-300 text-xs">{result.message}</div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {result && result.partialScope && (
-        <>
-          <div className="bg-[#111] border border-sky-900 rounded-xl overflow-hidden mb-4">
-            <div className="bg-[#0a1a2a] px-4 py-2 border-b border-sky-900 flex justify-between items-center">
-              <span className="text-sky-400 text-xs font-bold">{result.voltageClass} — {result.nominalVoltageKV} kV{result.dc ? ' DC' : ''}</span>
-              <span className="text-sky-400 text-xs font-mono border border-sky-800 rounded px-2 py-0.5">{result.voltageClass}</span>
-            </div>
-            <div className="px-4 py-3">
-              <div className="flex justify-between py-2 border-b border-[#1a1a1a]">
-                <span className="text-gray-300 text-sm font-bold">Min Safety Clearance</span>
-                <span className="text-2xl font-bold text-sky-400">{result.safetyClearanceM} m</span>
-              </div>
-              <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
-                <span className="text-gray-400 text-xs">Servitude Width (from centre)</span>
-                <span className="text-white text-sm font-mono">{result.servitudeWidthM}</span>
-              </div>
-              <div className="text-amber-400 text-xs pt-2">⚠ Ground clearance (above roads, townships) and clearance to buildings are NOT verified from an accessible primary source for this voltage class — consult IEC 61936-1 and your utility's transmission-line design standards for those figures.</div>
-              <div className="text-gray-600 text-[10px] pt-2 italic">{result.standard}</div>
-            </div>
-          </div>
-          <button onClick={exportPdf}
-            className="w-full py-3 rounded-xl font-bold text-sm mb-4"
-            style={{ background: 'transparent', border: '1px solid #38bdf8', color: '#38bdf8' }}>
-            📄 Export PDF
-          </button>
-        </>
-      )}
-
-      {result && !result.outOfScope && (
+      {result && (
         <>
           <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-4">
             <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a] flex justify-between items-center">
-              <span className="text-amber-400 text-xs font-bold">CLEARANCES — VOLTAGE BAND UP TO {result.voltageBandKV} kV</span>
+              <span className="text-amber-400 text-xs font-bold">CLEARANCES — {result.nominalVoltageKV ? `${result.nominalVoltageKV} kV` : `<${result.voltageBandKV} kV`} (SYSTEM BAND UP TO {result.voltageBandKV} kV)</span>
               {result.voltageClass && <span className="text-sky-400 text-xs font-mono border border-sky-800 rounded px-2 py-0.5">{result.voltageClass}</span>}
             </div>
             <div className="px-4 py-3">
+              {result.safetyClearanceM !== null && (
+                <div className="flex justify-between py-2 border-b border-[#1a1a1a]">
+                  <span className="text-gray-300 text-sm font-bold">Min Safety Clearance</span>
+                  <span className="text-2xl font-bold text-sky-400">{result.safetyClearanceM} m</span>
+                </div>
+              )}
               <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
-                <span className="text-gray-400 text-xs">To Ground (outside townships)</span>
-                <span className="text-white text-sm font-mono">{result.groundOutsideTownshipM} m</span>
-              </div>
-              <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
-                <span className="text-gray-400 text-xs">To Ground (inside townships)</span>
-                <span className="text-white text-sm font-mono">{result.groundInsideTownshipM} m</span>
+                <span className="text-gray-400 text-xs">To Ground</span>
+                <span className="text-white text-sm font-mono">{result.groundClearanceM} m</span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
                 <span className="text-gray-400 text-xs">Above Roads/Railway Lines</span>
                 <span className="text-sky-400 text-sm font-mono font-bold">{result.aboveRoadsRailM} m</span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
-                <span className="text-gray-400 text-xs">To Comms/Other Power Lines</span>
-                <span className="text-white text-sm font-mono">{result.toCommsOtherLinesM} m</span>
+                <span className="text-gray-400 text-xs">To Buildings/Structures/Vegetation</span>
+                <span className="text-white text-sm font-mono">{result.toBuildingsVegetationM} m</span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
-                <span className="text-gray-400 text-xs">To Buildings/Structures</span>
-                <span className="text-white text-sm font-mono">{result.toBuildingsM} m</span>
+                <span className="text-gray-400 text-xs">To Telecom Lines/Other Power Lines</span>
+                <span className="text-white text-sm font-mono">{result.toTelecomOtherLinesM} m</span>
               </div>
-              {result.safetyClearanceM !== null && (
-                <div className="flex justify-between py-1.5">
-                  <span className="text-gray-400 text-xs">Min Safety Clearance (phase)</span>
-                  <span className="text-white text-sm font-mono">{result.safetyClearanceM} m</span>
-                </div>
+              <div className="flex justify-between py-1.5">
+                <span className="text-gray-400 text-xs">Horizontal Clearance</span>
+                <span className="text-white text-sm font-mono">{result.horizontalM} m</span>
+              </div>
+              {isLV && (
+                <div className="text-gray-600 text-[10px] pt-2 italic">Ground clearance shown is for conductor type "{result.conductorType}" excluding road/rail crossings; the "Above Roads/Railway Lines" figure covers proclaimed roads and railway crossings specifically (Table E.2).</div>
               )}
+              <div className="text-gray-600 text-[10px] pt-2 italic">{result.standard}</div>
             </div>
           </div>
 

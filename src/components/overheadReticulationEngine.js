@@ -260,37 +260,32 @@ export const STRUCTURE_MATERIALS = [
 ]
 
 // ---------------------------------------------------------------------
-// Clearances — OHS Act Electrical Machinery Regulations, 1988 (GN R.1593),
-// Regulation 15 Table — PRIMARY SOURCE (labour.gov.za regulation text),
-// upgraded 2026-07-27 from the earlier DST_34-1191/NRS 033 reproduction.
-// The primary source both extends the table (voltage bands up to 145kV;
-// this module includes up to the 100kV band, covering 66/88kV
-// sub-transmission) and corrected a banding discrepancy in the earlier
-// secondary reproduction: the regulation's 36kV band is 6.5m above roads,
-// with 6.6m belonging to the 48kV band — the previously-ingested
-// "33kV → 6.6m" row conflated the two. The 145kV row of the regulation was
-// truncated in the accessible text and is deliberately NOT included rather
-// than guessed [AI-18].
-// safetyClearanceM is the regulation's "minimum safety clearance" column
-// (phase clearance for which insulation is designed).
+// Clearance module history (superseded stages, kept for context):
+//   2026-07-27: OHS Act Reg 15 text reproduced up to the 100kV band only;
+//     145kV+ rows were truncated in the accessible secondary text and were
+//     honestly omitted rather than guessed.
+//   2026-07-28: HV/EHV (132kV+) safety clearances and servitude widths
+//     added from Eskom ESKASABG3 Annex C (a document citing the OHS Act),
+//     with ground/road/building clearances at those voltages left
+//     explicitly unverified/out-of-scope.
+//   2026-07-29 (this session): SANS 10280-1:2017 Annex E, Table E.1
+//     obtained directly — a normative national standard, referenced
+//     normatively by the OHS Act EMR itself. It supersedes BOTH prior
+//     stages for ALL voltage bands (see the full sourcing note above
+//     SANS10280_CLEARANCE_TABLE below) and closes every previously-open
+//     gap: ground, road/rail, building/vegetation, and telecom/other-line
+//     clearances are now verified end-to-end from LV through 765kV AC and
+//     533kV DC. One conflict was found (275kV safety clearance: ESKASABG3
+//     said 2.35m, SANS 10280-1 says 2.5m) and resolved in favour of SANS
+//     10280-1 per Hertz's explicit decision — see the note below.
 // ---------------------------------------------------------------------
 // ---------------------------------------------------------------------
 // Voltage class (LV/MV/HV/EHV) — a general Southern African power-
 // engineering convention used ONLY to label/categorize a voltage for the
-// user's orientation. It is NOT itself an OHS Act clearance boundary —
-// the actual clearance bands above come from Reg 15's own table breaks,
-// which don't align neatly to LV/MV/HV/EHV class edges.
-//
-// HV/EHV clearance figures (132kV and above) are explicitly OUT OF SCOPE
-// for verified data in this module, added 2026-07-28 after checking:
-// the OHS Act Reg 15 table itself was only found in accessible text up
-// to the 100kV band (the 145kV row is truncated in every secondary
-// reproduction checked); no accessible Eskom Transmission/NTCSA clearance
-// standard, and no IEC 61936-1 clearance TABLE, could be verified either
-// — only that IEC 61936-1 is the correct standard body to consult (it is
-// already on this project's approved standards list). Rather than
-// fabricate HV/EHV clearance figures, this module honestly flags them
-// and names the correct standard/authority to check against, per [AI-18].
+// user's orientation. It is NOT itself a clearance-table boundary — the
+// actual clearance bands come from SANS 10280-1 Table E.1's own
+// "highest system voltage" column breaks, which don't align neatly to
+// LV/MV/HV/EHV class edges.
 // The transmission voltage PRESETS below (132/220/275/400/765 kV) are
 // real, public Eskom/NTCSA transmission voltage classes — factual system
 // voltages, not clearance figures — offered so the picker doesn't force
@@ -314,125 +309,163 @@ export function voltageClass(voltageKVInput) {
 }
 
 // ---------------------------------------------------------------------
-// HV/EHV Minimum Safety Clearances — Eskom ESKASABG3 Rev 1 (May 2000)
-// "Standard for Bush Clearance and Maintenance Within Overhead Powerline
-// Servitudes", Annex C (normative): "Minimum clearances and general
-// servitude widths". The safety clearance column in that annex is
-// explicitly cited as "(OHSA, No. 85 of 1993)" — i.e. the OHS Act
-// Electrical Machinery Regulations that this module already uses for the
-// LV/MV bands from Reg 15.
+// Minimum Clearances — SANS 10280-1:2017 (Edition 2.1, Amendment 1),
+// Annex E (NORMATIVE), Table E.1 "Minimum clearances for power lines"
+// and Table E.2 "Minimum vertical clearance requirements applicable to
+// low voltage overhead lines... as well as road and railway crossings".
 //
-// THREE-POINT CROSS-VALIDATION against the independently verified Reg 15
-// table [AI-18]:
-//   ESKASABG3 11 kV → 0.20 m  ==  Reg 15 12kV band  safetyClearanceM 0.20 ✓
-//   ESKASABG3 22 kV → 0.32 m  ==  Reg 15 24kV band  safetyClearanceM 0.32 ✓
-//   ESKASABG3 88 kV → 1.00 m  ==  Reg 15 100kV band safetyClearanceM 1.00 ✓
+// SOURCING [AI-18]: SANS 10280-1 is referenced NORMATIVELY by the OHS
+// Act Electrical Machinery Regulations (EMR) via section 44 — per the
+// standard's own foreword: "This document is referenced in the
+// Electrical Machinery Regulations (EMR) (section 44) of the
+// Occupational Health and Safety Act, 1993 (Act No. 85 of 1993)."
+// This is now the strongest single clearance source available to this
+// project: a full national-standard table sourced directly, not a
+// secondary document that cites it. It SUPERSEDES the prior
+// ESKASABG3-sourced HV/EHV partial-scope data (2026-07-28 session) and
+// the prior DST_34-1191/NRS-033-derived LV/MV clearance bands
+// (2026-07-27 session), for ALL voltage bands, from LV through 765kV AC
+// and 533kV DC.
 //
-// These are Eskom's standard AC transmission/sub-transmission voltages
-// in South Africa. 220 kV is not a standard Eskom AC network voltage
-// (they use 275 kV for sub-transmission), so there is no 220 kV entry
-// in the table.
+// CROSS-VALIDATION: at 11/22/33/44/66/88/132/400/765kV and 533kV DC,
+// this table's safetyClearanceM column matches the previously-verified
+// ESKASABG3/Reg-15-derived data EXACTLY — confirming both trace to the
+// same underlying OHS Act Reg 15 table.
 //
-// SCOPE of this data (ESKASABG3 Annex C):
-//   ✓ Minimum safety clearance (OHS Act Reg 15 safety clearance column)
-//   ✓ Servitude building restriction width (both sides of centre line)
-//   ✗ Ground clearance above roads/railways  — NOT in this document
-//   ✗ Ground clearance outside/inside townships — NOT in this document
-//   ✗ Clearance to communication lines/buildings — NOT in this document
-// Those four clearance types remain unverified for HV/EHV and are
-// honestly flagged (same as before) — consult IEC 61936-1 and your
-// utility's internal transmission-line design standards directly.
+// CONFLICT FOUND AND RESOLVED: at 275kV (SANS 10280-1's "300kV highest
+// system voltage" row), the retired ESKASABG3 dataset gave a safety
+// clearance of 2.35m; this table gives 2.5m. Per Hertz's explicit
+// decision (2026-07-29 session), SANS 10280-1's 2.5m supersedes the
+// ESKASABG3 figure: SANS 10280-1 is a normative national standard with
+// a direct EMR reference, while ESKASABG3's figure was a secondary
+// citation of the OHS Act via its own Annex C. The stale 2.35m figure
+// is locked out by regression test below.
 //
-// Wind-pressure note: Reg 15 uses 500 Pa for conductor sag/swing in
-// clearance assessment; DST_34-1191 §4.5.10.2 uses 700 Pa for structure
-// loading and strength calculations. These apply to different calculations
-// and are not contradictory.
+// SCOPE: this single table now covers minimum safety clearance, ground
+// clearance, road/rail crossing clearance, clearance to buildings and
+// vegetation, clearance to telecom lines/other power lines, and
+// horizontal clearance — for every voltage band from LV through 765kV
+// AC and 533kV DC. No partial-scope or out-of-scope case remains for AC
+// voltages; the table is complete end-to-end. The only genuinely
+// NOT-in-this-source figure remains structure (at-pole) phase
+// clearances (structureClearance() below), which SANS 10280-1 Annex E
+// does not cover.
 // ---------------------------------------------------------------------
-export const ESKASABG3_HV_EHV = [
-  { nomKV: 132, safetyClearanceM: 1.45, servitudeWidthM: '15.5 m' },
-  { nomKV: 275, safetyClearanceM: 2.35, servitudeWidthM: '22–23.5 m' },
-  { nomKV: 400, safetyClearanceM: 3.20, servitudeWidthM: '23.5–27.5 m' },
-  { nomKV: 765, safetyClearanceM: 5.50, servitudeWidthM: '40 m' },
-  // DC: separate insulation co-ordination — shown for reference, clearly labelled
-  { nomKV: 533, safetyClearanceM: 3.70, servitudeWidthM: '15 m', dc: true },
+const SANS10280_STANDARD = 'SANS 10280-1:2017 (Edition 2.1, Amdt 1) — Overhead power lines for conditions prevailing in South Africa, Part 1: Safety, Annex E (normative), Table E.1. Referenced normatively by the OHS Act Electrical Machinery Regulations (EMR), section 44.'
+const SANS10280_TABLE_E2_STANDARD = 'SANS 10280-1:2017 (Edition 2.1, Amdt 1), Annex E (normative), Table E.2 — LV (<1kV) ground clearance detail by conductor system and road/crossing category.'
+
+// One row per Table E.1 column-1 "highest system r.m.s. voltage" — this
+// is how the standard itself bands nominal system voltages. nominalKV is
+// column 2. dc:true marks the single 533kV DC row (a separate
+// insulation-co-ordination case per the standard's own footnote d).
+export const SANS10280_CLEARANCE_TABLE = [
+  { highestSystemKV: 1.1, nominalKV: null, safetyClearanceM: null, groundClearanceM: 4.9,  roadsRailM: 6.1,  buildingsVegetationM: 3.0, telecomOtherLinesM: 0.6, horizontalM: 3.0 },
+  { highestSystemKV: 7.2,  nominalKV: 6.6,  safetyClearanceM: 0.15, groundClearanceM: 5.5,  roadsRailM: 6.2,  buildingsVegetationM: 3.0, telecomOtherLinesM: 0.7, horizontalM: 3.0 },
+  { highestSystemKV: 12,   nominalKV: 11,   safetyClearanceM: 0.20, groundClearanceM: 5.5,  roadsRailM: 6.3,  buildingsVegetationM: 3.0, telecomOtherLinesM: 0.8, horizontalM: 3.0 },
+  { highestSystemKV: 24,   nominalKV: 22,   safetyClearanceM: 0.32, groundClearanceM: 5.5,  roadsRailM: 6.4,  buildingsVegetationM: 3.0, telecomOtherLinesM: 0.9, horizontalM: 3.0 },
+  { highestSystemKV: 36,   nominalKV: 33,   safetyClearanceM: 0.43, groundClearanceM: 5.5,  roadsRailM: 6.5,  buildingsVegetationM: 3.0, telecomOtherLinesM: 1.0, horizontalM: 3.0 },
+  { highestSystemKV: 48,   nominalKV: 44,   safetyClearanceM: 0.54, groundClearanceM: 5.5,  roadsRailM: 6.6,  buildingsVegetationM: 3.0, telecomOtherLinesM: 1.1, horizontalM: 3.0 },
+  { highestSystemKV: 72,   nominalKV: 66,   safetyClearanceM: 0.77, groundClearanceM: 5.7,  roadsRailM: 6.9,  buildingsVegetationM: 3.2, telecomOtherLinesM: 1.4, horizontalM: 3.0 },
+  { highestSystemKV: 100,  nominalKV: 88,   safetyClearanceM: 1.00, groundClearanceM: 5.9,  roadsRailM: 7.1,  buildingsVegetationM: 3.4, telecomOtherLinesM: 1.6, horizontalM: 3.0 },
+  { highestSystemKV: 145,  nominalKV: 132,  safetyClearanceM: 1.45, groundClearanceM: 6.3,  roadsRailM: 7.5,  buildingsVegetationM: 3.8, telecomOtherLinesM: 2.0, horizontalM: 3.0 },
+  { highestSystemKV: 245,  nominalKV: 220,  safetyClearanceM: 2.1,  groundClearanceM: 7.0,  roadsRailM: 8.2,  buildingsVegetationM: 4.5, telecomOtherLinesM: 2.7, horizontalM: 3.0 },
+  { highestSystemKV: 300,  nominalKV: 275,  safetyClearanceM: 2.5,  groundClearanceM: 7.4,  roadsRailM: 8.6,  buildingsVegetationM: 4.9, telecomOtherLinesM: 3.1, horizontalM: 3.0 },
+  { highestSystemKV: 362,  nominalKV: 330,  safetyClearanceM: 2.9,  groundClearanceM: 7.8,  roadsRailM: 9.0,  buildingsVegetationM: 5.3, telecomOtherLinesM: 3.5, horizontalM: 3.0 },
+  { highestSystemKV: 420,  nominalKV: 400,  safetyClearanceM: 3.2,  groundClearanceM: 8.1,  roadsRailM: 9.3,  buildingsVegetationM: 5.6, telecomOtherLinesM: 3.8, horizontalM: 3.2 },
+  { highestSystemKV: 800,  nominalKV: 765,  safetyClearanceM: 5.5,  groundClearanceM: 10.4, roadsRailM: 11.6, buildingsVegetationM: 8.5, telecomOtherLinesM: 6.1, horizontalM: 5.5 },
+  { highestSystemKV: 533,  nominalKV: 533,  safetyClearanceM: 3.7,  groundClearanceM: 8.6,  roadsRailM: 9.8,  buildingsVegetationM: 6.1, telecomOtherLinesM: 4.3, horizontalM: 3.7, dc: true },
 ]
 
-const ESKASABG3_STANDARD = 'Eskom ESKASABG3 Rev 1 (May 2000, Rev date May 2003) — "Standard for Bush Clearance and Maintenance Within Overhead Powerline Servitudes", Annex C (normative). Safety clearance values cited in that document as "(OHSA, No. 85 of 1993)" (OHS Act Electrical Machinery Regulations). Cross-validated: ESKASABG3 11/22/88 kV safety clearances (0.20/0.32/1.00 m) match the independently verified Reg 15 Annex table at the 12/24/100 kV bands exactly.'
-
-export const CLEARANCE_BANDS = [
-  { maxKV: 1.1, safetyClearanceM: null, groundOutsideM: 4.9, groundTownshipM: 5.5, roadsRailM: 6.1, commsOtherLinesM: 0.6, buildingsM: 3.0 },
-  { maxKV: 7.2, safetyClearanceM: 0.15, groundOutsideM: 5.0, groundTownshipM: 5.5, roadsRailM: 6.2, commsOtherLinesM: 0.7, buildingsM: 3.0 },
-  { maxKV: 12,  safetyClearanceM: 0.20, groundOutsideM: 5.1, groundTownshipM: 5.5, roadsRailM: 6.3, commsOtherLinesM: 0.8, buildingsM: 3.0 },
-  { maxKV: 24,  safetyClearanceM: 0.32, groundOutsideM: 5.2, groundTownshipM: 5.5, roadsRailM: 6.4, commsOtherLinesM: 0.9, buildingsM: 3.0 },
-  { maxKV: 36,  safetyClearanceM: 0.43, groundOutsideM: 5.3, groundTownshipM: 5.5, roadsRailM: 6.5, commsOtherLinesM: 1.0, buildingsM: 3.0 },
-  { maxKV: 48,  safetyClearanceM: 0.54, groundOutsideM: 5.4, groundTownshipM: 5.5, roadsRailM: 6.6, commsOtherLinesM: 1.1, buildingsM: 3.0 },
-  { maxKV: 72,  safetyClearanceM: 0.77, groundOutsideM: 5.7, groundTownshipM: 5.7, roadsRailM: 6.9, commsOtherLinesM: 1.4, buildingsM: 3.2 },
-  { maxKV: 100, safetyClearanceM: 1.00, groundOutsideM: 5.9, groundTownshipM: 5.9, roadsRailM: 7.1, commsOtherLinesM: 1.6, buildingsM: 3.4 },
-]
+// Table E.2 — LV (<1kV) ground clearance detail by conductor system and
+// road/crossing category. Table E.1's <1kV row gives a single ground
+// clearance figure (4.9m, footnoted "see table E.2") for the general
+// case; this is the detail behind that footnote.
+export const LV_GROUND_CLEARANCE_TABLE = {
+  bare:       { proclaimedRoadsRailM: 6.1, otherRoadsM: 4.9, excludingRoadsM: 4.9 },
+  abc:        { proclaimedRoadsRailM: 6.1, otherRoadsM: 4.9, excludingRoadsM: 3.7 },
+  concentric: { proclaimedRoadsRailM: 6.1, otherRoadsM: 4.7, excludingRoadsM: 3.0 },
+}
 
 /**
- * Minimum clearances (ground, roads/rail, comms/other lines, buildings)
- * for a given nominal overhead line voltage, up to the 100kV band —
- * covers 66kV and 88kV sub-transmission. Above 100kV the regulation's
- * 145kV row was truncated in the accessible source text and is honestly
- * flagged rather than guessed.
+ * Minimum clearances (safety, ground, roads/rail, buildings/vegetation,
+ * telecom/other power lines, horizontal) for a given nominal overhead
+ * line voltage, per SANS 10280-1:2017 Annex E, Table E.1 (normative).
+ * Covers the full LV/MV/HV/EHV range in one verified table — no
+ * partial-scope or out-of-scope cases remain for AC voltages.
  * @param {string|number} voltageKVInput
+ * @param {string} [conductorType] - 'bare'|'abc'|'concentric'; only affects the <1kV LV band (Table E.2). Defaults to 'bare'.
  * @returns {Object|null}
  */
-export function clearanceLookup(voltageKVInput) {
+export function clearanceLookup(voltageKVInput, conductorType = 'bare') {
   const voltageKV = pf(voltageKVInput)
   if (isNaN(voltageKV) || voltageKV <= 0) return null
 
-  if (voltageKV > 100) {
-    const vClass = voltageClass(voltageKV)
-    // Try to find an exact match in the ESKASABG3 HV/EHV table
-    const hvEntry = ESKASABG3_HV_EHV.find(e => Math.round(voltageKV) === e.nomKV)
+  const acRows = SANS10280_CLEARANCE_TABLE.filter(r => !r.dc)
+  const row = acRows.find(r => voltageKV <= r.highestSystemKV) || acRows[acRows.length - 1]
+  const vClass = voltageClass(voltageKV)
 
-    if (hvEntry) {
-      return {
-        partialScope: true,             // safety clearance verified; ground/road/building not
-        outOfScope: false,
-        voltageClass: vClass,
-        nominalVoltageKV: hvEntry.nomKV,
-        dc: hvEntry.dc || false,
-        safetyClearanceM: hvEntry.safetyClearanceM,  // verified from ESKASABG3/OHS Act
-        servitudeWidthM: hvEntry.servitudeWidthM,    // verified from ESKASABG3
-        groundClearanceVerified: false,  // explicit honest flag
-        roadClearanceVerified: false,
-        buildingClearanceVerified: false,
-        message: `Minimum safety clearance ${hvEntry.safetyClearanceM} m and servitude width ${hvEntry.servitudeWidthM} are verified from ESKASABG3 Annex C (citing OHS Act), cross-validated at three voltage levels. Ground clearance (above roads, townships, and to buildings) is NOT verified for this voltage from any accessible source — consult IEC 61936-1 and your utility's own transmission-line design standards for those figures.`,
-        standard: ESKASABG3_STANDARD,
-      }
-    }
-
-    // Voltage > 100kV but not a standard Eskom AC network voltage
-    // Find bracketing ESKASABG3 entries for orientation
-    const lower = [...ESKASABG3_HV_EHV].filter(e => !e.dc && e.nomKV < voltageKV).pop()
-    const upper = ESKASABG3_HV_EHV.find(e => !e.dc && e.nomKV > voltageKV)
-    const bracketMsg = lower && upper
-      ? ` The adjacent verified Eskom voltages from ESKASABG3 are ${lower.nomKV} kV (safety clearance ${lower.safetyClearanceM} m) and ${upper.nomKV} kV (${upper.safetyClearanceM} m).`
-      : ''
+  if (row.highestSystemKV === 1.1) {
+    const lvKey = ['bare', 'abc', 'concentric'].includes(conductorType) ? conductorType : 'bare'
+    const lvDetail = LV_GROUND_CLEARANCE_TABLE[lvKey]
     return {
-      outOfScope: true,
       voltageClass: vClass,
-      message: vClass === 'HV'
-        ? `${Math.round(voltageKV)} kV is an HV voltage but is not one of Eskom's standard AC network voltages in South Africa (which use 132 kV for sub-transmission), so it does not appear in the ESKASABG3 clearance reference.${bracketMsg} Consult IEC 61936-1 and your utility's own internal standards.`
-        : `${Math.round(voltageKV)} kV is an EHV transmission voltage not listed in the ESKASABG3 reference for Eskom's standard AC network voltages.${bracketMsg} Consult IEC 61936-1 and Eskom Transmission / NTCSA's own internal transmission-line design standards.`,
-      standard: 'Not verified for this exact voltage — see message for correct standard/authority to consult',
+      voltageBandKV: row.highestSystemKV,
+      nominalVoltageKV: row.nominalKV,
+      safetyClearanceM: row.safetyClearanceM,
+      groundClearanceM: lvDetail.excludingRoadsM,
+      groundOtherRoadsM: lvDetail.otherRoadsM,
+      aboveRoadsRailM: lvDetail.proclaimedRoadsRailM,
+      toBuildingsVegetationM: row.buildingsVegetationM,
+      toTelecomOtherLinesM: row.telecomOtherLinesM,
+      horizontalM: row.horizontalM,
+      conductorType: lvKey,
+      standard: SANS10280_STANDARD + ' ' + SANS10280_TABLE_E2_STANDARD,
     }
   }
 
-  const band = CLEARANCE_BANDS.find(b => voltageKV <= b.maxKV) || CLEARANCE_BANDS[CLEARANCE_BANDS.length - 1]
   return {
-    voltageClass: voltageClass(voltageKV),
-    voltageBandKV: band.maxKV,
-    safetyClearanceM: band.safetyClearanceM,
-    groundOutsideTownshipM: band.groundOutsideM,
-    groundInsideTownshipM: band.groundTownshipM,
-    aboveRoadsRailM: band.roadsRailM,
-    toCommsOtherLinesM: band.commsOtherLinesM,
-    toBuildingsM: band.buildingsM,
-    standard: 'OHS Act Electrical Machinery Regulations, 1988 (GN R.1593), Regulation 15 — primary regulation text (labour.gov.za)',
+    voltageClass: vClass,
+    voltageBandKV: row.highestSystemKV,
+    nominalVoltageKV: row.nominalKV,
+    safetyClearanceM: row.safetyClearanceM,
+    groundClearanceM: row.groundClearanceM,
+    aboveRoadsRailM: row.roadsRailM,
+    toBuildingsVegetationM: row.buildingsVegetationM,
+    toTelecomOtherLinesM: row.telecomOtherLinesM,
+    horizontalM: row.horizontalM,
+    standard: SANS10280_STANDARD,
+  }
+}
+
+/**
+ * 533kV DC clearance lookup — the only DC voltage in SANS 10280-1
+ * Table E.1 (a separate insulation-co-ordination case, per the
+ * standard's footnote d — "maximum voltage to earth, for which
+ * insulation is designed").
+ * @param {string|number} voltageKVInput
+ * @returns {Object|null}
+ */
+export function clearanceLookupDC(voltageKVInput) {
+  const voltageKV = pf(voltageKVInput)
+  if (isNaN(voltageKV) || voltageKV <= 0) return null
+  const row = SANS10280_CLEARANCE_TABLE.find(r => r.dc)
+  if (Math.round(voltageKV) !== row.highestSystemKV) {
+    return {
+      outOfScope: true,
+      message: `Only ${row.highestSystemKV} kV DC is listed in SANS 10280-1 Table E.1 — no other DC voltage is verified from this source.`,
+    }
+  }
+  return {
+    dc: true,
+    voltageBandKV: row.highestSystemKV,
+    nominalVoltageKV: row.nominalKV,
+    safetyClearanceM: row.safetyClearanceM,
+    groundClearanceM: row.groundClearanceM,
+    aboveRoadsRailM: row.roadsRailM,
+    toBuildingsVegetationM: row.buildingsVegetationM,
+    toTelecomOtherLinesM: row.telecomOtherLinesM,
+    horizontalM: row.horizontalM,
+    standard: SANS10280_STANDARD,
   }
 }
 

@@ -1,8 +1,10 @@
 # On-Device Verification — Overhead Reticulation (all 7 sub-tabs)
 
-Written 2026-07-28. Expected values below are the same hand-verified figures the automated
-tests assert (455/455 passing at write time) — the point of this pass is UI wiring, touch
-behaviour, and PDF rendering on the reference device, not re-proving the math.
+Written 2026-07-28, **Clearances section rewritten 2026-07-29** for the SANS 10280-1
+full rebuild (see `debt.md`/`roadmap.md` for the sourcing detail). Expected values below
+are the same hand-verified figures the automated tests assert (482/482 passing at write
+time) — the point of this pass is UI wiring, touch behaviour, and PDF rendering on the
+reference device, not re-proving the math.
 
 Build: standard release sequence, `assembleRelease` only (never debug on the licensed device).
 
@@ -23,16 +25,21 @@ Build: standard release sequence, `assembleRelease` only (never debug on the lic
 - [ ] Switching material Wood↔Concrete resets the pole picker to a valid row (no stale selection crash).
 - [ ] **PDF export** (9 m wood): depth accented, DISSCAAO1 note fully rendered (no truncation).
 
-## 4. Clearances (owed from 2026-07-27 + HV/EHV added 2026-07-28)
-- [ ] **66 kV** → returns the **72 kV band** (MV badge): ground outside 5.7 m, roads/rail 6.9 m, safety clearance 0.77 m.
-- [ ] **33 kV** → 36 kV band: roads **6.5 m** (NOT 6.6 — that was the fixed error; 6.6 belongs to 48 kV).
-- [ ] **132 kV** (press preset button) → **partial-scope card** (blue, not amber): safety clearance **1.45 m**, servitude width **15.5 m**, amber ground-clearance-not-verified note visible, ESKASABG3 standard citation in small text. No road/building clearance figures shown.
-- [ ] **275 kV** → safety clearance **2.35 m**, servitude **22–23.5 m**.
-- [ ] **400 kV** → safety clearance **3.20 m**, servitude **23.5–27.5 m**.
-- [ ] **765 kV** → safety clearance **5.50 m**, servitude **40 m**.
-- [ ] **220 kV** (type manually) → amber out-of-scope card showing both "132 kV (1.45 m)" and "275 kV (2.35 m)" as bracketing guidance in the message text. No fabricated clearance figure.
-- [ ] **PDF export** (132 kV): "Min Safety Clearance: 1.45 m" row accented, servitude width row present, ground-clearance note rendered, ESKASABG3 citation in notes — no road/building clearance rows (those are verified absent, not just missing).
+## 4. Clearances (fully rebuilt 2026-07-29 on SANS 10280-1 Table E.1 — single unified card now, no partial/out-of-scope branches)
+- [ ] **11 kV** → safety clearance **0.20 m**, ground **5.5 m**, roads/rail **6.3 m**, buildings/vegetation **3.0 m**, telecom/other-lines **0.8 m**, horizontal **3.0 m**.
+- [ ] **33 kV** → 36 kV band: safety **0.43 m**, ground **5.5 m**, roads/rail **6.5 m** (NOT 6.6 — that error was fixed in an earlier session; 6.6 belongs to the 48 kV band).
+- [ ] **66 kV** → 72 kV band (MV badge): ground **5.7 m**, roads/rail **6.9 m**, buildings/vegetation **3.2 m**, safety clearance **0.77 m**.
+- [ ] **132 kV** (press preset button) → single result card (no more blue "partial-scope" styling — same card style as every other voltage now): safety clearance **1.45 m**, ground **6.3 m**, roads/rail **7.5 m**, buildings/vegetation **3.8 m**, telecom **2.0 m**. SANS 10280-1 standard citation visible in small text at the bottom, NOT an ESKASABG3 citation.
+- [ ] **220 kV** (press preset button) → now returns full verified data (previously an amber out-of-scope card with bracketing text — that's gone): safety **2.1 m**, ground **7.0 m**, roads/rail **8.2 m**, buildings/vegetation **4.5 m**.
+- [ ] **275 kV** → safety clearance **2.5 m** (NOT 2.35 m — this is the resolved conflict; 2.35 m must not appear anywhere on this card or its PDF), ground **7.4 m**, roads/rail **8.6 m**, buildings/vegetation **4.9 m**.
+- [ ] **400 kV** → safety **3.20 m**, ground **8.1 m**, roads/rail **9.3 m**, horizontal **3.2 m** (the only AC band where horizontal ≠ 3.0 m besides 765 kV).
+- [ ] **765 kV** → safety **5.50 m**, ground **10.4 m**, roads/rail **11.6 m**, buildings/vegetation **8.5 m**, horizontal **5.5 m**.
+- [ ] **330 kV** (type manually, no preset button) → now verified: safety **2.9 m**, ground **7.8 m** — this voltage returned nothing useful before this session.
+- [ ] **LV conductor-type selector** (appears only when voltage ≤1.1 kV): default **Bare** → ground **4.9 m**, roads/rail **6.1 m**. Switch to **ABC** → ground drops to **3.7 m** (roads/rail unchanged at 6.1 m). Switch to **Concentric** → ground **3.0 m**, "other roads" **4.7 m** (lowest of the three). Selector disappears for any voltage above 1.1 kV.
+- [ ] **PDF export** (132 kV): "Minimum Safety Clearance: 1.45 m" row present, PLUS full ground/roads/buildings/telecom/horizontal rows now included (previously these were absent for HV/EHV — confirm they render this time), SANS 10280-1 citation in notes.
+- [ ] **PDF export** (LV, Bare conductor): the italic note explaining "ground clearance shown is for conductor type... excluding road/rail crossings" renders fully, not truncated.
 - [ ] Voltage class badge shows correctly: 66kV → **MV**, 88kV → **HV**, 132kV → **HV**, 275kV → **EHV**.
+- [ ] Structure (at-pole) clearance sub-card still appears for 33 kV only (unchanged this session — DST_34-1191 §4.11.4 remains the separate source for that figure).
 
 ## 5. Fittings & Structures (owed from 2026-07-27)
 - [ ] Hare / Dead-End → match diameter **14.16 mm**, colour warning visible.
