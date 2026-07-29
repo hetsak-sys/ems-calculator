@@ -139,11 +139,30 @@ Three §5.2 candidates run through the §5.1 checklist together in one scoping p
 
 **Charter (one sentence):** *MV/LV Overhead Reticulation is responsible for overhead-line conductor selection and reference-table spacing/clearance guidance; it explicitly does not perform sag-tension mechanical calculations.*
 
+**Build status (2026-07-27/28) — SEVEN sub-tabs built, on-device verification owed:**
+
+Shipped 2026-07-27 (commits `f60874a` → `8177845`, pushed by Hertz):
+1. **Conductor Sizing** — 47 conductors: 40 Eskom-rated (Squirrel→IEC 800, 835mm²) with Rate A/B ampacity at 50/60/70/80°C from the single authoritative source "Phase Conductor Standard for Eskom Overhead Lines" 240-152844641 Rev 2 (2021), plus 7 BS215 dimension-only conductors (Gopher/Weasel/Ferret/Rabbit/Otter/Dog/Lynx) with honest `ratingsAvailable:false`. Supersedes DST_34-1191 Table 7's flat ratings after a real cross-source conflict (Magpie 78A vs 133.8A — rating is temperature-dependent; regression test locks both old numbers out).
+2. **Pole Spacing** — electrical span formula, verified for 22 kV only (C=0.4m, DST_34-1191 §4.5.11).
+3. **Clearances** — primary legal source: OHS Act Electrical Machinery Regulations 1988, Reg 15 table, 8 bands to 100kV (fixed the shipped "33kV → 6.6m" error — the 36kV band is 6.5m; regression-tested). **Extended 2026-07-28 (two iterations):** HV/EHV presets added; then Eskom ESKASABG3 Rev 1 (May 2000) Annex C (normative) was identified as the verified source for HV/EHV minimum safety clearances — that document explicitly cites OHS Act No. 85 of 1993 as its source, and cross-validates at 11/22/88kV against the already-verified Reg 15 data (all three match exactly). Safety clearances now verified for 132kV (1.45m), 275kV (2.35m), 400kV (3.20m), 765kV (5.50m), 533kV DC (3.70m) — these display as "partial scope" results with servitude widths; ground/road/building clearances for HV/EHV remain honestly flagged as unverified (ESKASABG3 Annex C does not contain them). 220kV is not a standard Eskom AC network voltage and is flagged as such with bracketing guidance. 472 tests passing.
+4. **Fittings & Structures** — preformed fitting selection keyed on conductor diameter (never colour — manufacturer-specific and contradictory); guy grips redirect to stay-strand diameter; structure typology/materials qualitative reference with a no-fabricated-strength-figures test.
+
+Built 2026-07-28 (this session — engine + tests + UI, 455/455 passing, clean build, strings verified in compiled bundle):
+5. **Pole Planting** — DST_34-1191 §4.5.9 Table 6, re-fetched from the primary accessible text this session: 11 wood rows (5–18m, 1000–2400mm) + 6 concrete rows (4–11m, 800–1800mm), incl. both 10m transformer-pole variants. Discrete table rows only, picker-driven — no interpolation. Regression test locks out the fabricated AI-wishlist "8m → 1.5m" row (Table 6 has no 8m pole). Backfilling procedure per DISSCAAO1 Rev 2 honestly flagged as referenced-but-inaccessible.
+6. **Construction** — 11-phase build sequence (each phase clause-anchored to DST_34-1191), 12 clause-cited stringing/construction numeric rules (50%/40% UTS tension limits, joint placement rules, 96kN stay assembly, 50m min span, RSAT C-values), and the standard's own §4.10.2 **pre-energization inspection checklist** (6 groups, 35 items) as an interactive tick-off list with PDF export as a hand-over record — unticked items export visibly incomplete.
+7. **Faults & Maintenance** — 9-entry qualitative fault-finding reference (each mechanism anchored to DST_34-1191's own failure discussion; test asserts only clause-cited figures appear), the §4.4.9 **lightning-exposure calculator** (Ns = Ng(28H^0.6+W)·L·10⁻³; Ng from Td if needed; the standard's per-town Ng table deliberately NOT reproduced per the no-place-names rule), and an 11-term stringing-equipment glossary (no fabricated specs).
+
+**Wishlist triage (2026-07-27, from a large AI-generated "Overhead Line Reticulation" feature list — recorded so it isn't re-litigated):**
+- *Already built:* clearances incl. crossings, conductor DB, diameter-based fitting selection, structure typology, pole/transformer earthing (Earthing module).
+- *Built 2026-07-28:* construction sequence + checklists, pole planting (from the real Table 6, not the wishlist's fabricated example), fault finding/maintenance reference, stringing glossary.
+- *Blocked on sources:* stay-wire sizes/breaking loads (BS 183/ASTM A475 — no verified accessible source), insulator specs, crossarm/bolt tables.
+- *Charter boundary — own scoping session required, never a quiet build:* Sag & Tension calculator, wind/ice loading, pole strength/selection (wind-zone input = structural design). Deferred three times now; still binding.
+- *Known-fabrication guard:* the wishlist contained fabricated conductor/colour tables (Hare 100mm²/288kg/km, "Dog → 710mm²", contradictory colour maps) and the fake planting example. None ingested; cross-check any similar pasted tables against the engine's verified data.
+
 #### What a fresh session should do with this section
 
-1. Underground Reticulation (§5.6.2) is shipped, on-device verified, and confirmed pushed (`dae503a`) — **do not rebuild it.**
-2. Building/Installation Design (§5.6.1) is shipped, on-device verified, and confirmed pushed (`210ed02`) — **all four sub-tabs (Load Assessment, DB Sizing, Circuit Design, Area Lighting) are done; do not rebuild it.**
-3. Still re-clone fresh per [AI-19]/[PRO-11] before touching anything — this doc reflects state as of 2026-07-27, not a live guarantee.
-4. **MV/LV Reticulation — Overhead (§5.6.3) is next**, per the build order above. Run the §5.1 three-question checklist fresh before writing any code — it's been scoped once (this section) but not re-confirmed recently, and the depth caveat (no sag-tension mechanics in v1) needs an explicit nod before starting, not an assumption.
-5. Source-check SANS 10280/IEC 61936-1 pole-spacing and clearance figures directly against standard text before coding, per [AI-18] — the same caution that shaped both Load Assessment's diversity-table finding and Area Lighting's SANS 10389-1 finding: don't assume a convenient lookup table exists without checking.
-6. Engine-first: extracted calculation engine + tests, then UI, per the established PowerSuite pattern (§3 of the knowledge doc).
+1. Underground Reticulation (§5.6.2) and Building/Installation Design (§5.6.1) are shipped, on-device verified, pushed — **do not rebuild.**
+2. Still re-clone fresh per [AI-19]/[PRO-11] before touching anything — this doc reflects state as of 2026-07-28, not a live guarantee.
+3. **Overhead (§5.6.3): on-device verification is the next action, not more building** — see debt.md for the owed checklist (all seven sub-tabs' owed items, plus older Protection/TCC debt).
+4. After verification, remaining §5.6.3 candidates in priority order: none with zero sourcing risk remain — everything left is either blocked on sources or behind the sag-tension charter boundary. Deepening elsewhere (or the §6.2 queue) is the next scoping conversation.
+5. Engine-first with tests, sources cited, [AI-18] flags on anything unverified — unchanged.

@@ -6,6 +6,13 @@ import {
   clearanceLookup, structureClearance,
   phaseSpacing,
   fittingSelection, FITTING_TYPES, STRUCTURE_TYPES, STRUCTURE_MATERIALS,
+  polePlanting, POLE_PLANTING,
+  lightningExposure,
+  STRINGING_RULES, CONSTRUCTION_SEQUENCE,
+  PRE_ENERGIZATION_CHECKLIST, PRE_ENERGIZATION_STANDARD,
+  FAULT_FINDING, STRINGING_GLOSSARY,
+  voltageClass, VOLTAGE_CLASS_CONVENTION, TRANSMISSION_VOLTAGE_PRESETS,
+  ESKASABG3_HV_EHV,
 } from './overheadReticulationEngine'
 
 const SOURCE_NOTE = 'SANS 10280-1 itself is a paywalled SABS publication and could not be accessed directly for this module. Clearance/spacing figures come from two independent, publicly accessible Eskom/NRS documents that implement it — DST_34-1191 and NRS 033:1996 — cross-verified against each other. This is a generic/secondary-sourced planning reference, not a primary SANS 10280-1 citation.'
@@ -296,11 +303,31 @@ function Clearances({ addHistory }) {
 
   const exportPdf = () => {
     if (!result || result.outOfScope) return
+    if (result.partialScope) {
+      showCard({
+        calculator: 'Overhead Reticulation — Clearances (HV/EHV)',
+        site: site.name,
+        standard: result.standard,
+        inputs: [
+          { label: 'Nominal Voltage', value: `${result.nominalVoltageKV} kV ${result.dc ? '(DC)' : '(AC)'}` },
+          { label: 'Voltage Class', value: result.voltageClass },
+        ],
+        sections: [{
+          title: 'Verified from ESKASABG3 Annex C (citing OHS Act)',
+          rows: [
+            { label: 'Minimum Safety Clearance', value: `${result.safetyClearanceM} m`, accent: true },
+            { label: 'Servitude Width (from centre line)', value: result.servitudeWidthM },
+          ],
+        }],
+        notes: 'Ground clearance (above roads, townships), clearance to communication lines, and clearance to buildings are NOT verified from an accessible primary source for HV/EHV voltages. Consult IEC 61936-1 (AC electrical installations exceeding 1 kV) and your utility\'s (Eskom Transmission / NTCSA) own internal transmission-line design standards for those figures.',
+      })
+      return
+    }
     showCard({
       calculator: 'Overhead Reticulation — Clearances',
       site: site.name,
       standard: result.standard,
-      inputs: [{ label: 'Nominal Voltage', value: `${voltageKV} kV (band: up to ${result.voltageBandKV} kV)` }],
+      inputs: [{ label: 'Nominal Voltage', value: `${voltageKV} kV (band: up to ${result.voltageBandKV} kV, class: ${result.voltageClass})` }],
       sections: [
         {
           title: 'Minimum Clearances',
@@ -327,24 +354,76 @@ function Clearances({ addHistory }) {
   return (
     <div className="px-4 py-3">
       <InfoBox title="Minimum Overhead Line Clearances" color="blue" lines={[
-        'Ground, road/rail, communication-line, and building clearances by voltage band, up to the 100kV band — covers 11/22/33kV distribution and 44/66/88kV sub-transmission.',
-        'Sourced directly from the primary regulation: OHS Act Electrical Machinery Regulations, 1988, Regulation 15 table. The regulation\'s 145kV band exists but was truncated in the accessible source text, so voltages above 100kV are honestly flagged rather than guessed.',
+        'Ground, road/rail, communication-line, and building clearances by voltage band (OHS Act Reg 15), covering LV/MV distribution and sub-transmission up to the 100kV band.',
+        'HV (132kV) and EHV (275/400/765kV) Eskom standard transmission voltages now show verified minimum safety clearances and servitude widths from Eskom ESKASABG3 Annex C (normative), which cites the OHS Act as its source — cross-validated at 11/22/88kV against the independently verified Reg 15 data. Ground and road clearances at HV/EHV remain unverified.',
+        '220kV is not a standard Eskom AC network voltage (Eskom uses 275kV for sub-transmission) and is honestly flagged as such.',
       ]} />
 
-      <NumInput label="Nominal Voltage" value={voltageKV} onChange={setVoltageKV} unit="kV" placeholder="e.g. 11, 22, 33" />
+      <NumInput label="Nominal Voltage" value={voltageKV} onChange={setVoltageKV} unit="kV" placeholder="e.g. 11, 22, 33, 132, 400" />
+
+      <div className="mb-3">
+        <label className="text-gray-400 text-xs mb-1.5 block">HV / EHV Transmission Presets</label>
+        <div className="flex flex-wrap gap-2">
+          {TRANSMISSION_VOLTAGE_PRESETS.map(v => (
+            <button key={v} onClick={() => setVoltageKV(String(v))}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono border ${voltageKV === String(v) ? 'bg-sky-500 border-sky-500 text-black font-bold' : 'bg-[#1c1c1c] border-[#2a2a2a] text-gray-300'}`}>
+              {v} kV
+            </button>
+          ))}
+        </div>
+      </div>
 
       <CalcButton onClick={calculate} />
       <ErrBox msg={error} />
 
       {result && result.outOfScope && (
-        <InfoBox title="Out of Scope" color="amber" lines={[result.message]} />
+        <>
+          <div className="bg-[#111] border border-amber-900 rounded-xl overflow-hidden mb-4">
+            <div className="bg-[#1a1a0a] px-4 py-2 border-b border-amber-900 flex justify-between items-center">
+              <span className="text-amber-400 text-xs font-bold">{result.voltageClass} — PARTIAL DATA ONLY</span>
+              <span className="text-amber-400 text-xs font-mono">{voltageKV} kV</span>
+            </div>
+            <div className="px-4 py-3">
+              <div className="text-gray-300 text-xs">{result.message}</div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {result && result.partialScope && (
+        <>
+          <div className="bg-[#111] border border-sky-900 rounded-xl overflow-hidden mb-4">
+            <div className="bg-[#0a1a2a] px-4 py-2 border-b border-sky-900 flex justify-between items-center">
+              <span className="text-sky-400 text-xs font-bold">{result.voltageClass} — {result.nominalVoltageKV} kV{result.dc ? ' DC' : ''}</span>
+              <span className="text-sky-400 text-xs font-mono border border-sky-800 rounded px-2 py-0.5">{result.voltageClass}</span>
+            </div>
+            <div className="px-4 py-3">
+              <div className="flex justify-between py-2 border-b border-[#1a1a1a]">
+                <span className="text-gray-300 text-sm font-bold">Min Safety Clearance</span>
+                <span className="text-2xl font-bold text-sky-400">{result.safetyClearanceM} m</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
+                <span className="text-gray-400 text-xs">Servitude Width (from centre)</span>
+                <span className="text-white text-sm font-mono">{result.servitudeWidthM}</span>
+              </div>
+              <div className="text-amber-400 text-xs pt-2">⚠ Ground clearance (above roads, townships) and clearance to buildings are NOT verified from an accessible primary source for this voltage class — consult IEC 61936-1 and your utility's transmission-line design standards for those figures.</div>
+              <div className="text-gray-600 text-[10px] pt-2 italic">{result.standard}</div>
+            </div>
+          </div>
+          <button onClick={exportPdf}
+            className="w-full py-3 rounded-xl font-bold text-sm mb-4"
+            style={{ background: 'transparent', border: '1px solid #38bdf8', color: '#38bdf8' }}>
+            📄 Export PDF
+          </button>
+        </>
       )}
 
       {result && !result.outOfScope && (
         <>
           <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-4">
-            <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]">
+            <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a] flex justify-between items-center">
               <span className="text-amber-400 text-xs font-bold">CLEARANCES — VOLTAGE BAND UP TO {result.voltageBandKV} kV</span>
+              {result.voltageClass && <span className="text-sky-400 text-xs font-mono border border-sky-800 rounded px-2 py-0.5">{result.voltageClass}</span>}
             </div>
             <div className="px-4 py-3">
               <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
@@ -507,11 +586,410 @@ function FittingsStructures({ addHistory }) {
   )
 }
 
+// ── Pole Planting ────────────────────────────────────────────────────────────
+// Fifth sub-tab, added 2026-07-28. DST_34-1191 §4.5.9 Table 6, re-fetched
+// from the primary accessible text this session. Discrete table rows only —
+// pole selection is a picker of real table rows, so unlisted lengths can't
+// even be entered (no interpolation, no fabricated depths). A regression
+// test locks out a fabricated "8m → 1.5m" row from an AI-generated
+// wishlist table (Table 6 has no 8m pole at all).
+function PolePlanting({ addHistory }) {
+  const { site } = useSite()
+  const [material, setMaterial] = useState('wood')
+  const [rowId, setRowId] = useState('w9')
+  const [result, setResult] = useState(null)
+  const { cardData, showCard, hideCard } = useResultCard()
+
+  const rowOptions = POLE_PLANTING[material].map(r => [
+    r.id,
+    `${r.lengthM} m — ${material === 'wood' ? `tip Ø${r.tipDiaMM} mm` : r.classLabel}${r.transformerPole ? ' (Transformer pole)' : ''}`,
+  ])
+
+  const changeMaterial = (m) => {
+    setMaterial(m)
+    setRowId(POLE_PLANTING[m][0].id)
+    setResult(null)
+  }
+
+  const calculate = () => {
+    const r = polePlanting(material, rowId)
+    setResult(r)
+    if (r && r.verified) addHistory({ tab: 'Overhead — Pole Planting', expr: `${r.lengthM}m ${material}${r.transformerPole ? ' (Tx)' : ''}`, result: `${r.plantingDepthMM} mm deep` })
+  }
+
+  const exportPdf = () => {
+    if (!result || !result.verified) return
+    showCard({
+      calculator: 'Overhead Reticulation — Pole Planting',
+      site: site.name,
+      standard: result.standard,
+      inputs: [
+        { label: 'Material', value: result.material === 'wood' ? 'Wood pole' : 'Concrete pole' },
+        { label: 'Pole Length', value: `${result.lengthM} m` },
+        { label: result.material === 'wood' ? 'Tip Diameter' : 'Class', value: result.material === 'wood' ? `${result.tipDiaMM} mm` : result.classLabel },
+        { label: 'Transformer Pole', value: result.transformerPole ? 'Yes' : 'No' },
+      ],
+      sections: [{
+        title: 'Planting',
+        rows: [
+          { label: 'Planting Depth (Table 6)', value: `${result.plantingDepthMM} mm`, accent: true },
+          { label: 'Height Above Ground (derived)', value: `${result.aboveGroundM} m` },
+        ],
+      }],
+      notes: 'Planting depth is the DST_34-1191 Table 6 value for this exact pole; height above ground is simple arithmetic (length minus depth), not a table figure. The planting and backfilling procedure itself is per DISSCAAO1 Rev 2, which is referenced by the clause but was not accessible — confirm the backfilling/compaction method against it or local utility practice.',
+    })
+  }
+
+  return (
+    <div className="px-4 py-3">
+      <InfoBox title="Pole Planting Depths" color="blue" lines={[
+        'Standard planting depths for the wood and concrete poles listed in DST_34-1191 §4.5.9, Table 6. The picker only offers real table rows — depths for unlisted lengths are deliberately not interpolated, because the table is a discrete list of stocked pole sizes, not a formula.',
+        'Poles must end up plumb and correctly compacted — this is an explicit pre-energization inspection item (see the Construction sub-tab checklist).',
+      ]} />
+
+      <SelectInput label="Pole Material" value={material} onChange={changeMaterial}
+        options={[['wood', 'Wood pole'], ['concrete', 'Concrete pole']]} />
+      <SelectInput label="Pole (Table 6 rows)" value={rowId} onChange={setRowId} options={rowOptions} />
+
+      <CalcButton onClick={calculate} label="LOOK UP" />
+
+      {result && !result.verified && (
+        <InfoBox title="Not In Table 6" color="amber" lines={[result.message]} />
+      )}
+
+      {result && result.verified && (
+        <>
+          <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-4">
+            <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]">
+              <span className="text-amber-400 text-xs font-bold">
+                {result.lengthM} m {result.material.toUpperCase()} POLE{result.transformerPole ? ' — TRANSFORMER' : ''}
+              </span>
+            </div>
+            <div className="px-4 py-3">
+              <div className="flex justify-between py-2 border-b border-[#1a1a1a]">
+                <span className="text-gray-300 text-sm font-bold">Planting Depth</span>
+                <span className="text-2xl font-bold text-sky-400">{result.plantingDepthMM} mm</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
+                <span className="text-gray-400 text-xs">Height Above Ground (derived)</span>
+                <span className="text-white text-sm font-mono">{result.aboveGroundM} m</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
+                <span className="text-gray-400 text-xs">{result.material === 'wood' ? 'Tip Diameter' : 'Class'}</span>
+                <span className="text-white text-sm font-mono">{result.material === 'wood' ? `${result.tipDiaMM} mm` : result.classLabel}</span>
+              </div>
+              <div className="text-gray-500 text-xs pt-2">Backfilling/compaction procedure per DISSCAAO1 Rev 2 (referenced, not accessible) — confirm the method against it or local utility practice.</div>
+            </div>
+          </div>
+          <button onClick={exportPdf}
+            className="w-full py-3 rounded-xl font-bold text-sm mb-4"
+            style={{ background: 'transparent', border: '1px solid #38bdf8', color: '#38bdf8' }}>
+            📄 Export PDF
+          </button>
+        </>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
+    </div>
+  )
+}
+
+// ── Construction ─────────────────────────────────────────────────────────────
+// Sixth sub-tab, added 2026-07-28. Three parts: (1) the 11-phase build
+// sequence, clause-anchored per phase; (2) the clause-cited stringing/
+// construction numeric rules; (3) the DST_34-1191 §4.10.2 pre-energization
+// inspection checklist as an interactive tick-off list with PDF export —
+// same UI precedent as the Grid-Tie compliance checklist, but here the
+// ticked/unticked state exports into the PDF as a hand-over record.
+function Construction({ addHistory }) {
+  const { site } = useSite()
+  const [openPhase, setOpenPhase] = useState(null)
+  const [showRules, setShowRules] = useState(false)
+  const [checked, setChecked] = useState({})
+  const { cardData, showCard, hideCard } = useResultCard()
+
+  const allItems = PRE_ENERGIZATION_CHECKLIST.flatMap(g => g.items)
+  const doneCount = allItems.filter(i => checked[i.id]).length
+  const allDone = doneCount === allItems.length
+
+  const toggle = (id) => setChecked(c => ({ ...c, [id]: !c[id] }))
+
+  const exportChecklist = () => {
+    showCard({
+      calculator: 'Overhead Reticulation — Pre-Energization Inspection',
+      site: site.name,
+      standard: PRE_ENERGIZATION_STANDARD,
+      inputs: [
+        { label: 'Items Checked', value: `${doneCount} of ${allItems.length}` },
+        { label: 'Status', value: allDone ? 'ALL ITEMS AFFIRMATIVE — may be energized per §4.10.2' : 'INCOMPLETE — the line may NOT be energized until every answer is affirmative' },
+      ],
+      sections: PRE_ENERGIZATION_CHECKLIST.map(g => ({
+        title: g.group,
+        rows: g.items.map(i => ({
+          label: i.text,
+          value: checked[i.id] ? 'YES' : '—',
+          accent: !checked[i.id],
+        })),
+      })),
+      notes: 'DST_34-1191 §4.10.2 requires every answer to be in the affirmative before the line may be energized. Unticked items export as "—" so an incomplete record is visibly incomplete. Earth resistance test results per §4.10.3 / DST_34-1985 must be attached separately.',
+    })
+    addHistory({ tab: 'Overhead — Pre-Energization', expr: `${doneCount}/${allItems.length} checked`, result: allDone ? 'complete' : 'incomplete' })
+  }
+
+  return (
+    <div className="px-4 py-3">
+      <InfoBox title="Line Construction Reference" color="blue" lines={[
+        'The build sequence and its numeric rules per DST_34-1191, plus the standard\'s own §4.10.2 pre-energization inspection as a tick-off checklist you can export as a hand-over record.',
+        'Sequence phases are anchored to the governing clause where one exists; sag-tension mechanical design itself remains out of this module\'s scope.',
+      ]} />
+
+      {/* ── Construction sequence ── */}
+      <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-3">
+        <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]">
+          <span className="text-amber-400 text-xs font-bold">CONSTRUCTION SEQUENCE — 11 PHASES</span>
+        </div>
+        <div className="px-4 py-2">
+          {CONSTRUCTION_SEQUENCE.map(p => (
+            <div key={p.id} className="py-2 border-b border-[#1a1a1a] last:border-b-0">
+              <button onClick={() => setOpenPhase(openPhase === p.id ? null : p.id)} className="w-full text-left">
+                <div className="flex justify-between items-center">
+                  <span className="text-white text-sm font-bold">{p.phase}. {p.title}</span>
+                  <span className="text-gray-500 text-xs">{openPhase === p.id ? '▲' : '▼'}</span>
+                </div>
+              </button>
+              {openPhase === p.id && (
+                <div className="pt-1.5">
+                  <div className="text-gray-300 text-xs">{p.detail}</div>
+                  <div className="text-gray-500 text-xs pt-1 italic">{p.clause}</div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Stringing rules ── */}
+      <button onClick={() => setShowRules(s => !s)}
+        className="w-full py-3 rounded-xl font-bold text-sm mb-3"
+        style={{ background: 'transparent', border: '1px solid #94a3b8', color: '#94a3b8' }}>
+        {showRules ? 'HIDE' : 'SHOW'} STRINGING & CONSTRUCTION RULES
+      </button>
+      {showRules && (
+        <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-3">
+          <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]">
+            <span className="text-amber-400 text-xs font-bold">NUMERIC RULES — CLAUSE-CITED</span>
+          </div>
+          <div className="px-4 py-2">
+            {STRINGING_RULES.map(r => (
+              <div key={r.id} className="py-2 border-b border-[#1a1a1a] last:border-b-0">
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-300 text-xs">{r.label}</span>
+                  <span className="text-white text-xs font-mono text-right flex-shrink-0">{r.value}</span>
+                </div>
+                <div className="text-gray-600 text-[10px] pt-0.5 italic">{r.clause}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Pre-energization checklist ── */}
+      <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-3">
+        <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a] flex justify-between items-center">
+          <span className="text-amber-400 text-xs font-bold">PRE-ENERGIZATION INSPECTION</span>
+          <span className={`text-xs font-bold ${allDone ? 'text-green-400' : 'text-gray-400'}`}>{doneCount}/{allItems.length}</span>
+        </div>
+        <div className="px-4 py-2">
+          <div className="text-gray-400 text-xs pb-2">§4.10.2: every answer must be affirmative before the line may be energized.</div>
+          {PRE_ENERGIZATION_CHECKLIST.map(g => (
+            <div key={g.group} className="pb-2">
+              <div className="text-sky-400 text-xs font-bold pt-1 pb-1">{g.group}</div>
+              {g.items.map(i => (
+                <button key={i.id} onClick={() => toggle(i.id)}
+                  className="w-full flex items-start gap-2 py-1.5 text-left border-b border-[#1a1a1a] last:border-b-0">
+                  <span className={`flex-shrink-0 w-5 h-5 rounded border text-xs flex items-center justify-center mt-0.5 ${checked[i.id] ? 'bg-green-500 border-green-500 text-black font-bold' : 'border-[#3a3a3a] text-transparent'}`}>✓</span>
+                  <span className={`text-xs ${checked[i.id] ? 'text-gray-500 line-through' : 'text-gray-300'}`}>{i.text}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {!allDone && doneCount > 0 && (
+        <InfoBox title="Checklist Incomplete" color="amber" lines={[
+          `${allItems.length - doneCount} item(s) unticked — per §4.10.2 the line may not be energized until every answer is affirmative. The PDF export marks unticked items visibly.`,
+        ]} />
+      )}
+
+      <button onClick={exportChecklist}
+        className="w-full py-3 rounded-xl font-bold text-sm mb-4"
+        style={{ background: 'transparent', border: '1px solid #38bdf8', color: '#38bdf8' }}>
+        📄 Export Checklist PDF
+      </button>
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
+    </div>
+  )
+}
+
+// ── Faults & Maintenance ─────────────────────────────────────────────────────
+// Seventh sub-tab, added 2026-07-28. Qualitative fault-finding reference
+// (each mechanism anchored to DST_34-1191's own failure discussion), the
+// §4.4.9 lightning-exposure calculation (Ng entered by the user — the
+// standard's per-town Ng table is deliberately not reproduced, per the
+// no-place-names rule), and the stringing-equipment glossary.
+function FaultsMaintenance({ addHistory }) {
+  const { site } = useSite()
+  const [ng, setNg] = useState('')
+  const [td, setTd] = useState('')
+  const [heightM, setHeightM] = useState('')
+  const [widthM, setWidthM] = useState('')
+  const [lengthKm, setLengthKm] = useState('')
+  const [result, setResult] = useState(null)
+  const [err, setErr] = useState('')
+  const [openFault, setOpenFault] = useState(null)
+  const [showGlossary, setShowGlossary] = useState(false)
+  const { cardData, showCard, hideCard } = useResultCard()
+
+  const calculate = () => {
+    setErr('')
+    setResult(null)
+    const r = lightningExposure({ ngPerKm2Yr: ng, thunderDays: td, avgHeightM: heightM, lineWidthM: widthM, lengthKm })
+    if (!r) {
+      setErr('Enter a positive structure height and line length, a line width (0 allowed for single-conductor width), and either a ground flash density (Ng) or annual thunder days (Td).')
+      return
+    }
+    setResult(r)
+    addHistory({ tab: 'Overhead — Lightning Exposure', expr: `Ng ${r.ngPerKm2Yr}, ${lengthKm} km`, result: `${r.strikesPerYear} strikes/yr` })
+  }
+
+  const exportPdf = () => {
+    if (!result) return
+    showCard({
+      calculator: 'Overhead Reticulation — Lightning Exposure',
+      site: site.name,
+      standard: result.standard,
+      inputs: [
+        { label: 'Ground Flash Density Ng', value: `${result.ngPerKm2Yr} strikes/km²/yr${result.ngDerivedFromTd ? ' (derived from thunder days)' : ''}` },
+        { label: 'Average Structure Height', value: `${heightM} m` },
+        { label: 'Line Width', value: `${widthM} m` },
+        { label: 'Line Length', value: `${lengthKm} km` },
+      ],
+      sections: [{
+        title: 'Expected Strikes To The Line',
+        rows: [
+          { label: 'Strikes Per Year', value: `${result.strikesPerYear}`, accent: true },
+          { label: 'Strikes Per 100 km Per Year', value: `${result.strikesPer100kmYear}` },
+        ],
+      }],
+      notes: 'Planning-level estimate for line-performance assessment (is this line\'s trip rate consistent with its lightning exposure?). Ng must be a real local figure from utility isokeraunic data or the Weather Bureau — it varies by more than two orders of magnitude across the region, which is why no default is offered.',
+    })
+  }
+
+  return (
+    <div className="px-4 py-3">
+      <InfoBox title="Fault Finding & Maintenance" color="blue" lines={[
+        'Common MV overhead fault mechanisms with what to look for on patrol — each anchored to DST_34-1191\'s own failure-mechanism discussion — plus the §4.4.9 lightning-exposure estimate for judging whether a line\'s trip rate matches its environment.',
+      ]} />
+
+      {/* ── Lightning exposure calc ── */}
+      <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-3">
+        <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]">
+          <span className="text-amber-400 text-xs font-bold">LIGHTNING EXPOSURE — Ns = Ng(28H^0.6 + W)·L·10⁻³</span>
+        </div>
+        <div className="px-4 py-3">
+          <NumInput label="Ground flash density Ng" value={ng} onChange={setNg} unit="strikes/km²/yr" note="from utility/Weather Bureau data for YOUR area — leave blank to derive from thunder days" />
+          <NumInput label="Annual thunder days Td" value={td} onChange={setTd} unit="days/yr" note="used only if Ng is blank; Ng = 0.04·Td^1.25" />
+          <NumInput label="Average structure height" value={heightM} onChange={setHeightM} unit="m" />
+          <NumInput label="Line width" value={widthM} onChange={setWidthM} unit="m" note="outer conductor to outer conductor" />
+          <NumInput label="Line length" value={lengthKm} onChange={setLengthKm} unit="km" />
+          <CalcButton onClick={calculate} label="ESTIMATE" />
+          {err && <ErrBox msg={err} />}
+          {result && (
+            <>
+              <div className="flex justify-between py-2 border-b border-[#1a1a1a]">
+                <span className="text-gray-300 text-sm font-bold">Expected Strikes</span>
+                <span className="text-2xl font-bold text-sky-400">{result.strikesPerYear} /yr</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-[#1a1a1a]">
+                <span className="text-gray-400 text-xs">Per 100 km</span>
+                <span className="text-white text-sm font-mono">{result.strikesPer100kmYear} /100km/yr</span>
+              </div>
+              {result.ngDerivedFromTd && (
+                <div className="text-gray-500 text-xs pt-1.5">Ng derived from thunder days: {result.ngPerKm2Yr} strikes/km²/yr</div>
+              )}
+              <button onClick={exportPdf}
+                className="w-full py-3 rounded-xl font-bold text-sm mt-3"
+                style={{ background: 'transparent', border: '1px solid #38bdf8', color: '#38bdf8' }}>
+                📄 Export PDF
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Fault-finding reference ── */}
+      <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-3">
+        <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]">
+          <span className="text-amber-400 text-xs font-bold">FAULT-FINDING REFERENCE</span>
+        </div>
+        <div className="px-4 py-2">
+          {FAULT_FINDING.map(f => (
+            <div key={f.id} className="py-2 border-b border-[#1a1a1a] last:border-b-0">
+              <button onClick={() => setOpenFault(openFault === f.id ? null : f.id)} className="w-full text-left">
+                <div className="flex justify-between items-center">
+                  <span className="text-white text-sm font-bold">{f.fault}</span>
+                  <span className="text-gray-500 text-xs">{openFault === f.id ? '▲' : '▼'}</span>
+                </div>
+              </button>
+              {openFault === f.id && (
+                <div className="pt-1.5">
+                  <div className="text-gray-300 text-xs">{f.mechanism}</div>
+                  <div className="text-sky-400 text-xs pt-1.5 font-bold">Look for:</div>
+                  <div className="text-gray-300 text-xs">{f.lookFor}</div>
+                  <div className="text-gray-500 text-xs pt-1 italic">{f.clause}</div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Stringing glossary ── */}
+      <button onClick={() => setShowGlossary(s => !s)}
+        className="w-full py-3 rounded-xl font-bold text-sm mb-3"
+        style={{ background: 'transparent', border: '1px solid #94a3b8', color: '#94a3b8' }}>
+        {showGlossary ? 'HIDE' : 'SHOW'} STRINGING EQUIPMENT GLOSSARY
+      </button>
+      {showGlossary && (
+        <div className="bg-[#111] border border-[#2a2a2a] rounded-xl overflow-hidden mb-3">
+          <div className="bg-[#1a1a0a] px-4 py-2 border-b border-[#2a2a2a]">
+            <span className="text-amber-400 text-xs font-bold">STRINGING EQUIPMENT — TRADE REFERENCE</span>
+          </div>
+          <div className="px-4 py-2">
+            {STRINGING_GLOSSARY.map(g => (
+              <div key={g.id} className="py-2 border-b border-[#1a1a1a] last:border-b-0">
+                <div className="text-white text-sm font-bold">{g.term}</div>
+                <div className="text-gray-400 text-xs pt-0.5">{g.meaning}</div>
+                {g.clause && <div className="text-gray-600 text-[10px] pt-0.5 italic">{g.clause}</div>}
+              </div>
+            ))}
+            <div className="text-gray-500 text-xs py-2">General trade-terminology reference — clause citations shown where a DST_34-1191 rule attaches to the item; the rest is standard line-construction usage, not a standards citation.</div>
+          </div>
+        </div>
+      )}
+      {cardData && <ResultCard data={cardData} onClose={hideCard} />}
+    </div>
+  )
+}
+
 const OVERHEAD_TABS = [
   { id: 'conductor', label: 'Conductor Sizing', icon: '〰' },
   { id: 'spacing',   label: 'Pole Spacing', icon: '📏' },
+  { id: 'planting',  label: 'Pole Planting', icon: '🕳' },
   { id: 'clearance', label: 'Clearances', icon: '⛔' },
   { id: 'fittings',  label: 'Fittings & Structures', icon: '🔩' },
+  { id: 'construction', label: 'Construction', icon: '🏗' },
+  { id: 'maintenance',  label: 'Faults & Maintenance', icon: '🔧' },
 ]
 
 export default function OverheadReticulation({ addHistory }) {
@@ -519,8 +997,11 @@ export default function OverheadReticulation({ addHistory }) {
   const map = {
     conductor: <ConductorSizing addHistory={addHistory} />,
     spacing:   <PoleSpacing addHistory={addHistory} />,
+    planting:  <PolePlanting addHistory={addHistory} />,
     clearance: <Clearances addHistory={addHistory} />,
     fittings:  <FittingsStructures addHistory={addHistory} />,
+    construction: <Construction addHistory={addHistory} />,
+    maintenance:  <FaultsMaintenance addHistory={addHistory} />,
   }
   return (
     <div className="flex flex-col h-full overflow-hidden">

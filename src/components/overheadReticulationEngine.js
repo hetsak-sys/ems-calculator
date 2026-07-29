@@ -274,6 +274,91 @@ export const STRUCTURE_MATERIALS = [
 // safetyClearanceM is the regulation's "minimum safety clearance" column
 // (phase clearance for which insulation is designed).
 // ---------------------------------------------------------------------
+// ---------------------------------------------------------------------
+// Voltage class (LV/MV/HV/EHV) — a general Southern African power-
+// engineering convention used ONLY to label/categorize a voltage for the
+// user's orientation. It is NOT itself an OHS Act clearance boundary —
+// the actual clearance bands above come from Reg 15's own table breaks,
+// which don't align neatly to LV/MV/HV/EHV class edges.
+//
+// HV/EHV clearance figures (132kV and above) are explicitly OUT OF SCOPE
+// for verified data in this module, added 2026-07-28 after checking:
+// the OHS Act Reg 15 table itself was only found in accessible text up
+// to the 100kV band (the 145kV row is truncated in every secondary
+// reproduction checked); no accessible Eskom Transmission/NTCSA clearance
+// standard, and no IEC 61936-1 clearance TABLE, could be verified either
+// — only that IEC 61936-1 is the correct standard body to consult (it is
+// already on this project's approved standards list). Rather than
+// fabricate HV/EHV clearance figures, this module honestly flags them
+// and names the correct standard/authority to check against, per [AI-18].
+// The transmission voltage PRESETS below (132/220/275/400/765 kV) are
+// real, public Eskom/NTCSA transmission voltage classes — factual system
+// voltages, not clearance figures — offered so the picker doesn't force
+// free-text entry for common HV/EHV system voltages.
+// ---------------------------------------------------------------------
+export const VOLTAGE_CLASS_CONVENTION = 'General Southern African power-engineering convention (not an OHS Act clearance boundary): LV ≤1kV, MV >1–33kV, HV >33–132kV, EHV >132kV.'
+
+export const TRANSMISSION_VOLTAGE_PRESETS = [132, 220, 275, 400, 765]
+
+/**
+ * @param {string|number} voltageKVInput
+ * @returns {'LV'|'MV'|'HV'|'EHV'|null}
+ */
+export function voltageClass(voltageKVInput) {
+  const voltageKV = pf(voltageKVInput)
+  if (isNaN(voltageKV) || voltageKV <= 0) return null
+  if (voltageKV <= 1.1) return 'LV'
+  if (voltageKV <= 33) return 'MV'
+  if (voltageKV <= 132) return 'HV'
+  return 'EHV'
+}
+
+// ---------------------------------------------------------------------
+// HV/EHV Minimum Safety Clearances — Eskom ESKASABG3 Rev 1 (May 2000)
+// "Standard for Bush Clearance and Maintenance Within Overhead Powerline
+// Servitudes", Annex C (normative): "Minimum clearances and general
+// servitude widths". The safety clearance column in that annex is
+// explicitly cited as "(OHSA, No. 85 of 1993)" — i.e. the OHS Act
+// Electrical Machinery Regulations that this module already uses for the
+// LV/MV bands from Reg 15.
+//
+// THREE-POINT CROSS-VALIDATION against the independently verified Reg 15
+// table [AI-18]:
+//   ESKASABG3 11 kV → 0.20 m  ==  Reg 15 12kV band  safetyClearanceM 0.20 ✓
+//   ESKASABG3 22 kV → 0.32 m  ==  Reg 15 24kV band  safetyClearanceM 0.32 ✓
+//   ESKASABG3 88 kV → 1.00 m  ==  Reg 15 100kV band safetyClearanceM 1.00 ✓
+//
+// These are Eskom's standard AC transmission/sub-transmission voltages
+// in South Africa. 220 kV is not a standard Eskom AC network voltage
+// (they use 275 kV for sub-transmission), so there is no 220 kV entry
+// in the table.
+//
+// SCOPE of this data (ESKASABG3 Annex C):
+//   ✓ Minimum safety clearance (OHS Act Reg 15 safety clearance column)
+//   ✓ Servitude building restriction width (both sides of centre line)
+//   ✗ Ground clearance above roads/railways  — NOT in this document
+//   ✗ Ground clearance outside/inside townships — NOT in this document
+//   ✗ Clearance to communication lines/buildings — NOT in this document
+// Those four clearance types remain unverified for HV/EHV and are
+// honestly flagged (same as before) — consult IEC 61936-1 and your
+// utility's internal transmission-line design standards directly.
+//
+// Wind-pressure note: Reg 15 uses 500 Pa for conductor sag/swing in
+// clearance assessment; DST_34-1191 §4.5.10.2 uses 700 Pa for structure
+// loading and strength calculations. These apply to different calculations
+// and are not contradictory.
+// ---------------------------------------------------------------------
+export const ESKASABG3_HV_EHV = [
+  { nomKV: 132, safetyClearanceM: 1.45, servitudeWidthM: '15.5 m' },
+  { nomKV: 275, safetyClearanceM: 2.35, servitudeWidthM: '22–23.5 m' },
+  { nomKV: 400, safetyClearanceM: 3.20, servitudeWidthM: '23.5–27.5 m' },
+  { nomKV: 765, safetyClearanceM: 5.50, servitudeWidthM: '40 m' },
+  // DC: separate insulation co-ordination — shown for reference, clearly labelled
+  { nomKV: 533, safetyClearanceM: 3.70, servitudeWidthM: '15 m', dc: true },
+]
+
+const ESKASABG3_STANDARD = 'Eskom ESKASABG3 Rev 1 (May 2000, Rev date May 2003) — "Standard for Bush Clearance and Maintenance Within Overhead Powerline Servitudes", Annex C (normative). Safety clearance values cited in that document as "(OHSA, No. 85 of 1993)" (OHS Act Electrical Machinery Regulations). Cross-validated: ESKASABG3 11/22/88 kV safety clearances (0.20/0.32/1.00 m) match the independently verified Reg 15 Annex table at the 12/24/100 kV bands exactly.'
+
 export const CLEARANCE_BANDS = [
   { maxKV: 1.1, safetyClearanceM: null, groundOutsideM: 4.9, groundTownshipM: 5.5, roadsRailM: 6.1, commsOtherLinesM: 0.6, buildingsM: 3.0 },
   { maxKV: 7.2, safetyClearanceM: 0.15, groundOutsideM: 5.0, groundTownshipM: 5.5, roadsRailM: 6.2, commsOtherLinesM: 0.7, buildingsM: 3.0 },
@@ -299,14 +384,47 @@ export function clearanceLookup(voltageKVInput) {
   if (isNaN(voltageKV) || voltageKV <= 0) return null
 
   if (voltageKV > 100) {
+    const vClass = voltageClass(voltageKV)
+    // Try to find an exact match in the ESKASABG3 HV/EHV table
+    const hvEntry = ESKASABG3_HV_EHV.find(e => Math.round(voltageKV) === e.nomKV)
+
+    if (hvEntry) {
+      return {
+        partialScope: true,             // safety clearance verified; ground/road/building not
+        outOfScope: false,
+        voltageClass: vClass,
+        nominalVoltageKV: hvEntry.nomKV,
+        dc: hvEntry.dc || false,
+        safetyClearanceM: hvEntry.safetyClearanceM,  // verified from ESKASABG3/OHS Act
+        servitudeWidthM: hvEntry.servitudeWidthM,    // verified from ESKASABG3
+        groundClearanceVerified: false,  // explicit honest flag
+        roadClearanceVerified: false,
+        buildingClearanceVerified: false,
+        message: `Minimum safety clearance ${hvEntry.safetyClearanceM} m and servitude width ${hvEntry.servitudeWidthM} are verified from ESKASABG3 Annex C (citing OHS Act), cross-validated at three voltage levels. Ground clearance (above roads, townships, and to buildings) is NOT verified for this voltage from any accessible source — consult IEC 61936-1 and your utility's own transmission-line design standards for those figures.`,
+        standard: ESKASABG3_STANDARD,
+      }
+    }
+
+    // Voltage > 100kV but not a standard Eskom AC network voltage
+    // Find bracketing ESKASABG3 entries for orientation
+    const lower = [...ESKASABG3_HV_EHV].filter(e => !e.dc && e.nomKV < voltageKV).pop()
+    const upper = ESKASABG3_HV_EHV.find(e => !e.dc && e.nomKV > voltageKV)
+    const bracketMsg = lower && upper
+      ? ` The adjacent verified Eskom voltages from ESKASABG3 are ${lower.nomKV} kV (safety clearance ${lower.safetyClearanceM} m) and ${upper.nomKV} kV (${upper.safetyClearanceM} m).`
+      : ''
     return {
       outOfScope: true,
-      message: 'The regulation continues to a 145kV band, but that row was truncated in the accessible source text — its values are deliberately not guessed here. For voltages above 100kV, consult the OHS Act Electrical Machinery Regulations Reg. 15 table directly.',
+      voltageClass: vClass,
+      message: vClass === 'HV'
+        ? `${Math.round(voltageKV)} kV is an HV voltage but is not one of Eskom's standard AC network voltages in South Africa (which use 132 kV for sub-transmission), so it does not appear in the ESKASABG3 clearance reference.${bracketMsg} Consult IEC 61936-1 and your utility's own internal standards.`
+        : `${Math.round(voltageKV)} kV is an EHV transmission voltage not listed in the ESKASABG3 reference for Eskom's standard AC network voltages.${bracketMsg} Consult IEC 61936-1 and Eskom Transmission / NTCSA's own internal transmission-line design standards.`,
+      standard: 'Not verified for this exact voltage — see message for correct standard/authority to consult',
     }
   }
 
   const band = CLEARANCE_BANDS.find(b => voltageKV <= b.maxKV) || CLEARANCE_BANDS[CLEARANCE_BANDS.length - 1]
   return {
+    voltageClass: voltageClass(voltageKV),
     voltageBandKV: band.maxKV,
     safetyClearanceM: band.safetyClearanceM,
     groundOutsideTownshipM: band.groundOutsideM,
@@ -386,3 +504,318 @@ export function phaseSpacing({ spanM, angleDeg, voltageKV } = {}) {
     standard: 'DST_34-1191 §4.5.11 electrical span/phase-spacing formula, C=0.4m verified for 22 kV',
   }
 }
+
+// ---------------------------------------------------------------------
+// Pole Planting — DST_34-1191 §4.5.9, Table 6 ("Planting depths of
+// equivalent concrete and wood poles"), re-fetched and transcribed from
+// the primary accessible text 2026-07-28. Planting and backfilling
+// procedure itself is per DISSCAAO1 Rev 2, which is referenced by the
+// clause but NOT accessible — only the depth table is reproduced here,
+// with the procedural standard honestly flagged [AI-18].
+//
+// GUARD NOTE: an AI-generated "planting depth" example table circulating
+// in a feature wishlist (e.g. "8m pole → 1.5m") does NOT match this
+// source — Table 6 has no 8m row at all. Only the rows below are real.
+// A regression test locks the fabricated 8m row out.
+// ---------------------------------------------------------------------
+
+export const POLE_PLANTING = {
+  wood: [
+    { id: 'w5',   lengthM: 5,  tipDiaMM: '80',      depthMM: 1000, transformerPole: false },
+    { id: 'w7',   lengthM: 7,  tipDiaMM: '120',     depthMM: 1300, transformerPole: false },
+    { id: 'w9',   lengthM: 9,  tipDiaMM: '140',     depthMM: 1500, transformerPole: false },
+    { id: 'w10',  lengthM: 10, tipDiaMM: '160',     depthMM: 1700, transformerPole: false },
+    { id: 'w10t', lengthM: 10, tipDiaMM: '180',     depthMM: 1700, transformerPole: true },
+    { id: 'w11',  lengthM: 11, tipDiaMM: '140/180', depthMM: 1800, transformerPole: false },
+    { id: 'w12',  lengthM: 12, tipDiaMM: '160/200', depthMM: 2000, transformerPole: false },
+    { id: 'w13',  lengthM: 13, tipDiaMM: '160/200', depthMM: 2200, transformerPole: false },
+    { id: 'w14',  lengthM: 14, tipDiaMM: '180',     depthMM: 2200, transformerPole: false },
+    { id: 'w16',  lengthM: 16, tipDiaMM: '180',     depthMM: 2200, transformerPole: false },
+    { id: 'w18',  lengthM: 18, tipDiaMM: '180',     depthMM: 2400, transformerPole: false },
+  ],
+  concrete: [
+    { id: 'c4',   lengthM: 4,  classLabel: '1 kN',             depthMM: 800,  transformerPole: false },
+    { id: 'c7',   lengthM: 7,  classLabel: '4 kN',             depthMM: 1300, transformerPole: false },
+    { id: 'c9',   lengthM: 9,  classLabel: '6 kN',             depthMM: 1500, transformerPole: false },
+    { id: 'c10',  lengthM: 10, classLabel: '8 kN',             depthMM: 1800, transformerPole: false },
+    { id: 'c10t', lengthM: 10, classLabel: 'Transformer pole', depthMM: 1800, transformerPole: true },
+    { id: 'c11',  lengthM: 11, classLabel: '8 kN',             depthMM: 1800, transformerPole: false },
+  ],
+}
+
+const POLE_PLANTING_STANDARD = 'DST_34-1191 §4.5.9, Table 6 — planting depths of concrete and wood poles; planting/backfilling procedure per DISSCAAO1 Rev 2 (referenced by the clause, not accessible — consult it or local practice for the backfilling method itself)'
+
+/**
+ * Look up the standard planting depth for a listed pole. Table-listed
+ * rows ONLY — no interpolation for unlisted lengths, because Table 6 is
+ * a discrete table of the poles Eskom actually stocks, not a formula.
+ * Above-ground height is simple arithmetic (length − depth), flagged as
+ * a derived value, not a table figure.
+ * @param {'wood'|'concrete'} material
+ * @param {string} rowId - id in POLE_PLANTING[material]
+ * @returns {Object|null}
+ */
+export function polePlanting(material, rowId) {
+  const rows = POLE_PLANTING[material]
+  if (!rows) return null
+  const row = rows.find(r => r.id === rowId)
+  if (!row) {
+    return {
+      verified: false,
+      message: 'This pole length is not a row in DST_34-1191 Table 6 — the table is a discrete list of stocked pole sizes, not a formula, so depths for unlisted lengths are deliberately not interpolated. Select a listed pole, or consult DISSCAAO1/the pole supplier directly.',
+    }
+  }
+  const depthM = row.depthMM / 1000
+  const aboveGroundM = Math.round((row.lengthM - depthM) * 100) / 100
+  return {
+    verified: true,
+    material,
+    lengthM: row.lengthM,
+    tipDiaMM: row.tipDiaMM || null,
+    classLabel: row.classLabel || null,
+    transformerPole: row.transformerPole,
+    plantingDepthMM: row.depthMM,
+    plantingDepthM: depthM,
+    aboveGroundM, // derived: length − planting depth (arithmetic, not a table value)
+    standard: POLE_PLANTING_STANDARD,
+  }
+}
+
+// ---------------------------------------------------------------------
+// Stringing & construction numeric rules — every figure clause-cited to
+// DST_34-1191. These are the only numbers the Construction sub-tab
+// presents; everything else there is qualitative sequence/checklist
+// content. A test asserts each entry carries its clause reference.
+// ---------------------------------------------------------------------
+export const STRINGING_RULES = [
+  { id: 'initialTension', label: 'Max initial (stringing) tension', value: '50% of UTS', clause: 'DST_34-1191 §4.6.2 (OHS Act design limit)' },
+  { id: 'finalTension',   label: 'Max final tension', value: '40% of UTS', clause: 'DST_34-1191 §4.6.2 (OHS Act design limit, @ −5°C + 700 Pa wind)' },
+  { id: 'jointsMiddle',   label: 'Joint placement', value: 'Middle third of span, as far as possible', clause: 'DST_34-1191 §4.6.3' },
+  { id: 'jointsMinDist',  label: 'Min joint distance from a structure', value: '20 m', clause: 'DST_34-1191 §4.6.3' },
+  { id: 'jointsCrossing', label: 'Joints in crossing spans', value: 'Not permitted', clause: 'DST_34-1191 §4.6.3' },
+  { id: 'jointsType',     label: 'Joint type', value: 'Compression only, by Eskom-approved trained persons', clause: 'DST_34-1191 §4.6.3 / DSP0035 Rev 3' },
+  { id: 'stayAssembly',   label: 'Standard MV stay assembly', value: '96 kN', clause: 'DST_34-1191 §4.5.8' },
+  { id: 'stayBisector',   label: 'H-pole deviation > 60°', value: 'Bisector stays on both uprights', clause: 'DST_34-1191 §4.5.8' },
+  { id: 'minSpan',        label: 'Minimum design span', value: '50 m (shorter ⇒ structure exceeding design limit)', clause: 'DST_34-1191 §4.5.10.2(j)' },
+  { id: 'cValueStd',      label: 'Tension C-value, ACSR/AAAC (no dampers)', value: '1425', clause: 'DST_34-1191 §4.6.2 (RSAT)' },
+  { id: 'cValueExtra',    label: 'Tension C-value, extra-strength ACSR', value: '2712', clause: 'DST_34-1191 §4.6.2 (RSAT)' },
+  { id: 'cValueSteel',    label: 'Tension C-value, steel wire', value: '2242', clause: 'DST_34-1191 §4.6.2 (RSAT)' },
+]
+
+// ---------------------------------------------------------------------
+// Line Construction Sequence — ordered qualitative reference. Each phase
+// is anchored to the DST_34-1191 clause (or referenced standard) that
+// governs it where one exists; phases with no accessible clause are
+// honestly marked as general practice. No fabricated figures — the only
+// numbers that appear are the clause-cited ones from STRINGING_RULES /
+// POLE_PLANTING territory.
+// ---------------------------------------------------------------------
+export const CONSTRUCTION_SEQUENCE = [
+  { id: 'approvals', phase: 1, title: 'Planning, wayleaves & statutory approvals',
+    detail: 'Sign wayleave/servitude agreements with every private property owner on the route. Submit the project to Telkom in the prescribed manner and engage their regional representatives early. Obtain approvals from other statutory bodies as applicable (national/provincial roads, forestry, civil aviation, local authorities). Carry out an EIA for major/sensitive expansions or a scoping exercise for minor ones.',
+    clause: 'DST_34-1191 §4.1.1–4.1.3, §4.2.1' },
+  { id: 'survey', phase: 2, title: 'Route survey & structure pegging',
+    detail: 'Peg structure positions to the design. Span lengths are governed by the lesser of ground-clearance, electrical, wind and weight spans from the structure strength tables — minimum design span 50 m. In poor soils, wind-span assumptions must be re-checked against actual bearing-pressure tests.',
+    clause: 'DST_34-1191 §4.5.5–4.5.6, §4.5.10.2(j)' },
+  { id: 'materials', phase: 3, title: 'Pole delivery, storage & handling',
+    detail: 'Wood poles: minimum 55 MPa fibre strength per DSP_34-1647; CCA-treated poles are urban-only (not for rural lines). In dry climates (mean annual timber equilibrium moisture content below 100 g/kg) store poles at least 6 months before use — below 80 g/kg, one year — to limit pole twisting. Concrete poles must not be used in exposed high-lightning rural areas.',
+    clause: 'DST_34-1191 §4.5.4 + notes' },
+  { id: 'planting', phase: 4, title: 'Excavation & pole planting',
+    detail: 'Plant poles and stays and backfill holes per DISSCAAO1 Rev 2, at the Table 6 planting depths (see the Pole Planting sub-tab). Poles must end up plumb and correctly compacted — this is an explicit pre-energization inspection item.',
+    clause: 'DST_34-1191 §4.5.9 (Table 6), §4.10.2' },
+  { id: 'stays', phase: 5, title: 'Stay installation & testing',
+    detail: 'Standard MV stay assembly is 96 kN. Use as few stays as practical; bisector stays for angle structures where practical, and on both uprights of H-pole structures beyond 60° deviation. Conventional, rock or percussion anchors per soil conditions — installation testing per DSP-34-1657. Fit anti-climbing devices to struts.',
+    clause: 'DST_34-1191 §4.5.8; DSP-34-1657 Rev 2' },
+  { id: 'dressing', phase: 6, title: 'Pole-top hardware & insulator dressing',
+    detail: 'Dress structures per the standard assembly drawings, phasing per D-DT-0311 (viewed from the source substation). Apply the insulation co-ordination and bonding practice chosen for the area (BIL downwires, 500 mm wood-path gap, bonding of insulator dead ends in polluted areas).',
+    clause: 'DST_34-1191 §4.4.6–4.4.9 (Table 4), §4.5.7' },
+  { id: 'stringing', phase: 7, title: 'Conductor stringing',
+    detail: 'String through running blocks; construction/stringing stays, if left in place, must be slackened off slightly once stringing is complete. Initial (stringing) tension limited to 50% of UTS.',
+    clause: 'DST_34-1191 §4.5.8, §4.6.2' },
+  { id: 'sagging', phase: 8, title: 'Sagging, tensioning & jointing',
+    detail: 'Sag to the RSAT sag/tension tables for the conductor and area (final tension limit 40% UTS at −5°C + 700 Pa wind; C-values chosen so standard lines need no dampers). Joints: compression type only by approved trained persons, in the middle third of the span where possible, never within 20 m of a structure, never in crossing spans.',
+    clause: 'DST_34-1191 §4.6.2–4.6.3' },
+  { id: 'equipment', phase: 9, title: 'Jumpers, pole-mounted equipment & earthing',
+    detail: 'Fit covered (insulated) jumpers at auxiliary structures and equipment — treated as bare for safety clearances. Install and label transformers, isolators, fuses and reclosers per the Buyers\' Guide assemblies; earth per DST_34-1985 (MV/LV reticulation earthing — see the Earthing module).',
+    clause: 'DST_34-1191 §4.2.4, §4.9; DST_34-1985' },
+  { id: 'inspection', phase: 10, title: 'Pre-energization inspection & electrical tests',
+    detail: 'Complete the §4.10.2 visual inspection checklist (every answer must be affirmative before energizing) and perform earth resistance tests at transformer and auxiliary structures per DST_34-1985 / SCSASAAL9. Record all results.',
+    clause: 'DST_34-1191 §4.10' },
+  { id: 'energize', phase: 11, title: 'Energization & handover',
+    detail: 'Energize only once inspections and tests are recorded and passed. Hand over the recorded inspection/test documentation with the as-built layout.',
+    clause: 'DST_34-1191 §4.10.1' },
+]
+
+// ---------------------------------------------------------------------
+// Pre-Energization Inspection Checklist — DST_34-1191 §4.10.2, the
+// standard's own visual-inspection list (item wording condensed; the
+// clause requires every answer to be affirmative before the line may be
+// energized). Grouped as in the source. Rendered as an interactive
+// tick-off checklist, same UI precedent as the Grid-Tie compliance
+// checklist.
+// ---------------------------------------------------------------------
+export const PRE_ENERGIZATION_CHECKLIST = [
+  { group: 'General', items: [
+    { id: 'gen-layout',   text: 'Installation corresponds with the layout drawing' },
+    { id: 'gen-statutory',text: 'All necessary statutory approvals attained' },
+  ]},
+  { group: 'MV Lines', items: [
+    { id: 'mv-config',    text: 'MV configuration used suits the job' },
+    { id: 'mv-clearance', text: 'All clearances in accordance with the drawings and the OHS Act' },
+    { id: 'mv-binding',   text: 'Conductors correctly bound to the insulators' },
+    { id: 'mv-stayins',   text: 'Stay insulators fitted' },
+    { id: 'mv-plumb',     text: 'Poles plumb and correctly compacted' },
+    { id: 'mv-insul',     text: 'Insulators sound' },
+    { id: 'mv-tension',   text: 'Conductor correctly tensioned' },
+    { id: 'mv-hardware',  text: 'Line hardware correctly fitted' },
+  ]},
+  { group: 'Transformers', items: [
+    { id: 'tx-label',     text: 'Transformer installation labelled correctly' },
+    { id: 'tx-sa-fit',    text: 'MV surge arresters fitted correctly' },
+    { id: 'tx-sa-earth',  text: 'MV surge arresters earthed correctly' },
+    { id: 'tx-tank',      text: 'Transformer tank earthed correctly' },
+    { id: 'tx-earthlead', text: 'Earth lead securely fixed to the pole' },
+    { id: 'tx-fuse-label',text: 'Drop-out fuses correctly labelled' },
+    { id: 'tx-fuse-align',text: 'Drop-out fuses correctly aligned' },
+    { id: 'tx-fuse-rate', text: 'Fuse elements have the correct ratings' },
+    { id: 'tx-fuse-op',   text: 'Drop-out fuses operate correctly' },
+    { id: 'tx-fuse-ins',  text: 'Drop-out fuse insulators sound' },
+    { id: 'tx-bushings',  text: 'Transformer bushings sound' },
+    { id: 'tx-oil',       text: 'Transformer free from oil leaks' },
+    { id: 'tx-tap',       text: 'Tap changer in the correct position and locked' },
+    { id: 'tx-mount',     text: 'Unit mounted level and secured on the platform' },
+    { id: 'tx-phasing',   text: 'Phasing correct' },
+  ]},
+  { group: 'Isolators / Air-Break Switches', items: [
+    { id: 'iso-insul',    text: 'Insulators sound' },
+    { id: 'iso-align',    text: 'Equipment aligned correctly (open and close)' },
+    { id: 'iso-horn',     text: 'Arcing horn alignment correct' },
+    { id: 'iso-mount',    text: 'Mounted to the manufacturer\u2019s specification' },
+    { id: 'iso-lock',     text: 'Locking mechanisms (if fitted) operable' },
+    { id: 'iso-footplate',text: 'Footplate for hand-operated gang isolators installed and correctly earthed' },
+    { id: 'iso-earth',    text: 'Earthing conforms to requirements' },
+  ]},
+  { group: 'PMB / Sectionalizers', items: [
+    { id: 'pmb-mount',    text: 'Mounted to the manufacturer\u2019s specification' },
+    { id: 'pmb-insul',    text: 'Insulators sound' },
+  ]},
+  { group: 'Electrical Tests', items: [
+    { id: 'test-earth',   text: 'Earth resistance test results at transformer and auxiliary structures recorded and attached (per DST_34-1985 / SCSASAAL9)' },
+  ]},
+]
+
+export const PRE_ENERGIZATION_STANDARD = 'DST_34-1191 §4.10.2 — pre-energization visual inspection (every answer must be affirmative before the line may be energized); electrical tests per §4.10.3 / DST_34-1985'
+
+// ---------------------------------------------------------------------
+// Lightning Exposure — DST_34-1191 §4.4.9 notes.
+//   Ns = Ng × (28·H^0.6 + W) × L × 10⁻³   [strikes/year to the line]
+//   Ng = 0.04 × Td^1.25                    [from Weather Bureau thunder days]
+// Ground flash density (Ng) must be supplied by the user for their area
+// (from utility isokeraunic data or the Weather Bureau) — the standard's
+// per-town Ng table is deliberately NOT reproduced, per the project's
+// no-place-names rule; Ng in South Africa/Lesotho spans roughly 0.1–13
+// strikes/km²/yr depending on area, which is why a local figure matters.
+// ---------------------------------------------------------------------
+
+/**
+ * @param {Object} p
+ * @param {string|number} [p.ngPerKm2Yr] - ground flash density; if blank, derived from thunderDays
+ * @param {string|number} [p.thunderDays] - annual thunder days (Td), used only if Ng not given
+ * @param {string|number} p.avgHeightM   - average structure height, m
+ * @param {string|number} p.lineWidthM   - line width, m
+ * @param {string|number} p.lengthKm     - line length, km
+ * @returns {Object|null}
+ */
+export function lightningExposure({ ngPerKm2Yr, thunderDays, avgHeightM, lineWidthM, lengthKm } = {}) {
+  const H = pf(avgHeightM)
+  const W = pf(lineWidthM)
+  const L = pf(lengthKm)
+  if (isNaN(H) || H <= 0) return null
+  if (isNaN(W) || W < 0) return null
+  if (isNaN(L) || L <= 0) return null
+
+  let ng = pf(ngPerKm2Yr)
+  let ngDerivedFromTd = false
+  if (isNaN(ng) || ng <= 0) {
+    const td = pf(thunderDays)
+    if (isNaN(td) || td <= 0) return null
+    ng = 0.04 * Math.pow(td, 1.25)
+    ngDerivedFromTd = true
+  }
+
+  const ns = ng * (28 * Math.pow(H, 0.6) + W) * L * 1e-3
+
+  return {
+    ngPerKm2Yr: Math.round(ng * 100) / 100,
+    ngDerivedFromTd,
+    strikesPerYear: Math.round(ns * 100) / 100,
+    strikesPer100kmYear: Math.round((ns / L) * 100 * 100) / 100,
+    standard: 'DST_34-1191 §4.4.9 notes — Ns = Ng(28H^0.6 + W)·L·10⁻³; Ng = 0.04·Td^1.25',
+  }
+}
+
+// ---------------------------------------------------------------------
+// Fault Finding / Maintenance — qualitative reference. Every mechanism
+// below is drawn from DST_34-1191's own failure-mechanism discussion
+// (clause cited per entry); the field indicators are standard trade
+// diagnostics with no fabricated figures. A test asserts the only
+// numerals appearing are the clause-cited ones.
+// ---------------------------------------------------------------------
+export const FAULT_FINDING = [
+  { id: 'direct-strike', fault: 'Lightning — direct strike flashover',
+    mechanism: 'A direct strike to an unshielded line nearly always flashes one or more conductors to earth at the pole closest to the strike; on low-BIL lines flashover may occur at several structures, on high-BIL lines at only one (with severe surge transmitted toward terminal equipment).',
+    lookFor: 'Flash marks on insulators, fresh splintering on poles/cross-arms near the suspected strike point, operated arresters or blown fuses on the section.',
+    clause: 'DST_34-1191 §4.4.3' },
+  { id: 'power-arc', fault: 'Power-arc damage after flashover',
+    mechanism: 'Most physical damage is caused by the power-frequency arc that follows a flashover (0,85 probability), not the surge itself. Damage severity depends on wood moisture content and arc penetration — worst where the arc penetrates rather than tracking the surface.',
+    lookFor: 'Burnt/split poles and cross-arms; check that earth-wire wood-path gaps do not exceed 500 mm and that circumferential strapping is present at earth-wire termination points on either side of the gap.',
+    clause: 'DST_34-1191 §4.4.5' },
+  { id: 'induced', fault: 'Induced-voltage flashovers (nearby strikes)',
+    mechanism: 'Induced voltages rarely exceed 200 kV (maximum order 250 kV) and appear near-identically on all phases — so phase-to-phase flashover is not expected; flashover is to ground wherever insulation strength to ground is below the induced level.',
+    lookFor: 'Single-phase-to-earth trips in storms with no visible strike damage on the line itself; repeated trips on low-BIL sections.',
+    clause: 'DST_34-1191 §4.4.4' },
+  { id: 'pollution', fault: 'Pollution tracking / leakage burning',
+    mechanism: 'In polluted environments (marine/industrial), small leakage currents across contaminated insulators can burn unbonded cross-arms and poles at the insulator dead ends.',
+    lookFor: 'Charring at insulator attachment points on unbonded structures; verify bonding of insulator dead ends and stay wires in polluted areas; check insulator creepage class against the pollution level.',
+    clause: 'DST_34-1191 §4.4.6, §4.4.1' },
+  { id: 'joints', fault: 'Joint / connection failures',
+    mechanism: 'Compression joints degrade if incorrectly made or wrongly placed; a failing joint runs hot, then burns down. Joints are compression-type only, made by approved trained persons, placed in the middle third of the span, never within 20 m of a structure and never in a crossing span.',
+    lookFor: 'Discoloured/annealed conductor at joints (thermal imaging on load if available), joints found in prohibited positions during patrols.',
+    clause: 'DST_34-1191 §4.6.3 / DSP0035' },
+  { id: 'fatigue', fault: 'Conductor fatigue / aeolian vibration',
+    mechanism: 'Standard lines are tensioned to C-values (1425 ACSR/AAAC) specifically chosen so dampers are unnecessary; lines tensioned beyond those values without damping are exposed to vibration fatigue at the clamps.',
+    lookFor: 'Broken outer strands at suspension clamps and armour-rod ends; check as-built tensions against the RSAT tables if fatigue appears.',
+    clause: 'DST_34-1191 §4.6.2' },
+  { id: 'birds', fault: 'Bird streamers / electrocution faults',
+    mechanism: 'Large birds bridging phase-to-earth gaps (or streamer discharges) cause transient trips, typically at structures rather than mid-span, and bird electrocutions at un-insulated jumpers.',
+    lookFor: 'Carcasses/nests at structures on the tripping section; confirm covered jumpers at auxiliary structures, staggered bared sections, and bird-friendly pole-top configurations in sensitive areas.',
+    clause: 'DST_34-1191 §4.2.2, §4.2.4' },
+  { id: 'vegetation', fault: 'Vegetation / clearance encroachment',
+    mechanism: 'Growth under and beside the line reduces statutory clearances until flashover or direct contact occurs, especially at maximum sag (high load, hot day).',
+    lookFor: 'Burn marks on treetops under the line, clearance measurements against the Reg 15 table (see the Clearances sub-tab) at worst-case sag, servitude clearing state.',
+    clause: 'OHS Act Electrical Machinery Regulations Reg 15' },
+  { id: 'stays', fault: 'Stay / structure lean failures',
+    mechanism: 'Slack, corroded or broken stays let angle and terminal structures lean, redistributing tension until hardware or the pole fails. Porcelain stay insulators add little surge insulation and can crack.',
+    lookFor: 'Leaning poles at angles/terminations, slack or broken stay strands, missing anti-climbing devices, cracked stay insulators, anchor movement.',
+    clause: 'DST_34-1191 §4.5.8, §4.4.7' },
+]
+
+// ---------------------------------------------------------------------
+// Stringing Equipment Glossary — qualitative trade-terminology reference
+// (no pictures, no fabricated specifications). Where a DST_34-1191 rule
+// attaches to an item, the clause is cited; the rest is standard line-
+// construction trade usage, marked as general reference.
+// ---------------------------------------------------------------------
+export const STRINGING_GLOSSARY = [
+  { id: 'drum',       term: 'Conductor drum & drum stand (jack)', meaning: 'The reel the conductor ships on, mounted on braked stands so it pays out under control during stringing.' },
+  { id: 'block',      term: 'Running block / stringing sheave', meaning: 'Free-running pulley hung at each structure so the conductor (or pilot wire) can be pulled through the section without dragging on hardware or ground.' },
+  { id: 'pilot',      term: 'Pilot / draw wire', meaning: 'Light wire or rope pulled through the running blocks first, then used to pull the conductor itself through the section.' },
+  { id: 'puller',     term: 'Puller & tensioner (tension stringing)', meaning: 'Machine pair keeping the conductor under controlled back-tension while it is pulled in, so it never touches the ground — the method of choice over roads, fences and crossings.' },
+  { id: 'comealong',  term: 'Come-along (conductor grip)', meaning: 'Self-tightening clamp gripping the conductor so it can be pulled, held or dead-ended temporarily during sagging.' },
+  { id: 'swivel',     term: 'Swivel connector', meaning: 'Rotating link between pilot wire and conductor that stops lay-direction twist being wound into the conductor during the pull.' },
+  { id: 'dyno',       term: 'Dynamometer', meaning: 'In-line tension gauge used while sagging to bring the conductor to the table tension.' },
+  { id: 'sagboard',   term: 'Sagging boards / sighting targets', meaning: 'Targets fixed at the calculated sag below the attachment points on two structures; the sagger sights between them and adjusts tension until the conductor low point touches the sight line.' },
+  { id: 'sagtemp',    term: 'Conductor temperature (for sag tables)', meaning: 'Sag/tension tables are temperature-specific — the conductor temperature at time of sagging selects the table column. In this territory the tables come from RSAT.', clause: 'DST_34-1191 §4.6.2' },
+  { id: 'constay',    term: 'Construction / stringing stays', meaning: 'Temporary stays supporting structures against one-sided stringing loads; if left in place they must be slackened off slightly once stringing is complete.', clause: 'DST_34-1191 §4.5.8' },
+  { id: 'presstool',  term: 'Compression jointing tooling (dies & press)', meaning: 'Hydraulic press and conductor-specific dies for mid-span joints and dead-end sleeves — compression joints may only be made by persons who have passed approved compression-jointing training.', clause: 'DST_34-1191 §4.6.3 / DSP0035' },
+]
