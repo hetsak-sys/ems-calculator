@@ -147,7 +147,9 @@ Hertz decided this module should stay a field-reference tool, not drift into tra
 - **Existing shipped, verified content is NOT retroactively cut.** Checked against the actual data before deciding: Conductor Sizing (ampacity, not voltage-banded), Pole Planting, Construction, Faults & Maintenance, and Fittings & Structures contain no voltage-tiered content above 33kV to begin with — nothing to remove. Clearances (`SANS10280_CLEARANCE_TABLE`) *does* extend to 765kV AC / 533kV DC and is the one sub-tab with real >33kV content — this data stays as-is, fully verified and on-device confirmed, since discarding a completed, primary-sourced, tested reference table serves no one and wastes real closed work. Pole Spacing (`phaseSpacing()`) was already 22kV-only before this decision — unaffected.
 - **Going forward:** no new feature work in this module extends design-grade calculation above 33kV. Reference/lookup data (tables, clause citations, procedural checklists) may continue to cover higher voltage bands where a verified source exists, since that's within the module's field-reference charter — the line being drawn is calculation depth (mechanical/iterative design), not voltage per se.
 
-**Build status (2026-07-27/28) — SEVEN sub-tabs built, on-device verification owed:**
+**Build status (2026-07-27/28) — SEVEN sub-tabs built, ALL on-device verified 2026-07-30:**
+
+§4 (Clearances) was on-device verified 2026-07-29 (detailed below). Sub-tabs 1, 2, 5, 6, 7 (Conductor Sizing, Pole Spacing, Fittings & Structures, Construction, Faults & Maintenance) confirmed on-device 2026-07-30 by Hertz, per `docs/on_device_checklist_overhead_reticulation.md`. **§5.6.3 Overhead Reticulation is now fully closed end to end — engine, tests, UI, and on-device — no sub-tab remains owed.**
 
 Shipped 2026-07-27 (commits `f60874a` → `8177845`, pushed by Hertz):
 1. **Conductor Sizing** — 47 conductors: 40 Eskom-rated (Squirrel→IEC 800, 835mm²) with Rate A/B ampacity at 50/60/70/80°C from the single authoritative source "Phase Conductor Standard for Eskom Overhead Lines" 240-152844641 Rev 2 (2021), plus 7 BS215 dimension-only conductors (Gopher/Weasel/Ferret/Rabbit/Otter/Dog/Lynx) with honest `ratingsAvailable:false`. Supersedes DST_34-1191 Table 7's flat ratings after a real cross-source conflict (Magpie 78A vs 133.8A — rating is temperature-dependent; regression test locks both old numbers out).
@@ -196,7 +198,7 @@ Built 2026-07-28 (this session — engine + tests + UI, 455/455 passing, clean b
 
 1. Underground Reticulation (§5.6.2) and Building/Installation Design (§5.6.1) are shipped, on-device verified, pushed — **do not rebuild.**
 2. Still re-clone fresh per [AI-19]/[PRO-11] before touching anything — this doc reflects state as of 2026-07-30, not a live guarantee.
-3. **Overhead (§5.6.3): on-device verification is still an open action for sections 1–3 and 5–7** — see debt.md for the owed checklist.
+3. **Overhead (§5.6.3): on-device verification is fully closed (2026-07-30)** — all seven sub-tabs confirmed on the reference device; see `docs/on_device_checklist_overhead_reticulation.md` (all boxes ticked) and `debt.md`. Nothing owed here.
 4. **Sag & Tension (§5.6.3a) is RETIRED, not a queued item.** Per the 2026-07-30 scope decision, do not pick this up as a build candidate. The section is kept as historical record only. If Hertz raises it again, treat it as a fresh product decision requiring the full [AI-15] options-plus-recommendation treatment, not a resumption of prior scoping.
 5. **Module scope cap (2026-07-30):** no new mechanical/design-grade calculation work above 33kV in this module. Reference/lookup data extending to higher voltage bands is fine where already sourced (e.g. Clearances' existing HV/EHV rows) — the cap is on calculation depth, not on retaining verified reference tables.
 6. Engine-first with tests, sources cited, [AI-18] flags on anything unverified — unchanged.
