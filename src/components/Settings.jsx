@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { checkLicenseStatus, activateLicense, formatLicenseSuffix, buildFullLicenseKey, LICENSE_PREFIX } from '../services/LicenseManager'
+import { checkLicenseStatus, LICENSE_PREFIX } from '../services/LicenseManager'
+import { useLicenseActivation } from '../services/useLicenseActivation'
 import { useSite } from './SiteContext'
 import { clearPendingResult } from './shared'
 
@@ -39,33 +40,25 @@ export default function Settings({ themeMode, setThemeMode, theme: T }) {
   // expires, which LicenseGate's gate screen alone can't do (it only
   // shows the key-entry screen once status is 'trial_expired').
   const [licenseStatus, setLicenseStatus] = useState(null)
-  const [licenseKeyInput, setLicenseKeyInput] = useState('')
-  const [activating, setActivating] = useState(false)
-  const [activateError, setActivateError] = useState(null)
-  const [activateSuccess, setActivateSuccess] = useState(false)
 
   useEffect(() => {
     checkLicenseStatus().then(setLicenseStatus)
   }, [])
 
-  const handleActivateInSettings = async () => {
-    setActivating(true)
-    setActivateError(null)
-    try {
-      await activateLicense(buildFullLicenseKey(licenseKeyInput))
-      setActivateSuccess(true)
-      // Full reload rather than local state update: LicenseGate only
-      // checks license status once on mount (by design — see its own
-      // comments), so the currently-mounted gate won't drop its trial
-      // badge on its own even though the cache is now 'paid'. A reload
-      // remounts LicenseGate, which reads the fresh cache immediately.
+  // Activation + reactivation logic is shared with LicenseGate.jsx via
+  // this hook (see its own comments for why: two independent copies of
+  // the same server-interaction logic is how a fix — like the 409
+  // handling this hook exists to add — silently drifts between screens).
+  // Full reload rather than a local state update: LicenseGate only checks
+  // license status once on mount, so a currently-mounted gate elsewhere
+  // in the tree won't drop its trial badge on its own even though the
+  // cache is now 'paid'. A reload remounts everything, which reads the
+  // fresh cache immediately.
+  const activation = useLicenseActivation({
+    onSuccess: () => {
       setTimeout(() => window.location.reload(), 1200)
-    } catch (err) {
-      setActivateError(err.message || 'Activation failed. Check the key and try again.')
-    } finally {
-      setActivating(false)
-    }
-  }
+    },
+  })
 
   const update = (key, val) => setLocal(c => ({ ...c, [key]: val }))
 
@@ -98,6 +91,11 @@ export default function Settings({ themeMode, setThemeMode, theme: T }) {
     marginBottom: '16px',
   }
   const sectionTitle = { fontSize: '12px', fontWeight: '800', letterSpacing: '0.12em', color: T.accent, marginBottom: '16px', textTransform: 'uppercase' }
+  const secondaryButton = {
+    width: '100%', padding: '10px 14px', borderRadius: '12px',
+    backgroundColor: T.surface2Bg, border: `1px solid ${T.border}`,
+    color: T.textSub, fontSize: '13px', fontWeight: '600',
+  }
 
   return (
     <div className="px-4 pt-4 pb-6">
@@ -260,13 +258,77 @@ export default function Settings({ themeMode, setThemeMode, theme: T }) {
             </span>
           </div>
 
-        ) : activateSuccess ? (
+        ) : activation.phase === 'success' ? (
           <div className="flex items-center gap-2 py-1">
             <span style={{ color: '#22c55e', fontSize: '16px' }}>✓</span>
             <span style={{ fontSize: '13px', color: T.textPrimary, fontWeight: '600' }}>
               Activated! Reloading…
             </span>
           </div>
+
+        ) : activation.phase.startsWith('reactivate_') ? (
+          // Key is valid but bound to another device — the reactivation
+          // flow this Settings screen was previously missing entirely
+          // (it only ever showed the raw "already activated on another
+          // device" error text with no way forward).
+          (() => {
+            const subPhase = activation.phase.replace('reactivate_', '') // confirm | working | blocked | failed
+            const isWorking = subPhase === 'working'
+            const isTerminal = subPhase === 'blocked'
+            return (
+              <>
+                {isWorking ? (
+                  <div style={{ fontSize: '13px', color: T.textSub }}>Moving license to this device…</div>
+                ) : (
+                  <>
+                    {subPhase === 'confirm' && (
+                      <div style={{ fontSize: '12px', color: T.textMuted, marginBottom: '12px' }}>
+                        <span className="font-mono" style={{ color: T.textPrimary }}>
+                          {LICENSE_PREFIX}{activation.reactivateKeySuffix}
+                        </span>{' '}
+                        is already active on another device. You can move it to
+                        this device instead — this uses one of your limited
+                        device swaps.
+                      </div>
+                    )}
+
+                    {(isTerminal || subPhase === 'failed') && (
+                      <div
+                        className="text-xs rounded-lg px-3 py-2 mb-3"
+                        style={{ backgroundColor: '#7f1d1d33', color: '#fca5a5', border: '1px solid #7f1d1d' }}
+                      >
+                        {activation.reactivateMessage}
+                      </div>
+                    )}
+
+                    {subPhase === 'confirm' && (
+                      <button
+                        onClick={activation.handleReactivateConfirm}
+                        className="w-full py-2.5 rounded-xl font-semibold text-sm mb-2"
+                        style={{ backgroundColor: T.accent, color: '#000000' }}
+                      >
+                        Move license to this device
+                      </button>
+                    )}
+
+                    {subPhase === 'failed' && (
+                      <button
+                        onClick={activation.handleReactivateConfirm}
+                        className="w-full py-2.5 rounded-xl font-semibold text-sm mb-2"
+                        style={{ backgroundColor: T.accent, color: '#000000' }}
+                      >
+                        Try again
+                      </button>
+                    )}
+
+                    <button onClick={activation.handleReactivateBack} style={secondaryButton}>
+                      {subPhase === 'confirm' ? 'Use a different key' : 'Back'}
+                    </button>
+                  </>
+                )}
+              </>
+            )
+          })()
 
         ) : (
           <>
@@ -299,32 +361,32 @@ export default function Settings({ themeMode, setThemeMode, theme: T }) {
                 autoCorrect="off"
                 spellCheck={false}
                 placeholder="XXXX-XXXX-XXXX"
-                value={licenseKeyInput}
-                onChange={e => setLicenseKeyInput(formatLicenseSuffix(e.target.value))}
+                value={activation.keyInput}
+                onChange={e => activation.setKeyInput(e.target.value)}
                 style={{ flex: 1, textAlign: 'center', letterSpacing: '0.05em', padding: '12px 14px', backgroundColor: 'transparent', border: 'none', color: T.textPrimary, fontSize: '15px', fontFamily: 'monospace', outline: 'none', minWidth: 0 }}
               />
             </div>
 
-            {activateError && (
+            {activation.errorMessage && (
               <div
                 className="text-xs rounded-lg px-3 py-2 mb-3"
                 style={{ backgroundColor: '#7f1d1d33', color: '#fca5a5', border: '1px solid #7f1d1d' }}
               >
-                {activateError}
+                {activation.errorMessage}
               </div>
             )}
 
             <button
-              onClick={handleActivateInSettings}
-              disabled={activating || licenseKeyInput.replace(/-/g, '').length < 12}
+              onClick={activation.handleActivate}
+              disabled={activation.phase === 'activating' || activation.keyInput.replace(/-/g, '').length < 12}
               className="w-full py-2.5 rounded-xl font-semibold text-sm"
               style={{
                 backgroundColor: T.accent,
                 color: '#000000',
-                opacity: activating || licenseKeyInput.replace(/-/g, '').length < 12 ? 0.5 : 1,
+                opacity: activation.phase === 'activating' || activation.keyInput.replace(/-/g, '').length < 12 ? 0.5 : 1,
               }}
             >
-              {activating ? 'Activating…' : 'Activate'}
+              {activation.phase === 'activating' ? 'Activating…' : 'Activate'}
             </button>
           </>
         )}

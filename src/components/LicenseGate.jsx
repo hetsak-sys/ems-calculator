@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { checkLicenseStatus, activateLicense, formatLicenseSuffix, buildFullLicenseKey, LICENSE_PREFIX } from '../services/LicenseManager'
+import { checkLicenseStatus, LICENSE_PREFIX } from '../services/LicenseManager'
+import { useLicenseActivation } from '../services/useLicenseActivation'
 
 function GateShell({ theme: T, children }) {
   return (
@@ -115,7 +116,7 @@ function ActivationScreen({ theme: T, keyInput, onKeyChange, onActivate, activat
             spellCheck={false}
             placeholder="XXXX-XXXX-XXXX"
             value={keyInput}
-            onChange={(e) => onKeyChange(formatLicenseSuffix(e.target.value))}
+            onChange={(e) => onKeyChange(e.target.value)}
             className="flex-1 text-center px-3 py-2.5 font-mono tracking-wider text-sm"
             style={{ backgroundColor: 'transparent', color: T.textPrimary, minWidth: 0 }}
           />
@@ -153,6 +154,90 @@ function ActivationScreen({ theme: T, keyInput, onKeyChange, onActivate, activat
   )
 }
 
+// Shown after activateLicense() throws a 409 — the key is already bound
+// to a different device. Four sub-states within this one screen:
+//   confirm  → offer the swap, or let the user back out to try a
+//              different key
+//   working  → swap in flight
+//   blocked  → server rejected the swap for a reason a retry can't fix
+//              (institutional-403 or lockout-429) — message is already
+//              human-readable from the server, just display it, no retry
+//   failed   → transient failure (network/5xx) — offer Try Again
+function ReactivationScreen({ theme: T, keyDisplay, phase, onConfirm, onBack, message }) {
+  const isTerminal = phase === 'blocked'
+  const isWorking = phase === 'working'
+
+  return (
+    <GateShell theme={T}>
+      <style>{`@keyframes hetsa-spin { to { transform: rotate(360deg); } }`}</style>
+      <div
+        className="rounded-2xl p-5"
+        style={{ backgroundColor: T.cardBg, border: `1px solid ${T.border}` }}
+      >
+        {isWorking ? (
+          <>
+            <Spinner color={T.accent} />
+            <div className="text-sm mt-4" style={{ color: T.textSub }}>
+              Moving license to this device…
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="text-2xl mb-2">{isTerminal || phase === 'failed' ? '⚠️' : '📱'}</div>
+
+            {phase === 'confirm' && (
+              <>
+                <div className="text-sm font-semibold mb-1" style={{ color: T.textPrimary }}>
+                  Key already in use
+                </div>
+                <div className="text-xs mb-4" style={{ color: T.textMuted }}>
+                  <span className="font-mono">{LICENSE_PREFIX}{keyDisplay}</span> is already
+                  active on another device. You can move it to this device
+                  instead — this uses one of your limited device swaps.
+                </div>
+              </>
+            )}
+
+            {(isTerminal || phase === 'failed') && (
+              <div className="text-xs mb-4 text-left" style={{ color: T.textPrimary }}>
+                {message}
+              </div>
+            )}
+
+            {phase === 'confirm' && (
+              <button
+                onClick={onConfirm}
+                className="w-full py-2.5 rounded-xl font-semibold text-sm mb-2"
+                style={{ backgroundColor: T.btnEquals.bg, color: T.btnEquals.text, border: `1px solid ${T.btnEquals.border}` }}
+              >
+                Move license to this device
+              </button>
+            )}
+
+            {phase === 'failed' && (
+              <button
+                onClick={onConfirm}
+                className="w-full py-2.5 rounded-xl font-semibold text-sm mb-2"
+                style={{ backgroundColor: T.btnEquals.bg, color: T.btnEquals.text, border: `1px solid ${T.btnEquals.border}` }}
+              >
+                Try again
+              </button>
+            )}
+
+            <button
+              onClick={onBack}
+              className="w-full py-2.5 rounded-xl font-semibold text-sm"
+              style={{ backgroundColor: T.btnDark.bg, color: T.btnDark.text, border: `1px solid ${T.btnDark.border}` }}
+            >
+              {phase === 'confirm' ? 'Use a different key' : 'Back'}
+            </button>
+          </>
+        )}
+      </div>
+    </GateShell>
+  )
+}
+
 function TrialBadge({ theme: T, daysLeft, offline }) {
   return (
     <div
@@ -176,33 +261,33 @@ function TrialBadge({ theme: T, daysLeft, offline }) {
  * Wraps the whole app. Renders a blocking gate screen when licensing
  * requires it, otherwise passes children through untouched.
  *
- * State machine, per the resolved decision:
- *  - loading            → brief splash while the first check resolves
- *  - paid / isOwner      → pass through silently
- *  - trial               → pass through, small persistent days-left badge
- *  - trial_expired        → block, license-key entry screen
- *  - error AND no cache   → block, "connect to activate" screen (the one
- *                           automatic retry already happened inside
- *                           checkLicenseStatus by the time we see this)
+ * Outer phase (this component's own state):
+ *  - loading                 → brief splash while the first check resolves
+ *  - paid / isOwner           → pass through silently
+ *  - trial                    → pass through, small persistent days-left badge
+ *  - trial_expired             → block, key-entry / reactivation screen
+ *                                (which of the two shows is driven by
+ *                                useLicenseActivation's own `phase`)
+ *  - error AND no cache        → block, "connect to activate" screen (the
+ *                                one automatic retry already happened
+ *                                inside checkLicenseStatus by the time we
+ *                                see this)
  *  - error/offline WITH a cache → never reaches this component as
  *    status:'error' at all — checkLicenseStatus itself returns the cached
  *    status with offline:true, so it's handled by the trial/paid branches
  *    above, unblocked, per existing fail-open logic.
+ *
+ * Inner phase (from useLicenseActivation, only relevant while the outer
+ * phase is blocked_expired): idle/activating drive ActivationScreen;
+ * reactivate_confirm/working/blocked/failed drive ReactivationScreen;
+ * success triggers onSuccess below, which re-checks status and moves the
+ * OUTER phase to 'ready' — the inner hook's 'success' phase is never
+ * rendered directly by this component.
  */
 export default function LicenseGate({ theme: T, themeMode, children }) {
-  // 'initial' covers the very first check on mount (plain splash — we
-  // don't yet know if this is a cold start or a fast cache hit).
-  // 'ready' / 'blocked_expired' / 'blocked_error' reflect the last
-  // resolved result. `checking` tracks whether a check is in flight right
-  // now, independent of phase, so a manual retry from the blocked_error
-  // screen can show its own specific waiting copy instead of the generic
-  // splash.
   const [phase, setPhase] = useState('initial')
   const [checking, setChecking] = useState(true)
   const [licenseResult, setLicenseResult] = useState(null)
-  const [keyInput, setKeyInput] = useState('')
-  const [activating, setActivating] = useState(false)
-  const [activateError, setActivateError] = useState(null)
 
   const runCheck = useCallback(async (opts) => {
     setChecking(true)
@@ -220,23 +305,14 @@ export default function LicenseGate({ theme: T, themeMode, children }) {
     }
   }, [])
 
+  const activation = useLicenseActivation({
+    onSuccess: () => runCheck({ force: true }),
+  })
+
   useEffect(() => {
     runCheck()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  const handleActivate = async () => {
-    setActivating(true)
-    setActivateError(null)
-    try {
-      await activateLicense(buildFullLicenseKey(keyInput))
-      await runCheck({ force: true })
-    } catch (err) {
-      setActivateError(err.message || 'Activation failed. Check the key and try again.')
-    } finally {
-      setActivating(false)
-    }
-  }
 
   if (phase === 'initial') {
     return <LoadingScreen theme={T} />
@@ -258,14 +334,48 @@ export default function LicenseGate({ theme: T, themeMode, children }) {
   }
 
   if (phase === 'blocked_expired') {
+    if (activation.phase === 'success') {
+      // Activation or reactivation just succeeded — onSuccess (runCheck)
+      // is in flight but hasn't resolved yet. Without this branch, the
+      // render below would fall through to ActivationScreen for a brief
+      // moment, flashing the re-enabled key-entry form. Show a settled
+      // "done" state instead until the outer phase flips to 'ready'.
+      return (
+        <GateShell theme={T}>
+          <style>{`@keyframes hetsa-spin { to { transform: rotate(360deg); } }`}</style>
+          <div
+            className="rounded-2xl p-5"
+            style={{ backgroundColor: T.cardBg, border: `1px solid ${T.border}` }}
+          >
+            <Spinner color={T.accent} />
+            <div className="text-sm mt-4" style={{ color: T.textSub }}>
+              Activated — unlocking PowerSuite…
+            </div>
+          </div>
+        </GateShell>
+      )
+    }
+    if (activation.phase.startsWith('reactivate_')) {
+      const subPhase = activation.phase.replace('reactivate_', '') // confirm | working | blocked | failed
+      return (
+        <ReactivationScreen
+          theme={T}
+          keyDisplay={activation.reactivateKeySuffix}
+          phase={subPhase}
+          message={activation.reactivateMessage}
+          onConfirm={activation.handleReactivateConfirm}
+          onBack={activation.handleReactivateBack}
+        />
+      )
+    }
     return (
       <ActivationScreen
         theme={T}
-        keyInput={keyInput}
-        onKeyChange={setKeyInput}
-        onActivate={handleActivate}
-        activating={activating}
-        error={activateError}
+        keyInput={activation.keyInput}
+        onKeyChange={activation.setKeyInput}
+        onActivate={activation.handleActivate}
+        activating={activation.phase === 'activating'}
+        error={activation.errorMessage}
       />
     )
   }

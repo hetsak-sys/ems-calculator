@@ -93,6 +93,23 @@ async function writeCache(status) {
   });
 }
 
+// ApiError carries the HTTP status code alongside the message, and the
+// parsed JSON error body (if any) in `.body`. This is the fix this session
+// is built around: before, callApi() discarded the status code entirely,
+// so callers had no way to distinguish e.g. a 409 (key already active on
+// another device — the reactivation case) from a 400 (malformed key) or
+// a 404 (unknown key). Every existing catch-block that only reads
+// `err.message` keeps working unchanged; new callers can also read
+// `err.status` and `err.body`.
+export class ApiError extends Error {
+  constructor(message, status, body) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 // CHANGE 1: optional timeoutMs param (defaults to the routine, short
 // timeout). Callers on the cold-start-prone first-ever-contact path pass
 // COLD_START_TIMEOUT_MS explicitly; every other call site is unaffected.
@@ -110,8 +127,12 @@ async function callApi(path, body, timeoutMs = DEFAULT_TIMEOUT_MS) {
       signal: controller.signal,
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || `Request to ${path} failed (${res.status})`);
+      const errBody = await res.json().catch(() => ({}));
+      throw new ApiError(
+        errBody.message || `Request to ${path} failed (${res.status})`,
+        res.status,
+        errBody
+      );
     }
     return await res.json();
   } catch (err) {
@@ -127,6 +148,11 @@ async function callApi(path, body, timeoutMs = DEFAULT_TIMEOUT_MS) {
 /**
  * Activates a license key entered by the user on the gate screen.
  * Always hits the server live (no point caching a failed key entry).
+ *
+ * Throws ApiError on failure — callers that need to distinguish a 409
+ * (key already active on another device) from other failures should
+ * check `err.status === 409` and offer the reactivation flow instead of
+ * just displaying `err.message`.
  */
 export async function activateLicense(licenseKey) {
   const deviceId = await getDeviceId();
@@ -134,6 +160,36 @@ export async function activateLicense(licenseKey) {
   const status = { status: 'paid', daysLeft: null, isOwner: false };
   await writeCache(status);
   return { ...result, ...status };
+}
+
+/**
+ * Moves an already-activated license key to THIS device (self-service
+ * device swap). Call this after activateLicense() throws an ApiError with
+ * status 409 — that's the server's signal the key is bound elsewhere.
+ *
+ * Resolves to { reactivated: true, swapConsumed, swapsRemaining?, message }
+ * on success (swapsRemaining is only present when a swap was actually
+ * consumed — omitted on the idempotent same-device case).
+ *
+ * Throws ApiError on failure. Callers should branch on `err.status`:
+ *   403 - institutional key, manual-only (message already points to
+ *         hetsak@gmail.com — display as-is, no retry)
+ *   429 - swap-limit lockout (message already includes the retry date —
+ *         display as-is, no retry)
+ *   400 - key was never activated in the first place (shouldn't normally
+ *         happen if this is only called after a 409, but handle it —
+ *         message directs the user back to Activate)
+ *   404 - unknown key
+ *   5xx / network - transient, safe to offer a retry
+ */
+export async function reactivateLicense(licenseKey) {
+  const deviceId = await getDeviceId();
+  const result = await callApi('/api/reactivate', { deviceId, licenseKey });
+  // Both success shapes (swap consumed or idempotent same-device) carry
+  // reactivated:true — either way the device is now correctly licensed.
+  const status = { status: 'paid', daysLeft: null, isOwner: false };
+  await writeCache(status);
+  return result;
 }
 
 // Shared verify → register-if-new → re-verify sequence, parameterized by
