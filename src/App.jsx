@@ -261,12 +261,23 @@ export default function App() {
 
       {/* ── QUICK MATH OVERLAY ───────────────────────────────── */}
       {showQuickMath && (
-        <QuickMath
-          onClose={() => { setShowQuickMath(false); setBottomTab('home') }}
-          addHistory={addHistory}
-          theme={T}
-          themeMode={themeMode}
-        />
+        <Suspense
+          fallback={
+            <div
+              className="fixed inset-0 flex items-center justify-center text-sm z-40"
+              style={{ color: T.textMuted, backgroundColor: T.appBg }}
+            >
+              Loading…
+            </div>
+          }
+        >
+          <QuickMath
+            onClose={() => { setShowQuickMath(false); setBottomTab('home') }}
+            addHistory={addHistory}
+            theme={T}
+            themeMode={themeMode}
+          />
+        </Suspense>
       )}
 
       {/* ── BOTTOM NAVIGATION ────────────────────────────────── */}
