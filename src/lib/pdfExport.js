@@ -172,19 +172,53 @@ export function buildResultPdf(data) {
       const broke = checkPageBreak(14)
       if (broke) drawTitle(`${title} (cont.)`)
 
+      const labelX = margin + (r.sub ? 10 : 0)
+      const labelText = sanitizeForPdf(String(r.label ?? ''))
+      const valueText = sanitizeForPdf(`${r.value ?? ''}${r.unit ? ' ' + r.unit : ''}`)
+
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(9)
       doc.setTextColor(r.sub ? 130 : 90, r.sub ? 130 : 90, r.sub ? 130 : 90)
-      doc.text(sanitizeForPdf(String(r.label ?? '')), margin + (r.sub ? 10 : 0), y)
+      doc.text(labelText, labelX, y)
 
-      const valueText = sanitizeForPdf(`${r.value ?? ''}${r.unit ? ' ' + r.unit : ''}`)
-      if (r.warn) doc.setTextColor(180, 30, 30)
-      else if (r.accent) doc.setTextColor(150, 100, 20)
-      else doc.setTextColor(20, 20, 20)
+      const valueColor = () => {
+        if (r.warn) doc.setTextColor(180, 30, 30)
+        else if (r.accent) doc.setTextColor(150, 100, 20)
+        else doc.setTextColor(20, 20, 20)
+      }
       doc.setFont('helvetica', r.accent ? 'bold' : 'normal')
-      doc.text(valueText, pageWidth - margin, y, { align: 'right' })
 
-      y += 14
+      // 2026-08-01 fix: same bug class as the 07-27 title/standard/notes
+      // wrap fix, missed for table rows. A short numeric value (the common
+      // case) still renders on the same line, right-aligned, as before.
+      // But a sentence-length value (e.g. a controller-type recommendation
+      // or a DC:AC ratio assessment) was drawn with a single unwrapped
+      // right-aligned doc.text() call, so it silently overran past the
+      // margin and collided with the label — this is what actually
+      // happened in the Battery & Charge Controller PDF's "Controller
+      // type" row and, less visibly, Grid-Tie's "Assessment" row. Long
+      // values now drop to their own wrapped line(s) below the label
+      // instead of overlapping it.
+      const labelWidth = doc.getTextWidth(labelText)
+      const availableSameLine = pageWidth - margin - labelX - labelWidth - 10
+      const valueWidth = doc.getTextWidth(valueText)
+
+      if (valueWidth <= availableSameLine) {
+        valueColor()
+        doc.text(valueText, pageWidth - margin, y, { align: 'right' })
+        y += 14
+      } else {
+        y += 12
+        checkPageBreak(12)
+        valueColor()
+        const valueLines = doc.splitTextToSize(valueText, pageWidth - margin - labelX)
+        valueLines.forEach(line => {
+          checkPageBreak(12)
+          doc.text(line, labelX, y)
+          y += 12
+        })
+        y += 2
+      }
     })
     y += 8
   }

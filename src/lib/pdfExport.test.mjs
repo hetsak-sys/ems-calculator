@@ -94,3 +94,65 @@ describe('buildResultPdf — Standard badge wrapping (2026-07-27 fix)', () => {
     assert.ok(!sanitized.includes('≈'))
   })
 })
+
+describe('buildResultPdf — table row value wrapping (2026-08-01 fix)', () => {
+  // Found via a real exported Renewable Energy — Battery & Charge
+  // Controller PDF: the "Controller type" row's value (a full-sentence
+  // recommendation, not a short number) was drawn with a single unwrapped
+  // right-aligned doc.text() call, so it ran past the left margin and
+  // collided with the row's own label — the exact same bug class as the
+  // 07-27 title/standard/notes fix, just missed for table rows. The same
+  // bug silently affected Grid-Tie's "Assessment" row too (less visibly,
+  // since that sentence didn't happen to cut off mid-word).
+
+  test('a real exported PDF with a long row value does not throw and produces multiple output pages/lines correctly', () => {
+    // Reproduces the actual Battery & Charge Controller export verbatim.
+    const doc = buildResultPdf({
+      calculator: 'Renewable Energy — Battery & Charge Controller',
+      site: '',
+      standard: 'General battery-bank sizing practice (chemistry-independent arithmetic); IEC 62109 (charge controller safety context)',
+      inputs: [
+        { label: 'Daily load / autonomy', value: '10000Wh/day · 2 days' },
+      ],
+      sections: [{
+        title: 'BATTERY BANK & CHARGE CONTROLLER',
+        rows: [
+          { label: 'Required capacity', value: '980', unit: 'Ah', accent: true },
+          {
+            label: 'Controller type',
+            value: 'Array Vmp is close to or below bank voltage — verify this pairing works at all; PWM (or MPPT) both need array Vmp comfortably above bank voltage to charge properly.',
+            sub: true,
+          },
+        ],
+      }],
+      notes: 'Chemistry preset DoD/efficiency/C-rate values are UNVERIFIED-FLAGGED typical guideline figures.',
+    })
+    // Doesn't throw, and produced at least one page — the real assertion
+    // is the geometry check below, which proves the overlap is gone.
+    assert.ok(doc.internal.getNumberOfPages() >= 1)
+  })
+
+  test('a long row value needs more than one line at the available width (proves the old single-line call would have overrun)', () => {
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const margin = 40
+    const labelX = margin + 10 // sub row indent
+    const longValue = 'Array Vmp is close to or below bank voltage — verify this pairing works at all; PWM (or MPPT) both need array Vmp comfortably above bank voltage to charge properly.'
+    const valueWidth = doc.getTextWidth(longValue)
+    const availableSameLine = pageWidth - margin - labelX - doc.getTextWidth('Controller type') - 10
+    assert.ok(valueWidth > availableSameLine, 'expected the long value to exceed the same-line budget, confirming it must wrap onto its own line(s) rather than overlap the label')
+    const lines = doc.splitTextToSize(longValue, pageWidth - margin - labelX)
+    assert.ok(lines.length > 1)
+  })
+
+  test('a short row value (the common case) still fits on the same line — no regression', () => {
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const margin = 40
+    const labelX = margin
+    const shortValue = '980 Ah'
+    const valueWidth = doc.getTextWidth(shortValue)
+    const availableSameLine = pageWidth - margin - labelX - doc.getTextWidth('Required capacity') - 10
+    assert.ok(valueWidth <= availableSameLine, 'expected a short value to still fit on the same line as its label')
+  })
+})

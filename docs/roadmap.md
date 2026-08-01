@@ -202,3 +202,31 @@ Built 2026-07-28 (this session — engine + tests + UI, 455/455 passing, clean b
 4. **Sag & Tension (§5.6.3a) is RETIRED, not a queued item.** Per the 2026-07-30 scope decision, do not pick this up as a build candidate. The section is kept as historical record only. If Hertz raises it again, treat it as a fresh product decision requiring the full [AI-15] options-plus-recommendation treatment, not a resumption of prior scoping.
 5. **Module scope cap (2026-07-30):** no new mechanical/design-grade calculation work above 33kV in this module. Reference/lookup data extending to higher voltage bands is fine where already sourced (e.g. Clearances' existing HV/EHV rows) — the cap is on calculation depth, not on retaining verified reference tables.
 6. Engine-first with tests, sources cited, [AI-18] flags on anything unverified — unchanged.
+
+---
+
+### 5.7 Flagged, not scoped: no load → transformer kVA sizing tool exists anywhere in PowerSuite (2026-08-01)
+
+Found during a module-by-module triage (see §6 below — the Renewable Energy sizing-first restructure) that checked every calculator for the same "datasheet-first" anti-pattern. Power Systems → Transformer is a **parameters calculator for an already-chosen transformer** (given kVA/voltages/impedance you already have, it returns turns ratio, FLC, fault currents, losses) — that's a legitimate, different tool, not the same anti-pattern. But no tab anywhere in the app answers **"given this load, what kVA transformer do I need?"** the way Motor→FLA, Cable→Sizing, and Generator Sizing answer the equivalent question for their own domains.
+
+**Not yet run through the §5.1 checklist — do not build from this entry alone.** Recorded so it isn't lost, not because it's decided.
+
+- **Priority** — unknown, needs Hertz's call: is transformer selection typically driven by a utility/client-supplied spec in this market (making a sizing tool low-value), or do techs/contractors regularly need to size their own step-down transformer from a load schedule the way they'd size a generator?
+- **Depth** — if built, likely field-quick (load kVA → next standard transformer size + basic %Z guidance), not a full transformer-design tool — consistent with the rest of PowerSuite's depth pattern.
+- **New module vs. extension** — extension of Power Systems' existing Transformer tab (add a sizing-first section ahead of the existing parameters calculator, same pattern just applied to Renewable Energy's Array/Battery tabs — see §6).
+
+**If Hertz confirms this is a real gap**, treat it as its own scoping conversation before writing any code — do not fold it into an unrelated session.
+
+---
+
+## 6. Renewable Energy — sizing-first restructure (2026-08-01)
+
+**What changed:** Array and Battery tabs were originally structured datasheet-first — full panel/inverter or battery/charge-controller specs had to be filled in before the load-only sizing result (Required Wp / Required Ah) appeared, even though that sizing math needs nothing from the datasheet fields. This was inconsistent with the rest of PowerSuite's established pattern (Motor→FLA, Cable→Sizing, Generator Sizing all lead with a load-only sizing answer, with any product-specific verification downstream or optional).
+
+**Fix:** Both tabs now lead with a "sizing from load" primary section (Required Wp / Required Ah, plus — new — Grid-Tie's recommended-inverter-AC figure surfaced directly on Array's primary result, since it's derived from the same load-only Wp figure). Full panel/inverter and battery/charge-controller datasheet fields moved behind a collapsed **"Verify a specific product (optional)"** toggle per tab, defaulting closed, with the load-only target restated at the top of the collapsed section as a reminder. No engine changes — `pvArraySizing.js` and `batterySizing.js` were already structured correctly; this was a pure `RenewableEnergyCalculator.jsx` UI reorder. Grid-Tie and Hybrid tabs are unchanged — both are inherently compatibility/combination tabs with no load-only equivalent.
+
+**Verified on-device (2026-08-01):** both collapse toggles expand/collapse correctly; the target-restatement banners render without clipping or overlap on the reference device.
+
+**Also found and fixed in the same session, same category of issue:** `pdfExport.js`'s `drawTable()` drew every result-row value with a single unwrapped, right-aligned `doc.text()` call — fine for short numeric values, but a sentence-length value (e.g. Battery's controller-type recommendation, Grid-Tie's DC:AC ratio assessment) silently overran the left margin and visually collided with its own row label. Same bug class as the 2026-07-27 title/standard/notes wrap fix, just missed for table rows at the time. Fixed generally (any long row value now wraps onto its own line beneath the label instead of overlapping it) rather than patched only for the Battery tab, since Grid-Tie's "Assessment" row had the identical latent defect. Three regression tests added to `pdfExport.test.mjs` reproducing the exact failing PDF. **Confirmed fixed** — regenerated the exact Battery & Charge Controller PDF that broke and visually verified the overlap is gone (rendered clean via pdftoppm inspection).
+
+**Module-by-module triage result (2026-08-01):** every other calculator module was checked against the same anti-pattern (front-loading datasheet/compatibility inputs ahead of a load-only sizing answer). Renewable Energy was the only outlier. Motor, Cable, Generator Sizing, Installation Design, and Power Quality (Harmonics/Battery-UPS/Lighting) were already correctly sizing-first. Overhead Reticulation's Clearances/Fittings/Pole Planting tabs, Earthing's four tabs, Contactor/OLR, and Protection/Protection Coordination are all genuinely lookup/compliance/coordination tools by nature — there's no "sizing-first" equivalent for a question like "what clearance does this line need," so no restructure applies there. The one open item from this triage is §5.7 above (Power Systems → Transformer).

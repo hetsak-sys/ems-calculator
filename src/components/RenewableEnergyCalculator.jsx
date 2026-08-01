@@ -176,6 +176,13 @@ export default function RenewableEnergyCalculator({ addHistory }) {
   const workspace = useWorkspace()
   const { cardData, showCard, hideCard } = useResultCard()
 
+  // Sizing-first restructure (2026-08-01): each tab now leads with a
+  // load-only sizing result; datasheet-based compatibility checks are
+  // collapsed by default under "Verify a specific product". No engine
+  // changes — this is UI ordering only, see pvArraySizing.js/batterySizing.js.
+  const [showArrayVerify, setShowArrayVerify] = useState(false)
+  const [showBatteryVerify, setShowBatteryVerify] = useState(false)
+
   // ── Shared scenario inputs (used across multiple tabs) ──────────────────
   const [dailyLoadWh, setDailyLoadWh] = useState('10000')
   const [systemVoltageV, setSystemVoltageV] = useState('48')
@@ -578,68 +585,14 @@ export default function RenewableEnergyCalculator({ addHistory }) {
       ════════════════════════════════════════════════════════════ */}
       {tab === 'array' && (
         <div>
-          <div style={S.card}>
-            <div style={{ ...S.subHead, color: SOLAR_C }}>Panel datasheet</div>
-            <div style={S.grid2}>
-              <Inp label="Voc (STC)" sub="V" type="text" inputMode="decimal" value={vocStc} onChange={(e) => setVocStc(e.target.value)} />
-              <Inp label="Vmp (STC)" sub="V" type="text" inputMode="decimal" value={vmpStc} onChange={(e) => setVmpStc(e.target.value)} />
-            </div>
-            <div style={S.grid2}>
-              <Inp label="Isc (STC)" sub="A" type="text" inputMode="decimal" value={iscStc} onChange={(e) => setIscStc(e.target.value)} />
-              <Inp label="NOCT" sub="°C" type="text" inputMode="decimal" value={noct} onChange={(e) => setNoct(e.target.value)} />
-            </div>
-            <div style={S.grid2}>
-              <Inp label="Temp coeff. Voc" sub="%/°C (negative)" type="text" inputMode="decimal" value={tcVoc} onChange={(e) => setTcVoc(e.target.value)} />
-              <Inp label="Temp coeff. Vmp" sub="%/°C (negative)" type="text" inputMode="decimal" value={tcVmp} onChange={(e) => setTcVmp(e.target.value)} />
-            </div>
-            <div style={S.grid2}>
-              <Inp label="Temp coeff. Isc" sub="%/°C (positive)" type="text" inputMode="decimal" value={tcIsc} onChange={(e) => setTcIsc(e.target.value)} />
-              <Inp label="Panel wattage" sub="Wp" type="text" inputMode="decimal" value={panelW} onChange={(e) => setPanelW(e.target.value)} />
-            </div>
-          </div>
-
-          <div style={S.card}>
-            <div style={{ ...S.subHead, color: SOLAR_C }}>Inverter / charge controller</div>
-            <div style={S.grid2}>
-              <Inp label="Max DC voltage" sub="V" type="text" inputMode="decimal" value={invMaxDc} onChange={(e) => setInvMaxDc(e.target.value)} />
-              <Inp label="MPPT min voltage" sub="V" type="text" inputMode="decimal" value={mpptMin} onChange={(e) => setMpptMin(e.target.value)} />
-            </div>
-            <Inp label="Max input current" sub="A (per MPPT input)" type="text" inputMode="decimal" value={invMaxA} onChange={(e) => setInvMaxA(e.target.value)} />
-          </div>
-
-          <div style={S.card}>
-            <div style={{ ...S.subHead, color: SOLAR_C }}>Site design temperatures</div>
-            <div style={S.grid2}>
-              <Inp label="Design min ambient" sub="°C — use your coldest expected design day, not a regional guess" type="text" inputMode="decimal" value={minTemp} onChange={(e) => setMinTemp(e.target.value)} />
-              <Inp label="Design max ambient" sub="°C" type="text" inputMode="decimal" value={maxTemp} onChange={(e) => setMaxTemp(e.target.value)} />
-            </div>
-            <div style={S.note}>
-              Not looked up automatically — enter real site design temperatures (e.g. from local records), not a guessed regional default.
-            </div>
-          </div>
-
-          <div style={S.card}>
+          {/* ── PRIMARY: sizing-first — load-only, answers "what size array do I need" ── */}
+          <div style={{ ...S.card, borderColor: `${SOLAR_C}44` }}>
             <div style={{ ...S.subHead, color: SOLAR_C }}>Array sizing from load</div>
             <Inp label="Peak sun hours" sub="h/day, site-specific" type="text" inputMode="decimal" value={peakSunHours} onChange={(e) => setPeakSunHours(e.target.value)} />
             <div style={S.grid2}>
               <Inp label="System derate" sub="% — soiling/wiring/mismatch/inverter, UNVERIFIED guideline" type="text" inputMode="decimal" value={derateFactorPct} onChange={(e) => setDerateFactorPct(e.target.value)} />
-              <Inp label="Parallel-string safety factor" sub="% — UNVERIFIED, confirm vs SANS 10142-1" type="text" inputMode="decimal" value={stringSafetyPct} onChange={(e) => setStringSafetyPct(e.target.value)} />
+              <Inp label="Reference panel wattage" sub="Wp — for the panel-count estimate below" type="text" inputMode="decimal" value={panelW} onChange={(e) => setPanelW(e.target.value)} />
             </div>
-          </div>
-
-          <div style={{ ...S.card, borderColor: `${SOLAR_C}44` }}>
-            <div style={{ ...S.subHead, color: SOLAR_C }}>String configuration</div>
-            <RowVal label="Max panels in series" value={arrayRes.strings.maxPanelsSeries} accent={SOLAR_C} />
-            <RowVal label="Min panels in series" value={arrayRes.strings.minPanelsSeries} />
-            <RowVal label="Max strings in parallel" value={arrayRes.strings.maxStringsParallel} accent={SOLAR_C} />
-            <RowVal label="Worst-case cold Voc" value={`${arrayRes.strings.worstCaseVoc} V`} />
-            <RowVal label="Worst-case hot Vmp" value={`${arrayRes.strings.worstCaseVmp} V`} />
-            <RowVal label="Worst-case hot cell temp" value={`${arrayRes.strings.worstCaseCellTempC} °C`} />
-            <RowVal label="Design current / string" value={`${arrayRes.strings.designCurrentPerString} A`} />
-
-            {arrayRes.strings.warnings.map((w, i) => (
-              <div key={i} style={S.warn}>⚠ {w}</div>
-            ))}
 
             <div style={{ ...S.result, background: `${SOLAR_C}1a`, border: `0.5px solid ${SOLAR_C}44` }}>
               <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)' }}>Required array power</div>
@@ -650,12 +603,95 @@ export default function RenewableEnergyCalculator({ addHistory }) {
                 ≈ {arrayRes.approxPanels} × {panelW}W panels
               </div>
             </div>
+            <RowVal
+              label="Recommended inverter AC (1.2 target ratio)"
+              value={`${recommendInverterAcRating(arrayRes.requiredWp).toFixed(0)} W`}
+              accent={SOLAR_C}
+            />
+            <div style={S.note}>
+              This is your target from load alone — no panel or inverter model needed yet. Once you've
+              picked real products, use "Verify a specific panel + inverter" below to confirm they're
+              electrically compatible before you buy or wire them.
+            </div>
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
               <button onClick={pushHistoryArray} style={{ ...btnStyle(SOLAR_C), marginTop: 0, flex: 1 }}>Save to history</button>
               <button onClick={exportArray} style={{ ...btnStyle(SOLAR_C), marginTop: 0, flex: 1, background: `${SOLAR_C}1a` }}>📄 Result / Export</button>
             </div>
           </div>
+
+          {/* ── SECONDARY: collapsed compatibility check against a real datasheet ── */}
+          <button
+            onClick={() => setShowArrayVerify((v) => !v)}
+            style={{ ...btnStyle(SOLAR_C), background: 'rgba(255,255,255,0.03)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+          >
+            <span>{showArrayVerify ? '▾' : '▸'} Verify a specific panel + inverter (optional)</span>
+          </button>
+
+          {showArrayVerify && (
+            <div style={{ marginTop: '10px' }}>
+              <div style={S.note}>
+                Target from the sizing above: <strong>{arrayRes.requiredWp.toFixed(0)} Wp</strong>. Enter the
+                real panel and inverter/charge-controller you're pricing to confirm the string configuration
+                is electrically valid — this does not change the target above.
+              </div>
+
+              <div style={S.card}>
+                <div style={{ ...S.subHead, color: SOLAR_C }}>Panel datasheet</div>
+                <div style={S.grid2}>
+                  <Inp label="Voc (STC)" sub="V" type="text" inputMode="decimal" value={vocStc} onChange={(e) => setVocStc(e.target.value)} />
+                  <Inp label="Vmp (STC)" sub="V" type="text" inputMode="decimal" value={vmpStc} onChange={(e) => setVmpStc(e.target.value)} />
+                </div>
+                <div style={S.grid2}>
+                  <Inp label="Isc (STC)" sub="A" type="text" inputMode="decimal" value={iscStc} onChange={(e) => setIscStc(e.target.value)} />
+                  <Inp label="NOCT" sub="°C" type="text" inputMode="decimal" value={noct} onChange={(e) => setNoct(e.target.value)} />
+                </div>
+                <div style={S.grid2}>
+                  <Inp label="Temp coeff. Voc" sub="%/°C (negative)" type="text" inputMode="decimal" value={tcVoc} onChange={(e) => setTcVoc(e.target.value)} />
+                  <Inp label="Temp coeff. Vmp" sub="%/°C (negative)" type="text" inputMode="decimal" value={tcVmp} onChange={(e) => setTcVmp(e.target.value)} />
+                </div>
+                <Inp label="Temp coeff. Isc" sub="%/°C (positive)" type="text" inputMode="decimal" value={tcIsc} onChange={(e) => setTcIsc(e.target.value)} />
+              </div>
+
+              <div style={S.card}>
+                <div style={{ ...S.subHead, color: SOLAR_C }}>Inverter / charge controller</div>
+                <div style={S.grid2}>
+                  <Inp label="Max DC voltage" sub="V" type="text" inputMode="decimal" value={invMaxDc} onChange={(e) => setInvMaxDc(e.target.value)} />
+                  <Inp label="MPPT min voltage" sub="V" type="text" inputMode="decimal" value={mpptMin} onChange={(e) => setMpptMin(e.target.value)} />
+                </div>
+                <Inp label="Max input current" sub="A (per MPPT input)" type="text" inputMode="decimal" value={invMaxA} onChange={(e) => setInvMaxA(e.target.value)} />
+              </div>
+
+              <div style={S.card}>
+                <div style={{ ...S.subHead, color: SOLAR_C }}>Site design temperatures</div>
+                <div style={S.grid2}>
+                  <Inp label="Design min ambient" sub="°C — use your coldest expected design day, not a regional guess" type="text" inputMode="decimal" value={minTemp} onChange={(e) => setMinTemp(e.target.value)} />
+                  <Inp label="Design max ambient" sub="°C" type="text" inputMode="decimal" value={maxTemp} onChange={(e) => setMaxTemp(e.target.value)} />
+                </div>
+                <div style={S.note}>
+                  Not looked up automatically — enter real site design temperatures (e.g. from local records), not a guessed regional default.
+                </div>
+              </div>
+
+              <div style={S.card}>
+                <Inp label="Parallel-string safety factor" sub="% — UNVERIFIED, confirm vs SANS 10142-1" type="text" inputMode="decimal" value={stringSafetyPct} onChange={(e) => setStringSafetyPct(e.target.value)} />
+              </div>
+
+              <div style={{ ...S.card, borderColor: `${SOLAR_C}44` }}>
+                <div style={{ ...S.subHead, color: SOLAR_C }}>String configuration</div>
+                <RowVal label="Max panels in series" value={arrayRes.strings.maxPanelsSeries} accent={SOLAR_C} />
+                <RowVal label="Min panels in series" value={arrayRes.strings.minPanelsSeries} />
+                <RowVal label="Max strings in parallel" value={arrayRes.strings.maxStringsParallel} accent={SOLAR_C} />
+                <RowVal label="Worst-case cold Voc" value={`${arrayRes.strings.worstCaseVoc} V`} />
+                <RowVal label="Worst-case hot Vmp" value={`${arrayRes.strings.worstCaseVmp} V`} />
+                <RowVal label="Worst-case hot cell temp" value={`${arrayRes.strings.worstCaseCellTempC} °C`} />
+                <RowVal label="Design current / string" value={`${arrayRes.strings.designCurrentPerString} A`} />
+                {arrayRes.strings.warnings.map((w, i) => (
+                  <div key={i} style={S.warn}>⚠ {w}</div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -664,63 +700,93 @@ export default function RenewableEnergyCalculator({ addHistory }) {
       ════════════════════════════════════════════════════════════ */}
       {tab === 'battery' && (
         <div>
-          <div style={S.card}>
-            <div style={{ ...S.subHead, color: BATTERY_C }}>Off-grid demand</div>
+          {/* ── PRIMARY: sizing-first — load-only, answers "what size bank do I need" ── */}
+          <div style={{ ...S.card, borderColor: `${BATTERY_C}44` }}>
+            <div style={{ ...S.subHead, color: BATTERY_C }}>Battery bank sizing from load</div>
             <div style={S.grid2}>
               <Inp label="Autonomy days" sub="days battery covers alone" type="text" inputMode="decimal" value={autonomyDays} onChange={(e) => setAutonomyDays(e.target.value)} />
               <Inp label="Peak load" sub="W — for discharge current check" type="text" inputMode="decimal" value={peakLoadW} onChange={(e) => setPeakLoadW(e.target.value)} />
             </div>
-          </div>
 
-          <div style={S.card}>
-            <div style={{ ...S.subHead, color: BATTERY_C }}>Battery C-rate limits</div>
-            <div style={S.grid2}>
-              <Inp label="Max charge C-rate" sub="% of capacity/hour" type="text" inputMode="decimal" value={maxChargeCRatePct} onChange={(e) => setMaxChargeCRatePct(e.target.value)} />
-              <Inp label="Max discharge C-rate" sub="% of capacity/hour" type="text" inputMode="decimal" value={maxDischargeCRatePct} onChange={(e) => setMaxDischargeCRatePct(e.target.value)} />
-            </div>
-            <div style={S.note}>Chemistry-preset defaults — UNVERIFIED against a specific datasheet, override if known.</div>
-          </div>
-
-          <div style={S.card}>
-            <div style={{ ...S.subHead, color: BATTERY_C }}>Charge controller inputs</div>
-            <Inp
-              label="Array max current into controller"
-              sub={`A — suggested from Array tab: ${suggestedArrayCurrentA} A`}
-              type="text" inputMode="decimal" placeholder={String(suggestedArrayCurrentA)}
-              value={arrayMaxCurrentA} onChange={(e) => setArrayMaxCurrentA(e.target.value)}
-            />
-            <Inp
-              label="Array Vmp (worst-case hot)"
-              sub={`V — suggested from Array tab: ${arrayRes.strings.worstCaseVmp} V`}
-              type="text" inputMode="decimal" placeholder={String(arrayRes.strings.worstCaseVmp)}
-              value={arrayVmpOverride} onChange={(e) => setArrayVmpOverride(e.target.value)}
-            />
-            <Inp label="Controller safety factor" sub="% — UNVERIFIED, confirm vs SANS 10142-1" type="text" inputMode="decimal" value={controllerSafetyPct} onChange={(e) => setControllerSafetyPct(e.target.value)} />
-          </div>
-
-          <div style={{ ...S.card, borderColor: `${BATTERY_C}44` }}>
-            <div style={{ ...S.subHead, color: BATTERY_C }}>Battery bank</div>
             <RowVal label="Required capacity" value={`${batteryRes.bank.requiredCapacityWh.toFixed(0)} Wh`} />
-            <RowVal label="Required capacity" value={`${batteryRes.bank.requiredCapacityAh.toFixed(0)} Ah`} accent={BATTERY_C} />
+            <div style={{ ...S.result, background: `${BATTERY_C}1a`, border: `0.5px solid ${BATTERY_C}44` }}>
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)' }}>Required bank capacity</div>
+              <div style={{ fontSize: '28px', fontWeight: '500', color: BATTERY_C, fontFamily: 'monospace' }}>
+                {batteryRes.bank.requiredCapacityAh.toFixed(0)} Ah
+              </div>
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>@ {systemVoltageV} Vdc</div>
+            </div>
 
             <div style={{ ...S.subHead, color: BATTERY_C, marginTop: '10px' }}>Discharge current check</div>
             <RowVal label="Load current" value={`${batteryRes.discharge.loadCurrentA} A`} />
             <RowVal label="Battery max discharge current" value={`${batteryRes.discharge.batteryMaxDischargeCurrentA} A`} />
             <RowVal label="Within limit?" value={batteryRes.discharge.withinLimit ? 'Yes' : 'No'} accent={batteryRes.discharge.withinLimit ? BATTERY_C : RED} />
 
-            <div style={{ ...S.subHead, color: BATTERY_C, marginTop: '10px' }}>Charge controller</div>
-            <RowVal label="Required controller rating" value={`${batteryRes.controller.requiredControllerRatingA} A`} accent={BATTERY_C} />
-            <RowVal label="Battery max charge current" value={`${batteryRes.controller.batteryMaxChargeCurrentA} A`} />
-            {batteryRes.controller.warnings.map((w, i) => (<div key={i} style={S.warn}>⚠ {w}</div>))}
-
-            <div style={{ ...S.subHead, color: BATTERY_C, marginTop: '10px' }}>Controller type</div>
-            <div style={S.note}>{batteryRes.typeRec.recommendation} (Vmp:Vbank ratio {batteryRes.typeRec.ratio})</div>
+            <div style={S.note}>
+              This is your target bank size from load alone — uses the chemistry defaults from the Scenario
+              card above. Once you've picked a real battery and charge controller, use "Verify a specific
+              battery + controller" below to confirm the pairing before you buy or wire it.
+            </div>
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
               <button onClick={pushHistoryBattery} style={{ ...btnStyle(BATTERY_C), marginTop: 0, flex: 1 }}>Save to history</button>
               <button onClick={exportBattery} style={{ ...btnStyle(BATTERY_C), marginTop: 0, flex: 1, background: `${BATTERY_C}1a` }}>📄 Result / Export</button>
             </div>
           </div>
+
+          {/* ── SECONDARY: collapsed compatibility check against a real datasheet ── */}
+          <button
+            onClick={() => setShowBatteryVerify((v) => !v)}
+            style={{ ...btnStyle(BATTERY_C), background: 'rgba(255,255,255,0.03)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+          >
+            <span>{showBatteryVerify ? '▾' : '▸'} Verify a specific battery + controller (optional)</span>
+          </button>
+
+          {showBatteryVerify && (
+            <div style={{ marginTop: '10px' }}>
+              <div style={S.note}>
+                Target from the sizing above: <strong>{batteryRes.bank.requiredCapacityAh.toFixed(0)} Ah</strong> @ {systemVoltageV} Vdc.
+                Enter the real battery and charge-controller you're pricing to confirm C-rate and controller
+                sizing — this does not change the target above.
+              </div>
+
+              <div style={S.card}>
+                <div style={{ ...S.subHead, color: BATTERY_C }}>Battery C-rate limits</div>
+                <div style={S.grid2}>
+                  <Inp label="Max charge C-rate" sub="% of capacity/hour" type="text" inputMode="decimal" value={maxChargeCRatePct} onChange={(e) => setMaxChargeCRatePct(e.target.value)} />
+                  <Inp label="Max discharge C-rate" sub="% of capacity/hour" type="text" inputMode="decimal" value={maxDischargeCRatePct} onChange={(e) => setMaxDischargeCRatePct(e.target.value)} />
+                </div>
+                <div style={S.note}>Chemistry-preset defaults — UNVERIFIED against a specific datasheet, override if known.</div>
+              </div>
+
+              <div style={S.card}>
+                <div style={{ ...S.subHead, color: BATTERY_C }}>Charge controller inputs</div>
+                <Inp
+                  label="Array max current into controller"
+                  sub={`A — suggested from Array tab: ${suggestedArrayCurrentA} A`}
+                  type="text" inputMode="decimal" placeholder={String(suggestedArrayCurrentA)}
+                  value={arrayMaxCurrentA} onChange={(e) => setArrayMaxCurrentA(e.target.value)}
+                />
+                <Inp
+                  label="Array Vmp (worst-case hot)"
+                  sub={`V — suggested from Array tab: ${arrayRes.strings.worstCaseVmp} V`}
+                  type="text" inputMode="decimal" placeholder={String(arrayRes.strings.worstCaseVmp)}
+                  value={arrayVmpOverride} onChange={(e) => setArrayVmpOverride(e.target.value)}
+                />
+                <Inp label="Controller safety factor" sub="% — UNVERIFIED, confirm vs SANS 10142-1" type="text" inputMode="decimal" value={controllerSafetyPct} onChange={(e) => setControllerSafetyPct(e.target.value)} />
+              </div>
+
+              <div style={{ ...S.card, borderColor: `${BATTERY_C}44` }}>
+                <div style={{ ...S.subHead, color: BATTERY_C }}>Charge controller</div>
+                <RowVal label="Required controller rating" value={`${batteryRes.controller.requiredControllerRatingA} A`} accent={BATTERY_C} />
+                <RowVal label="Battery max charge current" value={`${batteryRes.controller.batteryMaxChargeCurrentA} A`} />
+                {batteryRes.controller.warnings.map((w, i) => (<div key={i} style={S.warn}>⚠ {w}</div>))}
+
+                <div style={{ ...S.subHead, color: BATTERY_C, marginTop: '10px' }}>Controller type</div>
+                <div style={S.note}>{batteryRes.typeRec.recommendation} (Vmp:Vbank ratio {batteryRes.typeRec.ratio})</div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
