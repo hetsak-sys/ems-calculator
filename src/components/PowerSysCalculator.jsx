@@ -1,7 +1,8 @@
 import GeneratorSizingPro from './GeneratorSizing'
 import React, { useState } from 'react'
 import { useSite } from './SiteContext'
-import { transformerParameters, pfCorrection, busbarRating, motorStartingComparison } from './powerSysEngine'
+import { useWorkspace } from './WorkspaceContext'
+import { transformerParameters, pfCorrection, busbarRating, motorStartingComparison, transformerSizingFromLoad } from './powerSysEngine'
 import { ResultCard, useResultCard } from './shared'
 
 // ── Tab merge note (this session) ──────────────────────────────────────────
@@ -60,6 +61,65 @@ const CalcBtn = ({ onCalc }) => (
   </button>
 )
 
+// ── Size from Load (§5.7, roadmap.md — scoped 2026-08-01) ────────────────────
+// Leads the Transformer tab per the sizing-first UI pattern (same shape as
+// Renewable Energy's Array/Battery restructure — see roadmap.md §6): a
+// load-only sizing answer first, with the existing parameters calculator
+// below now understood as "verify/derive parameters for a chosen size."
+// Deliberately the simple-arithmetic version, not the fuller design tool
+// originally flagged — no diversity table here either, same reasoning as
+// Load Assessment's own sourcing note (neither IEC 60364-1 nor SANS 10142-1
+// mandate one). demandKVA prefills from Load Assessment's WorkspaceContext
+// snapshot when available, same handoff pattern as Motor→Cable's flaSnapshot
+// and Load Assessment→DB Sizing.
+function SizeFromLoad({ onApply }) {
+  const { loadAssessmentSnapshot } = useWorkspace()
+  const [demandKVA, setDemandKVA] = useState(loadAssessmentSnapshot?.demandKVA || '')
+  const [margin, setMargin] = useState('')
+  const [res, setRes] = useState(null)
+
+  const calc = () => {
+    setRes(null)
+    const r = transformerSizingFromLoad({ demandKVA, growthMarginPct: margin })
+    if (!r) return
+    setRes({ demandKVA: r.demandKVA.toFixed(2), withMargin: r.withMargin.toFixed(2), stdKVA: r.stdKVA })
+  }
+
+  return (
+    <div className="rounded-xl p-3 mb-4" style={{ backgroundColor: '#0a1410', border: '1px solid #134e3a' }}>
+      <div className="text-xs font-bold mb-2 tracking-wide" style={{ color: '#34d399' }}>SIZE FROM LOAD</div>
+      {loadAssessmentSnapshot && (
+        <div className="text-xs mb-3 px-2.5 py-2 rounded-lg" style={{ backgroundColor: '#052e1f', color: '#6ee7b7' }}>
+          Loaded from Load Assessment: {loadAssessmentSnapshot.demandKVA} kVA demand
+        </div>
+      )}
+      <Field
+        label="Demand kVA" unit="kVA" value={demandKVA} onChange={setDemandKVA}
+        hint="From Load Assessment, or your own estimate — no diversity table is applied here, same reasoning as Installation Design's Load Assessment"
+      />
+      <Field
+        label="Growth Margin" unit="%" value={margin} onChange={setMargin}
+        hint="Optional — blank means no growth margin assumed"
+      />
+      <CalcBtn onCalc={calc} />
+      {res && (
+        <div className="rounded-xl p-3" style={{ backgroundColor: '#0a0a0a', border: '1px solid #1a1a1a' }}>
+          <ResultRow label="Demand kVA"    value={res.demandKVA}  unit="kVA" />
+          <ResultRow label="With Margin"   value={res.withMargin} unit="kVA" />
+          <ResultRow label="Recommended Transformer Size" value={res.stdKVA} unit="kVA" highlight />
+        </div>
+      )}
+      {res && (
+        <button onClick={() => onApply(String(res.stdKVA))}
+          className="w-full py-2.5 rounded-xl font-bold text-xs mt-3"
+          style={{ backgroundColor: '#052e1f', border: '1px solid #134e3a', color: '#6ee7b7' }}>
+          Use {res.stdKVA} kVA below ↓
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ── Transformer ──────────────────────────────────────────────────────────────
 function TransformerCalc() {
   const { site } = useSite()
@@ -114,6 +174,8 @@ function TransformerCalc() {
 
   return (
     <div>
+      <SizeFromLoad onApply={setKva} />
+      <div className="text-xs font-bold mb-2 tracking-wide" style={{ color: '#6b7280' }}>PARAMETERS FOR A CHOSEN SIZE</div>
       <Field label="Transformer Rating" unit="kVA" value={kva} onChange={setKva} />
       <Field label="Primary Voltage" unit="V" value={vpri} onChange={setVpri} />
       <Field label="Secondary Voltage" unit="V" value={vsec} onChange={setVsec} />

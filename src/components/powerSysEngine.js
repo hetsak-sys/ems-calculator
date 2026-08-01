@@ -13,6 +13,8 @@
 // for "power factor" in two function signatures below — reusing it as a
 // helper name would shadow that parameter inside those function bodies.
 
+import { TRAFO_SIZES, nextStd } from './generatorSizingEngine.js'
+
 const SQRT3 = Math.sqrt(3)
 
 function cnum(v) { return parseFloat(String(v).replace(',', '.')) }
@@ -138,3 +140,39 @@ export function motorStartingComparison({ kw, vv, eff, pf, method }) {
 
   return { Ifull, Istart, kVA: kVA_start, dip: voltDip_approx, torque: f.torque }
 }
+
+// ── 5. Transformer Sizing from Load (§5.7, roadmap.md — scoped 2026-08-01) ────────────────────
+// Deliberately the "simple arithmetic" version, not the fuller-design-tool scope originally
+// flagged in §5.7: connected-load demand kVA (usually handed over from Installation Design's
+// Load Assessment via WorkspaceContext.loadAssessmentSnapshot, same handoff pattern as
+// Motor->Cable's flaSnapshot and Load Assessment->DB Sizing) + an optional growth margin,
+// rounded up to the next standard transformer kVA size. Reuses TRAFO_SIZES/nextStd from
+// generatorSizingEngine.js rather than a second copy, per the shared-reference-data convention
+// (same list already used by Generator Sizing's Transformer stage for the same rounding step).
+//
+// No demand-factor table here, same reasoning as Load Assessment's own sourcing note: neither
+// IEC 60364-1 Clause 311 nor SANS 10142-1 mandate a diversity/demand-factor table for this kind
+// of load, so this function takes demand kVA as already computed (by Load Assessment or the
+// user's own judgement) rather than fabricating a lookup step of its own.
+/**
+ * @param {Object} p
+ * @param {string|number} p.demandKVA - demand kVA (from Load Assessment's snapshot, or manually
+ *   entered by the user)
+ * @param {string|number} p.growthMarginPct - growth margin, % — blank/invalid defaults to 0,
+ *   NOT a positive default like Generator Sizing's 25% margin, since this is the plain-arithmetic
+ *   version and should not assume growth the user didn't ask for
+ * @returns {{demandKVA:number, withMargin:number, stdKVA:number}|null}
+ */
+export function transformerSizingFromLoad({ demandKVA, growthMarginPct }) {
+  const kva = cnum(demandKVA)
+  if (isNaN(kva)) return null
+  const marginRaw = cnum(growthMarginPct)
+  const margin = isNaN(marginRaw) ? 0 : marginRaw
+
+  const withMargin = kva * (1 + margin / 100)
+  const stdKVA = nextStd(TRAFO_SIZES, withMargin)
+
+  return { demandKVA: kva, withMargin, stdKVA }
+}
+
+export { TRAFO_SIZES }

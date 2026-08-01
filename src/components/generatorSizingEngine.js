@@ -8,7 +8,14 @@ import { calculateGeneratorDerating, GEN_SIZES } from '../lib/generatorDerating.
 
 const SQRT3 = Math.sqrt(3)
 
-/** Standard distribution transformer kVA (IEC 60076) */
+// Common distribution transformer kVA sizes — market/manufacturer convention,
+// NOT an IEC-mandated table. Verified 2026-08-01 by reading IEC 60076-1:2011
+// directly: Part 1 defines what "rated power" means and how it's declared,
+// but does not publish a standard list of kVA sizes. Previously mislabeled
+// "(IEC 60076)" in this comment — corrected per [AI-18] rather than left
+// standing now that the inaccuracy is known. Values themselves are unchanged
+// and remain the single shared source for both Generator Sizing's
+// Transformer stage and Power Systems' load-based sizing tool (§5.7).
 export const TRAFO_SIZES = [
   5, 10, 15, 25, 50, 75, 100, 150, 200, 250,
   315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150,

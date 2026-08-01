@@ -205,17 +205,24 @@ Built 2026-07-28 (this session — engine + tests + UI, 455/455 passing, clean b
 
 ---
 
-### 5.7 Flagged, not scoped: no load → transformer kVA sizing tool exists anywhere in PowerSuite (2026-08-01)
+### 5.7 Scoped (2026-08-01): load → transformer kVA sizing tool, Power Systems → Transformer extension
 
 Found during a module-by-module triage (see §6 below — the Renewable Energy sizing-first restructure) that checked every calculator for the same "datasheet-first" anti-pattern. Power Systems → Transformer is a **parameters calculator for an already-chosen transformer** (given kVA/voltages/impedance you already have, it returns turns ratio, FLC, fault currents, losses) — that's a legitimate, different tool, not the same anti-pattern. But no tab anywhere in the app answers **"given this load, what kVA transformer do I need?"** the way Motor→FLA, Cable→Sizing, and Generator Sizing answer the equivalent question for their own domains.
 
-**Not yet run through the §5.1 checklist — do not build from this entry alone.** Recorded so it isn't lost, not because it's decided.
+**Run through the §5.1 checklist with Hertz on 2026-08-01 — confirmed a real gap, answers below.**
 
-- **Priority** — unknown, needs Hertz's call: is transformer selection typically driven by a utility/client-supplied spec in this market (making a sizing tool low-value), or do techs/contractors regularly need to size their own step-down transformer from a load schedule the way they'd size a generator?
-- **Depth** — if built, likely field-quick (load kVA → next standard transformer size + basic %Z guidance), not a full transformer-design tool — consistent with the rest of PowerSuite's depth pattern.
-- **New module vs. extension** — extension of Power Systems' existing Transformer tab (add a sizing-first section ahead of the existing parameters calculator, same pattern just applied to Renewable Energy's Array/Battery tabs — see §6).
+- **Priority — confirmed.** Techs/contractors in this market regularly size their own step-down transformer from a load schedule (not routinely handed a utility/client spec the way some other regions might be). Build it.
+- **Depth — Fuller design tool, not field-quick.** Explicit deviation from PowerSuite's usual depth pattern (Motor/Cable/Generator all lead field-quick-first). Flagged as a conscious choice by Hertz, not a default — the eventual charter/UI should still consider whether a load-only quick answer leads, per [DES-1]/[DES-2] consistency, even though the underlying engine goes deeper than "next standard size."
+- **New module vs. extension — confirmed.** Extension of Power Systems' existing Transformer tab: a sizing-first section ahead of the existing parameters calculator, same UI pattern as Renewable Energy's Array/Battery restructure (§6).
 
-**If Hertz confirms this is a real gap**, treat it as its own scoping conversation before writing any code — do not fold it into an unrelated session.
+**Not yet started — needs a dedicated scoping/sourcing session before any engine code is written**, per [AI-18] and the Sag & Tension precedent (§5.6.3a history): "fuller design tool" for transformer sizing pulls in more than a lookup table — likely candidates for that session to work through:
+- Core standard: IEC 60076 series (power transformers) — which parts (ratings, temperature rise, tap-changing, parallel operation) apply to a *sizing* tool vs. the existing *parameters* tool
+- SANS equivalent/harmonization status, if any, per the established sourcing hierarchy
+- What "fuller" concretely includes: temperature rise/loading guide (IEC 60076-7?), %Z selection guidance, parallel-operation compatibility, inrush — vs. what stays out of scope for v1
+- Whether load diversity/demand factor treatment is shared with existing Motor/Cable/Generator sizing logic or needs its own
+- Standard kVA size tables and %Z ranges by size class, sourced not assumed
+
+**Do not build from this entry alone** — this section records the scoping decision only. Treat the next session touching this as starting fresh with sourcing, the same way Sag & Tension required.
 
 ---
 
