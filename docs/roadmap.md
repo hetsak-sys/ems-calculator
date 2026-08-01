@@ -205,24 +205,24 @@ Built 2026-07-28 (this session — engine + tests + UI, 455/455 passing, clean b
 
 ---
 
-### 5.7 Scoped (2026-08-01): load → transformer kVA sizing tool, Power Systems → Transformer extension
+### 5.7 Built (2026-08-01), not yet on-device verified: load → transformer kVA sizing, Power Systems → Transformer extension
 
-Found during a module-by-module triage (see §6 below — the Renewable Energy sizing-first restructure) that checked every calculator for the same "datasheet-first" anti-pattern. Power Systems → Transformer is a **parameters calculator for an already-chosen transformer** (given kVA/voltages/impedance you already have, it returns turns ratio, FLC, fault currents, losses) — that's a legitimate, different tool, not the same anti-pattern. But no tab anywhere in the app answers **"given this load, what kVA transformer do I need?"** the way Motor→FLA, Cable→Sizing, and Generator Sizing answer the equivalent question for their own domains.
+Found during a module-by-module triage (see §6 below — the Renewable Energy sizing-first restructure) that checked every calculator for the same "datasheet-first" anti-pattern. Power Systems → Transformer is a **parameters calculator for an already-chosen transformer** (given kVA/voltages/impedance you already have, it returns turns ratio, FLC, fault currents, losses) — that's a legitimate, different tool, not the same anti-pattern. But no tab anywhere in the app answered **"given this load, what kVA transformer do I need?"** the way Motor→FLA, Cable→Sizing, and Generator Sizing answer the equivalent question for their own domains.
 
-**Run through the §5.1 checklist with Hertz on 2026-08-01 — confirmed a real gap, answers below.**
+**Scoped through the §5.1 checklist with Hertz on 2026-08-01**, then **deliberately narrowed** in the same session: the checklist's "fuller design tool" depth answer was set aside by Hertz's explicit follow-up ("the sizing decision itself is simple arithmetic, not a standards question") in favour of the plain load→kVA arithmetic version only. IEC 60076-1:2011 was sourced and read directly (page-by-page — the uploaded copy's OCR text layer was unusable/garbled, required visual reading) and confirmed it does **not** publish a standard kVA size table; that table is market/manufacturer convention, not an IEC-mandated figure. The fuller-design-tool scope (tap range, %Z selection, parallel-operation vector-group compatibility, temperature rise/loading per IEC 60076-2/-7) remains unbuilt and unscoped — **not abandoned, just correctly separated from this simpler piece.** If Hertz wants that fuller version later, treat it as its own fresh scoping pass, not a resumption of this entry.
 
-- **Priority — confirmed.** Techs/contractors in this market regularly size their own step-down transformer from a load schedule (not routinely handed a utility/client spec the way some other regions might be). Build it.
-- **Depth — Fuller design tool, not field-quick.** Explicit deviation from PowerSuite's usual depth pattern (Motor/Cable/Generator all lead field-quick-first). Flagged as a conscious choice by Hertz, not a default — the eventual charter/UI should still consider whether a load-only quick answer leads, per [DES-1]/[DES-2] consistency, even though the underlying engine goes deeper than "next standard size."
-- **New module vs. extension — confirmed.** Extension of Power Systems' existing Transformer tab: a sizing-first section ahead of the existing parameters calculator, same UI pattern as Renewable Energy's Array/Battery restructure (§6).
+**Built this session:**
+- **`generatorSizingEngine.js`**: `TRAFO_SIZES`'s comment corrected from a false "(IEC 60076)" attribution to "market/manufacturer convention" — found while sourcing IEC 60076-1 for this feature. Values unchanged; this is the same shared list Generator Sizing's Transformer stage already uses, reused rather than duplicated.
+- **`powerSysEngine.js`**: new `transformerSizingFromLoad({ demandKVA, growthMarginPct })` — no diversity/demand-factor table of its own, same reasoning as Load Assessment's own sourcing note (neither IEC 60364-1 Clause 311 nor SANS 10142-1 mandate one); takes demand kVA as already computed. Growth margin defaults to 0% (not a positive assumption like Generator Sizing's 25% default) since this is the plain-arithmetic version. 7 new tests, all passing.
+- **`PowerSysCalculator.jsx`**: new `SizeFromLoad` sub-section leads the Transformer tab (sizing-first placement, confirmed against the checklist's "New module vs. extension" answer). Prefills `demandKVA` from `WorkspaceContext.loadAssessmentSnapshot` when available (confirmed field shape directly from `InstallationDesign.jsx`'s `setLoadAssessmentSnapshot()` call before wiring, not assumed), manual entry otherwise. "Use *N* kVA below ↓" feeds the recommended size into the existing parameters calculator's `kva` field. Existing parameters section relabeled "PARAMETERS FOR A CHOSEN SIZE" to read as one flow.
+- Syntax-verified via `esbuild` bundle (clean) before delivery — full test suite not re-run against the real repo in this session (engine tests run in an isolated local harness with a stub `generatorDerating.js`; 2 unrelated pre-existing failures in that harness are stub artifacts, not real bugs — see the session transcript). **Needs a real `npm test` run against the actual repo to get the true updated total, and on-device verification before this is closed.**
 
-**Not yet started — needs a dedicated scoping/sourcing session before any engine code is written**, per [AI-18] and the Sag & Tension precedent (§5.6.3a history): "fuller design tool" for transformer sizing pulls in more than a lookup table — likely candidates for that session to work through:
-- Core standard: IEC 60076 series (power transformers) — which parts (ratings, temperature rise, tap-changing, parallel operation) apply to a *sizing* tool vs. the existing *parameters* tool
-- SANS equivalent/harmonization status, if any, per the established sourcing hierarchy
-- What "fuller" concretely includes: temperature rise/loading guide (IEC 60076-7?), %Z selection guidance, parallel-operation compatibility, inrush — vs. what stays out of scope for v1
-- Whether load diversity/demand factor treatment is shared with existing Motor/Cable/Generator sizing logic or needs its own
-- Standard kVA size tables and %Z ranges by size class, sourced not assumed
+**Deliberately not built this session:** PDF/result-card export on the `SizeFromLoad` sub-section itself (the existing parameters calculator below it still has its own, unchanged). Left out to match the narrowed scope rather than assumed — add if Hertz wants it, same `ResultCard`/`pdfExport.js` path as everywhere else.
 
-**Do not build from this entry alone** — this section records the scoping decision only. Treat the next session touching this as starting fresh with sourcing, the same way Sag & Tension required.
+**Not yet done:**
+- Files applied by Hertz to `src/components/` — **confirmed done (2026-08-01)**; real `npm test` run against the actual repo still owed to get the true updated test count
+- On-device verification (see `docs/on_device_checklist_power_systems.md`, new this session)
+- Commit and push to `origin/main`
 
 ---
 

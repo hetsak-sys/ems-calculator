@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   transformerParameters, pfCorrection, PFC_CAPACITOR_STEPS_KVAR,
   busbarRating, motorStartingComparison, MOTOR_STARTING_FACTORS,
+  transformerSizingFromLoad, TRAFO_SIZES,
 } from './powerSysEngine.js'
 
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) < eps
@@ -140,6 +141,51 @@ describe('comma-decimal input tolerance (2026-07-27 fix)', () => {
   test('motorStartingComparison accepts comma-decimals identically to period-decimals', () => {
     const withComma = motorStartingComparison({ kw: '75', vv: '400', eff: '92', pf: '0,88', method: 'dol' })
     const withPeriod = motorStartingComparison({ kw: '75', vv: '400', eff: '92', pf: '0.88', method: 'dol' })
+    assert.deepEqual(withComma, withPeriod)
+  })
+})
+
+// §5.7 (roadmap.md, scoped 2026-08-01): load -> transformer kVA sizing, the "simple arithmetic"
+// version — demand kVA (usually from Load Assessment's WorkspaceContext snapshot) + growth
+// margin, rounded up via the shared TRAFO_SIZES table.
+describe('transformerSizingFromLoad', () => {
+  test('16.67kVA demand (Load Assessment\'s own worked example), no margin — matches hand-derived reference', () => {
+    const r = transformerSizingFromLoad({ demandKVA: '16.67', growthMarginPct: '' })
+    assert.ok(close(r.demandKVA, 16.67))
+    assert.ok(close(r.withMargin, 16.67))
+    assert.equal(r.stdKVA, 25) // next standard size >= 16.67
+  })
+
+  test('280kVA demand + 20% growth margin — matches hand-derived reference', () => {
+    const r = transformerSizingFromLoad({ demandKVA: '280', growthMarginPct: '20' })
+    assert.ok(close(r.withMargin, 336))
+    assert.equal(r.stdKVA, 400) // next standard size >= 336
+  })
+
+  test('demand kVA exactly on a standard size stays at that size (no margin)', () => {
+    const r = transformerSizingFromLoad({ demandKVA: '630', growthMarginPct: '0' })
+    assert.equal(r.stdKVA, 630)
+  })
+
+  test('blank growth margin defaults to 0%, not a positive assumption (unlike Generator Sizing\'s 25% default)', () => {
+    const blank = transformerSizingFromLoad({ demandKVA: '100', growthMarginPct: '' })
+    const explicitZero = transformerSizingFromLoad({ demandKVA: '100', growthMarginPct: '0' })
+    assert.deepEqual(blank, explicitZero)
+    assert.equal(blank.withMargin, 100)
+  })
+
+  test('demand beyond the largest standard size rounds to the largest available (fallback behavior), not undefined', () => {
+    const r = transformerSizingFromLoad({ demandKVA: '5000', growthMarginPct: '0' })
+    assert.equal(r.stdKVA, TRAFO_SIZES[TRAFO_SIZES.length - 1])
+  })
+
+  test('invalid/missing demand kVA returns null, not NaN propagating silently', () => {
+    assert.equal(transformerSizingFromLoad({ demandKVA: '', growthMarginPct: '10' }), null)
+  })
+
+  test('comma-decimal demand kVA and margin accepted identically to period-decimal', () => {
+    const withComma = transformerSizingFromLoad({ demandKVA: '16,67', growthMarginPct: '12,5' })
+    const withPeriod = transformerSizingFromLoad({ demandKVA: '16.67', growthMarginPct: '12.5' })
     assert.deepEqual(withComma, withPeriod)
   })
 })
