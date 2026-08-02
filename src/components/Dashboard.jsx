@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useSite } from './SiteContext'
+import { openManual } from '../lib/openManual'
 
 const TOOL_GRID = [
   { id: 'motor',      label: 'Motors & Drives',  icon: '⚙',  desc: 'FLA · Starting · Relays · VFD',          bgKey: 'motorBg',   borderKey: 'motorBorder',   accentKey: 'motorAccent'   },
@@ -17,6 +18,22 @@ const TOOL_GRID = [
 
 export default function Dashboard({ onNavigate, theme: T, themeMode }) {
   const { site } = useSite()
+  const [manualState, setManualState] = useState('idle') // 'idle' | 'opening' | 'error'
+  const [manualError, setManualError] = useState(null)
+
+  const handleOpenManual = async () => {
+    if (manualState === 'opening') return
+    setManualState('opening')
+    setManualError(null)
+    try {
+      await openManual()
+      setManualState('idle')
+    } catch (e) {
+      setManualState('error')
+      setManualError(e.message || 'Could not open the manual')
+    }
+  }
+
   return (
     <div className="px-4 pt-4 pb-2">
 
@@ -95,6 +112,31 @@ export default function Dashboard({ onNavigate, theme: T, themeMode }) {
           )
         })}
       </div>
+
+      {/* User Manual */}
+      <button
+        onClick={handleOpenManual}
+        disabled={manualState === 'opening'}
+        className="w-full mt-4 rounded-xl p-3 flex items-center gap-3 text-left transition-all duration-150 active:scale-95"
+        style={{ backgroundColor: T.accentDim, border: `1px solid ${T.accentBorder}` }}
+      >
+        <div
+          className="flex items-center justify-center rounded-full shrink-0"
+          style={{ width: '32px', height: '32px', backgroundColor: `${T.accent}22`, border: `1px solid ${T.accent}45` }}
+        >
+          <span style={{ fontSize: '16px' }}>📘</span>
+        </div>
+        <div className="flex-1">
+          <div className="text-xs font-bold" style={{ color: T.textPrimary }}>
+            {manualState === 'opening' ? 'Opening manual\u2026' : 'User Manual'}
+          </div>
+          <div className="text-xs" style={{ color: T.textMuted }}>
+            {manualState === 'error'
+              ? (manualError || 'Could not open the manual \u2014 tap to retry')
+              : 'Full offline guide to every module'}
+          </div>
+        </div>
+      </button>
 
       {/* Quick Math hint */}
       <div
