@@ -220,9 +220,12 @@ Found during a module-by-module triage (see §6 below — the Renewable Energy s
 **Deliberately not built this session:** PDF/result-card export on the `SizeFromLoad` sub-section itself (the existing parameters calculator below it still has its own, unchanged). Left out to match the narrowed scope rather than assumed — add if Hertz wants it, same `ResultCard`/`pdfExport.js` path as everywhere else.
 
 **Not yet done:**
-- Files applied by Hertz to `src/components/` — **confirmed done (2026-08-01)**; real `npm test` run against the actual repo still owed to get the true updated test count
-- On-device verification (see `docs/on_device_checklist_power_systems.md`, new this session)
-- Commit and push to `origin/main`
+- Files applied by Hertz to `src/components/` — **confirmed done (2026-08-01)**
+- Real `npm test` run against the actual repo — **confirmed 2026-08-01, initially inconclusive: the delivered test file was named `powerSysEngine_test.js` (underscore) instead of the repo's real `.test.js` convention, so `npm test`'s glob silently skipped it — the run showed the unchanged 487/487 with no `transformerSizingFromLoad` suite at all. Found and fixed the same session**: renamed to `powerSysEngine.test.js`, re-ran — **494/494 passing** (487 + 7 new), `transformerSizingFromLoad` suite present and all 7 tests passing. Filename-convention mismatch flagged as the root cause, not a formula issue — see `debt.md`.
+- On-device verification (`docs/on_device_checklist_power_systems_size_from_load.md`) — **confirmed 2026-08-01 by Hertz, all scenarios passed.**
+- Commit and push to `origin/main` — **confirmed.** Two commits: `9e41d94` (the feature itself — engine, tests as delivered, UI, docs) and `4ad02c2` (the test-filename fix, found only after the first `npm test` run surfaced it). Both independently confirmed via the actual `git push` output (`85a8d87..9e41d94` then `9e41d94..4ad02c2`), not assumed.
+
+**§5.7 is now fully closed** — engine, tests (verified in the real repo, not just an isolated harness), UI, docs, on-device, committed and pushed.
 
 ---
 

@@ -4,12 +4,16 @@
 // message pre-filled, via a wa.me deep link. Nothing to deploy, nothing
 // to break, no email/SMTP dependency.
 //
-// Integration:
-//   1. Copy into src/components/SuggestionBox.jsx.
-//   2. Add a nav entry (Settings screen is the natural home) that renders
-//      this component.
-//   3. `npm install @capacitor/device` if not already present (the license
-//      flow likely already depends on it — check before adding a duplicate).
+// 2026-08-03 on-device test found two bugs, both fixed here:
+//   1. Textarea text was rendering near-invisible (light/gray on white)
+//      because no explicit text/background color was set, so the app's
+//      global dark-theme text color was bleeding through. Now explicit.
+//   2. Footer showed "Hetsa PowerSuite vunknown" because
+//      import.meta.env.VITE_APP_VERSION was never defined anywhere in
+//      the project — it silently fell back to the string 'unknown'.
+//      Now reads __APP_VERSION__, injected by vite.config.js from
+//      package.json's "version" field — one source of truth, nothing
+//      extra to configure per release.
 
 import React, { useState } from 'react';
 import { Device } from '@capacitor/device';
@@ -31,7 +35,9 @@ export default function SuggestionBox() {
     setStatus('opening');
 
     const info = await Device.getInfo().catch(() => ({}));
-    const appVersion = import.meta.env.VITE_APP_VERSION || 'unknown';
+    // __APP_VERSION__ is injected at build time by vite.config.js from
+    // package.json's "version" field (see note above).
+    const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'unknown';
 
     const fullMessage = [
       trimmed,
@@ -62,7 +68,7 @@ export default function SuggestionBox() {
       </p>
 
       <textarea
-        className="w-full border rounded p-2 text-sm"
+        className="w-full border rounded p-2 text-sm bg-white text-gray-900 placeholder-gray-400"
         rows={5}
         placeholder="Your suggestion or issue..."
         value={message}
