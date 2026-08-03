@@ -9,6 +9,10 @@
 
 export const WHATS_NEW = [
   {
+    version: '1.0.1',
+    note: "New: this What's New card — you'll see one here whenever an update adds something worth knowing about.",
+  },
+  {
     version: '1.0.0',
     note: 'New: Suggestions — send feedback straight to WhatsApp, in Settings.',
   },
