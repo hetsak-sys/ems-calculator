@@ -21,6 +21,7 @@ const PQCalculator = lazy(() => import('./components/PQCalculator'))
 const RenewableEnergyCalculator = lazy(() => import('./components/RenewableEnergyCalculator'))
 const InstallationDesign = lazy(() => import('./components/InstallationDesign'))
 const OverheadReticulation = lazy(() => import('./components/OverheadReticulation'))
+const SuggestionBox = lazy(() => import('./components/SuggestionBox'))
 import { SiteProvider, useSite } from './components/SiteContext'
 import { WorkspaceProvider } from './components/WorkspaceContext'
 import { ResultCard, getPendingResult, clearPendingResult } from './components/shared'
@@ -39,6 +40,7 @@ const SCREEN_LABELS = {
   formulas:   'Formula Library',
   history:    'Calculation History',
   settings:   'Settings',
+  suggestions: 'Suggestions',
 }
 
 // Site parameters (voltage, altitude, frequency, currency, etc.) live in
@@ -112,11 +114,13 @@ export default function App() {
       case 'convert':    return <ConvertCalculator theme={T} themeMode={themeMode} />
       case 'formulas':   return <FormulaReference history={history} theme={T} themeMode={themeMode} />
       case 'history':    return <HistoryView history={history} onClear={() => setHistory([])} theme={T} themeMode={themeMode} />
+      case 'suggestions': return <SuggestionBox theme={T} themeMode={themeMode} />
       case 'settings':   return (
         <Settings
           themeMode={themeMode}
           setThemeMode={setThemeMode}
           theme={T}
+          onNavigate={navigate}
         />
       )
       default: return <Dashboard onNavigate={navigate} theme={T} themeMode={themeMode} />

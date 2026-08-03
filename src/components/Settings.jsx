@@ -27,7 +27,7 @@ const CURRENCY_OPTIONS = [
   { label: 'EUR — Euro',               value: 'EUR' },
 ]
 
-export default function Settings({ themeMode, setThemeMode, theme: T }) {
+export default function Settings({ themeMode, setThemeMode, theme: T, onNavigate }) {
   const { site, setSiteFields } = useSite()
   const [local, setLocal] = useState({ ...site })
   const [saved, setSaved] = useState(false)
@@ -390,6 +390,22 @@ export default function Settings({ themeMode, setThemeMode, theme: T }) {
             </button>
           </>
         )}
+      </div>
+
+      {/* ── SUGGESTIONS ───────────────────────────────── */}
+      <div style={section}>
+        <div style={sectionTitle}>Suggestions</div>
+        <div style={{ fontSize: '12px', color: T.textMuted, marginBottom: '12px' }}>
+          Spotted a bug, missing standard, or an idea for a new module? Send it straight
+          to WhatsApp — no account needed, no waiting on email.
+        </div>
+        <button
+          onClick={() => onNavigate && onNavigate('suggestions')}
+          className="w-full py-2.5 rounded-xl font-semibold text-sm"
+          style={{ backgroundColor: T.accent, color: '#000000' }}
+        >
+          Open Suggestions
+        </button>
       </div>
 
       {/* ── SAVE BUTTON ───────────────────────────────── */}
