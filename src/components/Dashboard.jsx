@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useSite } from './SiteContext'
 import { openManual } from '../lib/openManual'
+import WhatsNewBanner from './WhatsNewBanner'
 
 const TOOL_GRID = [
   { id: 'motor',      label: 'Motors & Drives',  icon: '⚙',  desc: 'FLA · Starting · Relays · VFD',          bgKey: 'motorBg',   borderKey: 'motorBorder',   accentKey: 'motorAccent'   },
@@ -36,6 +37,9 @@ export default function Dashboard({ onNavigate, theme: T, themeMode }) {
 
   return (
     <div className="px-4 pt-4 pb-2">
+
+      {/* What's New (shows only when the running build is newer than what was last seen) */}
+      <WhatsNewBanner theme={T} />
 
       {/* Site Banner */}
       <div
@@ -159,7 +163,7 @@ export default function Dashboard({ onNavigate, theme: T, themeMode }) {
 
       {/* Footer */}
       <div className="text-center py-3 text-xs" style={{ color: T.textDisabled }}>
-        PowerSuite v1.0 · Built for field engineers
+        PowerSuite v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0'} · Built for field engineers
       </div>
     </div>
   )
