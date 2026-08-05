@@ -1,38 +1,63 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import obfuscator from "rollup-plugin-obfuscator";
+import { readFileSync } from "node:fs";
 
-// Single source of truth for the app version: package.json.
-// Bumping "version" there is now the only step needed — no separate
-// env var to remember to set (that's what caused the SuggestionBox
-// footer to read "vunknown": VITE_APP_VERSION was never defined
-// anywhere, so it silently fell back to the literal string 'unknown').
-const pkg = JSON.parse(
-  readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf-8')
-)
+// Single source of truth for the app's version string, injected at build time.
+// Read from package.json so App.jsx / whatsNew.js / eslint.config.js's __APP_VERSION__
+// global all resolve to the same value without hand-editing it in multiple places.
+const pkg = JSON.parse(readFileSync("./package.json", "utf-8"));
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  base: process.env.GITHUB_PAGES === 'true' ? '/ems-calculator/' : './',
+
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
+
   build: {
+    // Generated for every build so a release crash trace can be decoded later.
+    // NEVER let the .map file reach `www/`/the shipped APK — see the release
+    // procedure note: copy it out to a private location before `cap sync`.
+    sourcemap: true,
+
     rollupOptions: {
       output: {
-        // Splits the two heaviest vendor deps out of the main chunk.
-        // jsPDF's own dependencies (html2canvas, dompurify) already get
-        // split automatically since they're dynamically imported inside
-        // jspdf itself — this just adds react/react-dom and jspdf's own
-        // core code as their own cacheable chunks, since those rarely
-        // change version-to-version and shouldn't be re-downloaded every
-        // time app code changes. See debt.md's bundle-size entry.
         manualChunks: {
-          'react-vendor': ['react', 'react-dom'],
-          'jspdf-vendor': ['jspdf'],
+          react: ["react", "react-dom"],
+          jspdf: ["jspdf"],
         },
       },
+      plugins: [
+        // Obfuscation applies ONLY to the explicit "release" mode
+        // (npm run build:release). The default `npm run build` — used for
+        // assembleDebug and everyday dev-cycle testing — is completely
+        // unaffected. Added 2026-08-05; see architecture.md §6 and
+        // debt.md's 2026-08-05 entries for the full writeup.
+        mode === "release" &&
+          obfuscator({
+            sourceMap: true, // chains through Rollup's own sourcemap output above
+
+            // Moderate strength: a real deterrent against casual copy/paste of
+            // engine logic, without inflating bundle size or risking the
+            // PERF-1 <=3s cold-start budget on the reference device.
+            compact: true,
+            controlFlowFlattening: true,
+            controlFlowFlatteningThreshold: 0.4,
+            deadCodeInjection: false, // would grow bundle size for little added protection
+            identifierNamesGenerator: "hexadecimal",
+            renameGlobals: false, // Capacitor's JS<->native bridge depends on reachable globals
+            stringArray: true,
+            stringArrayEncoding: ["base64"],
+            stringArrayThreshold: 0.75,
+            splitStrings: true,
+            splitStringsChunkLength: 8,
+            numbersToExpressions: true,
+            simplify: true,
+            selfDefending: true,
+            disableConsoleOutput: false, // keep console.error alive for field crash reports
+          }),
+      ].filter(Boolean),
     },
   },
-})
+}));

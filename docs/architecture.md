@@ -80,6 +80,54 @@ device performance baseline exists (see `debt.md`'s bundle-size entry).
   out-of-range standards lookups) is currently unverified beyond manual spot-checks. This is the biggest
   gap in this view and the reason the test-suite debt item is rated **Risky**, not merely Cosmetic.
 
+## 6. Build & Release Security
+
+*Added 2026-08-05, following a WhatsApp-marketing security tangent that surfaced a real gap: this
+section didn't exist before, and the app shipped with no client-side protection at all beyond the
+default Vite/esbuild minification every build already gets for free.*
+
+- **The real threat surface is the JS bundle, not the native layer.** PowerSuite is a Capacitor app —
+  the calculation engines (`src/lib/*.js`, plus the engine files noted in §3's Contract View caveat)
+  compile via Vite into JavaScript and ship inside the APK's `assets/public/` folder as WebView
+  content. Android's R8/ProGuard only sees and protects the native Java/Kotlin layer (the Capacitor
+  bridge and any native plugins) — it has no visibility into the JS payload at all. Before this
+  addition, `unzip app-release.apk` yielded fully readable, unobfuscated calculation logic — variable
+  names shortened by Vite's default build minifier, but formulas, structure, and comments fully intact.
+- **Two web-build tracks now exist**, both defined in `vite.config.js`:
+  - `npm run build` (default, unobfuscated) — used for `assembleDebug` and everyday dev-cycle testing.
+    Behavior is completely unchanged from before this addition.
+  - `npm run build:release` (obfuscated, gated on Vite's `mode === "release"`) — used only immediately
+    before `assembleRelease`, per the updated procedure in `build_procedure_addition.md`.
+- **What the obfuscation does:** `rollup-plugin-obfuscator` (wrapping `javascript-obfuscator`) applies
+  control-flow flattening, base64 string-array encoding with string splitting, and hexadecimal
+  identifier renaming to the release bundle only. `renameGlobals: false` is a deliberate exception —
+  Capacitor's JS↔native bridge depends on certain globals being reachable by name; renaming them would
+  break the app silently rather than loudly, which is the worst failure mode to introduce here.
+- **What it does not do:** this is a deterrent, not a lock. No client-side hybrid-app architecture can
+  fully prevent reverse engineering — a sufficiently motivated actor can still work through an
+  obfuscated bundle, or observe the app's real behavior at runtime regardless of source readability.
+  The actual durable moat is the standards-clause sourcing labor (`[AI-18]` discipline), the offline
+  packaging, and the field-tested UX — not secrecy of the arithmetic, most of which traces to public
+  IEC/SANS clauses in any case.
+- **Native layer (`android/app/build.gradle`):** the `release` buildType now also runs
+  `minifyEnabled true` / `shrinkResources true` with Capacitor's standard ProGuard keep rules
+  (`proguard-rules.pro`). This protects a part of the app that isn't where the real IP lives, but costs
+  nothing and shrinks APK size, so there was no reason not to enable it alongside the JS-layer work.
+- **One live manual-process risk this introduces:** `npm run build:release` emits a source map
+  (`.js.map`) needed to decode a future field crash trace back to real file/line numbers. That map
+  must be manually copied to a private location (outside the repo, alongside the keystore) *before*
+  `npx cap sync android` — Capacitor will otherwise copy it straight into `www/`, and if it ships
+  inside the APK it hands anyone who downloads the app a complete de-obfuscation key, defeating the
+  entire point. No automated safeguard against this exists yet. See `debt.md`'s 2026-08-05 entry.
+- **Verification status:** the obfuscation pipeline was built and verified in an isolated test harness
+  (toy files mimicking the shape of `motorEngine.js`), confirming: formula/variable names are
+  genuinely unreadable in the release output; the existing default `npm run build` is completely
+  unaffected; the `__APP_VERSION__` define and `manualChunks` vendor splitting both continue to work
+  correctly alongside the obfuscator plugin; the chained sourcemap still resolves to real source
+  filenames. **It has not yet been run against the actual repo or through a real `assembleRelease` +
+  on-device pass** — this is the one required step before the addition can be called closed, per the
+  project's own "before calling anything done" standard. See `debt.md`.
+
 ---
 
 ## Module Map (informal — see `Hetsa_PowerSuite_Project_Knowledge.md` §4 for the authoritative feature list)

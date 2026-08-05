@@ -1,0 +1,35 @@
+// android/app/build.gradle
+// This is the `buildTypes` block only — merge into the existing file, which
+// also contains applicationId (com.hetsa.powersuite), versionCode/versionName,
+// compileSdkVersion, signingConfigs (release keystore reference), etc.
+// Do not replace the whole file blind without checking those existing values first.
+
+android {
+    ...
+
+    signingConfigs {
+        release {
+            // existing keystore config — do not touch, see build_procedure_addition.md
+            // "Keystore custody" section for the certificate details
+        }
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+            shrinkResources false
+        }
+
+        release {
+            // Added 2026-08-05: shrinks and lightly obfuscates the native
+            // Java/Kotlin layer (Capacitor bridge + any native plugins).
+            // This does NOT touch the JS calculation engines shipped as web
+            // assets — that protection comes from vite.config.js's release-mode
+            // obfuscation instead. See architecture.md §6 for the full picture.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+    }
+}
